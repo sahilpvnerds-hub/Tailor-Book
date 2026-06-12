@@ -1,0 +1,370 @@
+# Tailor Book - React Native Mobile Application
+
+Build a production-ready React Native mobile application called "Tailor Book" for tailoring businesses. The app should have a modern premium UI inspired by Blinkit, WhatsApp, and Zomato, with smooth animations, clean typography, professional color schemes, responsive layouts, and excellent user experience.
+
+## Technology Stack
+
+* React Native (Latest Version)
+* TypeScript
+* Redux Toolkit or Zustand for State Management
+* React Navigation
+* Node.js Backend
+* Express.js API
+* MongoDB Database
+* Firebase Push Notifications
+* JWT Authentication
+* Voice Recognition Integration
+* WhatsApp Sharing Integration
+* Email Sending Integration
+* Cloud Storage for Documents
+
+---
+
+# User Roles
+
+## 1. Admin
+
+Admin can:
+
+* View all tailor registrations
+* Approve or reject tailor accounts
+* Manage tailor profiles
+* Manage default pricing
+* View customer records
+* View measurement records
+* View invoices
+* Send notifications
+
+## 2. Tailor
+
+Tailor can:
+
+* Register account
+* Login after admin approval
+* Manage customers
+* Add measurements
+* Generate invoices
+* Send invoices through Email and WhatsApp
+* View measurement history
+* Search customers
+
+---
+
+# Registration Flow
+
+## Tailor Registration
+
+Fields:
+
+* Full Name
+* Shop Name
+* Mobile Number
+* Email Address
+* Password
+* Confirm Password
+* Shop Address
+* City
+* State
+
+Status:
+
+* Pending Approval
+* Approved
+* Rejected
+
+After registration:
+
+* Send notification to Admin
+* Admin receives approval request
+* Tailor cannot login until approved
+
+---
+
+# Login System
+
+Secure login using:
+
+* Mobile Number
+* Email
+* Password
+
+Features:
+
+* Forgot Password
+* Remember Me
+* JWT Authentication
+
+---
+
+# Dashboard
+
+Show:
+
+* Total Customers
+* Total Measurements
+* Total Orders
+* Total Revenue
+* Recent Customers
+* Recent Orders
+
+Premium card-based UI.
+
+---
+
+# Customer Management
+
+Create Customer:
+
+Fields:
+
+* Customer Name
+* Mobile Number
+* Email Address
+* Address
+* Notes
+
+Features:
+
+* Edit Customer
+* Delete Customer
+* Search Customer
+* Customer History
+
+---
+
+# Measurement Module
+
+When adding measurements, provide:
+
+* Customer Selection
+* Measurement Date
+
+Measurements:
+
+* Chest
+* Shoulder
+* Neck
+* Sleeve
+* Waist
+* Length
+* Hip
+* Thigh
+* Pant Length
+* Bottom Width
+* Armhole
+* Wrist
+* Custom Measurements
+
+---
+
+# Voice Measurement Entry
+
+Add microphone button beside each measurement field.
+
+Example:
+
+User taps microphone.
+
+User speaks:
+
+"Chest 38"
+
+Automatically fill:
+
+Chest = 38
+
+User speaks:
+
+"Shoulder 17"
+
+Automatically fill:
+
+Shoulder = 17
+
+Voice recognition should support:
+
+* English
+* Hindi
+* Gujarati
+
+Convert speech to measurement values automatically.
+
+---
+
+# Product Types
+
+Default products:
+
+* Shirt
+* Pant
+* Blazer
+* Kurta
+* Lenga
+* Coat
+* Safari Suit
+* Jacket
+* School Uniform
+
+Admin can:
+
+* Add Product
+* Edit Product
+* Delete Product
+
+---
+
+# Pricing Module
+
+Default pricing system.
+
+Example:
+
+Shirt = ₹500
+Pant = ₹700
+Kurta = ₹600
+Lenga = ₹2500
+
+Admin can update prices.
+
+When product selected:
+
+Price auto-populates.
+
+---
+
+# Invoice Module
+
+Generate professional invoice.
+
+Invoice includes:
+
+* Invoice Number
+* Customer Name
+* Mobile Number
+* Product Type
+* Quantity
+* Price
+* Total Amount
+* GST
+* Grand Total
+* Measurement Summary
+
+Generate PDF Invoice.
+
+---
+
+# Invoice Sharing
+
+After invoice creation:
+
+Options:
+
+* Send Email
+* Send WhatsApp
+* Download PDF
+* Print Invoice
+
+WhatsApp message example:
+
+"Dear Customer, your tailoring order has been created successfully. Please find your invoice attached."
+
+---
+
+# Notifications
+
+Push notifications for:
+
+* Registration Approval
+* New Order
+* Invoice Generated
+* Order Completed
+
+---
+
+# Search Features
+
+Global search for:
+
+* Customers
+* Mobile Number
+* Invoice Number
+* Products
+
+---
+
+# Reports
+
+Generate reports:
+
+* Daily Orders
+* Weekly Orders
+* Monthly Orders
+* Revenue Reports
+* Customer Reports
+
+Export:
+
+* PDF
+* Excel
+
+---
+
+# UI Design Requirements
+
+Design style inspired by:
+
+* Blinkit
+* WhatsApp
+* Zomato
+
+Requirements:
+
+* Premium look
+* Modern cards
+* Rounded corners
+* Elegant shadows
+* Smooth animations
+* Dark Mode
+* Light Mode
+* Mobile-first design
+* Fast performance
+
+Use professional typography and attractive dashboards.
+
+---
+
+# Folder Structure
+
+src/
+├── assets/
+├── components/
+├── screens/
+├── navigation/
+├── services/
+├── api/
+├── hooks/
+├── redux/
+├── utils/
+├── constants/
+├── models/
+├── features/
+├── notifications/
+├── voice/
+├── invoices/
+└── reports/
+
+---
+
+# Additional Features
+
+* Offline Data Storage
+* Sync when Internet Available
+* Customer Profile Photo
+* Measurement History
+* Order Tracking Status
+* Multi-language Support
+* Backup & Restore
+* Secure Data Encryption
+* Audit Logs
+
+Create complete frontend, backend APIs, database schema, navigation structure, reusable components, responsive screens, state management, authentication flow, invoice generation system, voice measurement entry system, WhatsApp integration, email integration, and production-ready code architecture.
