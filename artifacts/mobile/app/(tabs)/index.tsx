@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
+  Dimensions,
   Platform,
   Pressable,
   RefreshControl,
@@ -13,25 +14,87 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 import { useData } from "@/context/DataContext";
-import { StatCard, SectionHeader } from "@/components/ui";
-import { CustomerItem, InvoiceItem, MeasurementItem } from "@/components/ListItems";
+import { CustomerItem, InvoiceItem } from "@/components/ListItems";
 import { formatCurrency, formatDate } from "@/utils/storage";
 import colors from "@/constants/colors";
+
+const { width } = Dimensions.get("window");
+
+function QuickAction({
+  icon,
+  label,
+  color,
+  onPress,
+}: {
+  icon: keyof typeof MaterialIcons.glyphMap;
+  label: string;
+  color: string;
+  onPress: () => void;
+}) {
+  const c = useColors();
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => ({
+        flex: 1,
+        alignItems: "center",
+        gap: 8,
+        opacity: pressed ? 0.75 : 1,
+      })}
+    >
+      <View
+        style={{
+          width: 52,
+          height: 52,
+          borderRadius: 16,
+          backgroundColor: color + "18",
+          borderWidth: 1.5,
+          borderColor: color + "30",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <MaterialIcons name={icon} size={24} color={color} />
+      </View>
+      <Text
+        style={{
+          fontSize: 11,
+          fontFamily: "Inter_500Medium",
+          color: c.mutedForeground,
+          textAlign: "center",
+        }}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
 
 export default function DashboardScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { customers, measurements, invoices, isLoading, refresh } = useData();
+  const { customers, measurements, invoices, refresh } = useData();
   const [refreshing, setRefreshing] = useState(false);
 
   const totalRevenue = invoices
     .filter((i) => i.status === "completed")
     .reduce((s, i) => s + i.total, 0);
 
-  const pendingInvoices = invoices.filter((i) => i.status === "pending");
-  const recentCustomers = [...customers].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 3);
-  const recentInvoices = [...invoices].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 3);
+  const pendingRevenue = invoices
+    .filter((i) => i.status === "pending")
+    .reduce((s, i) => s + i.total, 0);
+
+  const completedInvoices = invoices.filter((i) => i.status === "completed").length;
+  const pendingCount = invoices.filter((i) => i.status === "pending").length;
+
+  const recentCustomers = [...customers]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 3);
+
+  const recentInvoices = [...invoices]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 4);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -40,166 +103,554 @@ export default function DashboardScreen() {
   }
 
   const topPad = Platform.OS === "web" ? 67 : 0;
+  const today = new Date().toLocaleDateString("en-IN", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: c.background }}
-      contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.primary} />}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 110 }}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={c.primary}
+        />
+      }
       showsVerticalScrollIndicator={false}
     >
-      {/* Header */}
+      {/* ── Hero Header ─────────────────────────────────── */}
       <View
         style={{
-          paddingTop: insets.top + topPad + 16,
-          paddingHorizontal: 20,
-          paddingBottom: 20,
           backgroundColor: c.primary,
+          paddingTop: insets.top + topPad + 20,
+          paddingHorizontal: 22,
+          paddingBottom: 32,
         }}
       >
-        <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: c.primaryForeground + "CC" }}>
-          {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "2-digit", month: "long" })}
-        </Text>
-        <Text style={{ fontSize: 22, fontFamily: "Inter_700Bold", color: c.primaryForeground, marginTop: 2 }}>
-          Welcome back, {user?.name?.split(" ")[0]}
-        </Text>
-        {user?.shopName && (
-          <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: c.primaryForeground + "BB", marginTop: 3 }}>
-            {user.shopName}
-          </Text>
-        )}
-
-        {/* Quick actions */}
-        <View style={{ flexDirection: "row", gap: 10, marginTop: 20 }}>
-          {[
-            { icon: "person-add" as const, label: "Add Customer", route: "/customers/new" },
-            { icon: "straighten" as const, label: "Measure", route: "/measurements/new" },
-            { icon: "receipt" as const, label: "Invoice", route: "/invoices/new" },
-          ].map((a) => (
-            <Pressable
-              key={a.route}
-              onPress={() => router.push(a.route as any)}
-              style={({ pressed }) => ({
-                flex: 1,
-                backgroundColor: "rgba(255,255,255,0.15)",
-                borderRadius: colors.radius,
-                padding: 12,
-                alignItems: "center",
-                gap: 6,
-                opacity: pressed ? 0.8 : 1,
-              })}
+        {/* Top row */}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 24,
+          }}
+        >
+          <View style={{ flex: 1 }}>
+            <Text
+              style={{
+                fontSize: 12,
+                fontFamily: "Inter_400Regular",
+                color: "rgba(255,255,255,0.65)",
+                marginBottom: 2,
+              }}
             >
-              <MaterialIcons name={a.icon} size={22} color={c.primaryForeground} />
-              <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: c.primaryForeground, textAlign: "center" }}>
-                {a.label}
+              {today}
+            </Text>
+            <Text
+              style={{
+                fontSize: 20,
+                fontFamily: "Inter_700Bold",
+                color: "#FFFFFF",
+              }}
+            >
+              Hi, {user?.name?.split(" ")[0]} 
+            </Text>
+            {user?.shopName ? (
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontFamily: "Inter_400Regular",
+                  color: "rgba(255,255,255,0.6)",
+                  marginTop: 1,
+                }}
+              >
+                {user.shopName}
               </Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-
-      <View style={{ padding: 20, gap: 24 }}>
-        {/* Stats */}
-        <View style={{ gap: 10 }}>
-          <View style={{ flexDirection: "row", gap: 10 }}>
-            <StatCard label="Customers" value={customers.length} icon="people" color="#6366F1" />
-            <StatCard label="Measurements" value={measurements.length} icon="straighten" color="#F59E0B" />
+            ) : null}
           </View>
-          <View style={{ flexDirection: "row", gap: 10 }}>
-            <StatCard label="Total Invoices" value={invoices.length} icon="receipt" color="#059669" />
-            <StatCard label="Revenue" value={formatCurrency(totalRevenue)} icon="currency-rupee" color="#1C1C7D" />
-          </View>
-        </View>
-
-        {/* Pending invoices alert */}
-        {pendingInvoices.length > 0 && (
           <Pressable
-            onPress={() => router.push("/(tabs)/invoices")}
+            onPress={() => router.push("/search")}
             style={{
-              backgroundColor: "#FEF3C7",
-              borderRadius: colors.radius,
-              padding: 14,
-              flexDirection: "row",
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              backgroundColor: "rgba(255,255,255,0.18)",
               alignItems: "center",
-              gap: 10,
-              borderWidth: 1,
-              borderColor: "#FDE68A",
+              justifyContent: "center",
             }}
           >
-            <MaterialIcons name="notifications" size={20} color="#D97706" />
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#92400E" }}>
-                {pendingInvoices.length} pending {pendingInvoices.length === 1 ? "invoice" : "invoices"}
-              </Text>
-              <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#92400E" }}>
-                Tap to view and update status
-              </Text>
-            </View>
-            <MaterialIcons name="chevron-right" size={18} color="#92400E" />
+            <MaterialIcons name="search" size={20} color="#FFFFFF" />
           </Pressable>
-        )}
+        </View>
 
-        {/* Recent customers */}
-        {recentCustomers.length > 0 && (
-          <View>
-            <SectionHeader
-              title="Recent Customers"
-              action={{ label: "View all", onPress: () => router.push("/(tabs)/customers") }}
+        {/* Revenue card */}
+        <View
+          style={{
+            backgroundColor: "rgba(255,255,255,0.13)",
+            borderRadius: 18,
+            padding: 20,
+            borderWidth: 1,
+            borderColor: "rgba(255,255,255,0.18)",
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 12,
+              fontFamily: "Inter_500Medium",
+              color: "rgba(255,255,255,0.7)",
+              marginBottom: 4,
+            }}
+          >
+            Total Revenue
+          </Text>
+          <Text
+            style={{
+              fontSize: 34,
+              fontFamily: "Inter_700Bold",
+              color: "#FFFFFF",
+              marginBottom: 14,
+            }}
+          >
+            {formatCurrency(totalRevenue)}
+          </Text>
+          <View style={{ flexDirection: "row", gap: 20 }}>
+            <View>
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontFamily: "Inter_400Regular",
+                  color: "rgba(255,255,255,0.6)",
+                }}
+              >
+                Pending
+              </Text>
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontFamily: "Inter_600SemiBold",
+                  color: "#FCD34D",
+                }}
+              >
+                {formatCurrency(pendingRevenue)}
+              </Text>
+            </View>
+            <View
+              style={{
+                width: 1,
+                backgroundColor: "rgba(255,255,255,0.2)",
+              }}
             />
-            <View style={{ gap: 8 }}>
-              {recentCustomers.map((cust) => (
-                <CustomerItem
-                  key={cust.id}
-                  customer={cust}
-                  onPress={() => router.push(`/customers/${cust.id}` as any)}
-                  measurementCount={measurements.filter((m) => m.customerId === cust.id).length}
-                />
-              ))}
+            <View>
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontFamily: "Inter_400Regular",
+                  color: "rgba(255,255,255,0.6)",
+                }}
+              >
+                Invoices
+              </Text>
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontFamily: "Inter_600SemiBold",
+                  color: "#6EE7E7",
+                }}
+              >
+                {completedInvoices} done
+              </Text>
+            </View>
+            <View
+              style={{
+                width: 1,
+                backgroundColor: "rgba(255,255,255,0.2)",
+              }}
+            />
+            <View>
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontFamily: "Inter_400Regular",
+                  color: "rgba(255,255,255,0.6)",
+                }}
+              >
+                Customers
+              </Text>
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontFamily: "Inter_600SemiBold",
+                  color: "#FFFFFF",
+                }}
+              >
+                {customers.length}
+              </Text>
             </View>
           </View>
-        )}
+        </View>
+      </View>
 
-        {/* Recent invoices */}
-        {recentInvoices.length > 0 && (
-          <View>
-            <SectionHeader
-              title="Recent Invoices"
-              action={{ label: "View all", onPress: () => router.push("/(tabs)/invoices") }}
-            />
-            <View style={{ gap: 8 }}>
-              {recentInvoices.map((inv) => (
-                <InvoiceItem
-                  key={inv.id}
-                  invoice={inv}
-                  onPress={() => router.push(`/invoices/${inv.id}` as any)}
-                />
-              ))}
-            </View>
-          </View>
-        )}
-
-        {customers.length === 0 && (
-          <View style={{ alignItems: "center", paddingVertical: 32, gap: 12 }}>
-            <View style={{ backgroundColor: c.muted, borderRadius: 40, padding: 16 }}>
-              <MaterialIcons name="people" size={36} color={c.mutedForeground} />
-            </View>
-            <Text style={{ fontSize: 16, fontFamily: "Inter_600SemiBold", color: c.foreground }}>
-              Start by adding a customer
-            </Text>
-            <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: c.mutedForeground, textAlign: "center" }}>
-              Add your first customer to begin managing measurements and invoices.
-            </Text>
-            <Pressable
-              onPress={() => router.push("/customers/new")}
-              style={{ backgroundColor: c.primary, paddingHorizontal: 20, paddingVertical: 11, borderRadius: colors.radius, marginTop: 4 }}
+      {/* ── Stats pills ──────────────────────────────────── */}
+      <View
+        style={{
+          flexDirection: "row",
+          marginHorizontal: 22,
+          marginTop: -20,
+          gap: 10,
+        }}
+      >
+        {[
+          {
+            icon: "people" as const,
+            label: "Customers",
+            value: customers.length,
+            color: "#6366F1",
+          },
+          {
+            icon: "straighten" as const,
+            label: "Measurements",
+            value: measurements.length,
+            color: "#F59E0B",
+          },
+          {
+            icon: "receipt" as const,
+            label: "Pending",
+            value: pendingCount,
+            color: "#EF4444",
+          },
+        ].map((s) => (
+          <View
+            key={s.label}
+            style={{
+              flex: 1,
+              backgroundColor: c.card,
+              borderRadius: 16,
+              padding: 14,
+              alignItems: "center",
+              gap: 6,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.08,
+              shadowRadius: 12,
+              elevation: 4,
+              borderWidth: 1,
+              borderColor: c.border,
+            }}
+          >
+            <View
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                backgroundColor: s.color + "18",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
             >
-              <Text style={{ color: c.primaryForeground, fontSize: 14, fontFamily: "Inter_600SemiBold" }}>
-                Add First Customer
+              <MaterialIcons name={s.icon} size={18} color={s.color} />
+            </View>
+            <Text
+              style={{
+                fontSize: 20,
+                fontFamily: "Inter_700Bold",
+                color: c.foreground,
+              }}
+            >
+              {s.value}
+            </Text>
+            <Text
+              style={{
+                fontSize: 10,
+                fontFamily: "Inter_400Regular",
+                color: c.mutedForeground,
+                textAlign: "center",
+              }}
+            >
+              {s.label}
+            </Text>
+          </View>
+        ))}
+      </View>
+
+      {/* ── Quick Actions ─────────────────────────────── */}
+      <View style={{ marginHorizontal: 22, marginTop: 24 }}>
+        <Text
+          style={{
+            fontSize: 16,
+            fontFamily: "Inter_700Bold",
+            color: c.foreground,
+            marginBottom: 14,
+          }}
+        >
+          Quick Actions
+        </Text>
+        <View
+          style={{
+            backgroundColor: c.card,
+            borderRadius: 18,
+            padding: 18,
+            flexDirection: "row",
+            borderWidth: 1,
+            borderColor: c.border,
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.05,
+            shadowRadius: 8,
+            elevation: 2,
+          }}
+        >
+          <QuickAction
+            icon="person-add"
+            label="Add Customer"
+            color="#6366F1"
+            onPress={() => router.push("/customers/new")}
+          />
+          <QuickAction
+            icon="straighten"
+            label="Measure"
+            color="#0D6E6E"
+            onPress={() => router.push("/measurements/new")}
+          />
+          <QuickAction
+            icon="receipt"
+            label="Invoice"
+            color="#059669"
+            onPress={() => router.push("/invoices/new")}
+          />
+          <QuickAction
+            icon="search"
+            label="Search"
+            color="#F59E0B"
+            onPress={() => router.push("/search")}
+          />
+        </View>
+      </View>
+
+      {/* ── Pending alert ─────────────────────────────── */}
+      {pendingCount > 0 && (
+        <Pressable
+          onPress={() => router.push("/(tabs)/invoices")}
+          style={({ pressed }) => ({
+            marginHorizontal: 22,
+            marginTop: 18,
+            backgroundColor: "#FEF3C7",
+            borderRadius: 14,
+            padding: 14,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+            borderWidth: 1,
+            borderColor: "#FDE68A",
+            opacity: pressed ? 0.85 : 1,
+          })}
+        >
+          <View
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 10,
+              backgroundColor: "#FDE68A",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <MaterialIcons name="schedule" size={18} color="#92400E" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text
+              style={{
+                fontSize: 13,
+                fontFamily: "Inter_600SemiBold",
+                color: "#92400E",
+              }}
+            >
+              {pendingCount} pending{" "}
+              {pendingCount === 1 ? "invoice" : "invoices"}
+            </Text>
+            <Text
+              style={{
+                fontSize: 11,
+                fontFamily: "Inter_400Regular",
+                color: "#B45309",
+              }}
+            >
+              {formatCurrency(pendingRevenue)} awaiting collection
+            </Text>
+          </View>
+          <MaterialIcons name="chevron-right" size={18} color="#92400E" />
+        </Pressable>
+      )}
+
+      {/* ── Recent Customers ──────────────────────────── */}
+      {recentCustomers.length > 0 && (
+        <View style={{ marginTop: 24 }}>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginHorizontal: 22,
+              marginBottom: 12,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 16,
+                fontFamily: "Inter_700Bold",
+                color: c.foreground,
+              }}
+            >
+              Recent Customers
+            </Text>
+            <Pressable onPress={() => router.push("/(tabs)/customers")}>
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontFamily: "Inter_500Medium",
+                  color: c.primary,
+                }}
+              >
+                See all
               </Text>
             </Pressable>
           </View>
-        )}
-      </View>
+          <View style={{ marginHorizontal: 22, gap: 8 }}>
+            {recentCustomers.map((cust) => (
+              <CustomerItem
+                key={cust.id}
+                customer={cust}
+                onPress={() => router.push(`/customers/${cust.id}` as any)}
+                measurementCount={
+                  measurements.filter((m) => m.customerId === cust.id).length
+                }
+              />
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* ── Recent Invoices ───────────────────────────── */}
+      {recentInvoices.length > 0 && (
+        <View style={{ marginTop: 24 }}>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginHorizontal: 22,
+              marginBottom: 12,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 16,
+                fontFamily: "Inter_700Bold",
+                color: c.foreground,
+              }}
+            >
+              Recent Invoices
+            </Text>
+            <Pressable onPress={() => router.push("/(tabs)/invoices")}>
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontFamily: "Inter_500Medium",
+                  color: c.primary,
+                }}
+              >
+                See all
+              </Text>
+            </Pressable>
+          </View>
+          <View style={{ marginHorizontal: 22, gap: 8 }}>
+            {recentInvoices.map((inv) => (
+              <InvoiceItem
+                key={inv.id}
+                invoice={inv}
+                onPress={() => router.push(`/invoices/${inv.id}` as any)}
+              />
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* ── Empty first-run ───────────────────────────── */}
+      {customers.length === 0 && (
+        <View
+          style={{
+            marginHorizontal: 22,
+            marginTop: 28,
+            backgroundColor: c.card,
+            borderRadius: 18,
+            padding: 28,
+            alignItems: "center",
+            gap: 12,
+            borderWidth: 1,
+            borderColor: c.border,
+          }}
+        >
+          <View
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 20,
+              backgroundColor: c.primary + "18",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <MaterialIcons name="people" size={32} color={c.primary} />
+          </View>
+          <Text
+            style={{
+              fontSize: 17,
+              fontFamily: "Inter_700Bold",
+              color: c.foreground,
+              textAlign: "center",
+            }}
+          >
+            Start your first order
+          </Text>
+          <Text
+            style={{
+              fontSize: 13,
+              fontFamily: "Inter_400Regular",
+              color: c.mutedForeground,
+              textAlign: "center",
+              lineHeight: 20,
+            }}
+          >
+            Add a customer, record their measurements, and create an invoice.
+          </Text>
+          <Pressable
+            onPress={() => router.push("/customers/new")}
+            style={({ pressed }) => ({
+              backgroundColor: c.primary,
+              paddingHorizontal: 24,
+              paddingVertical: 12,
+              borderRadius: colors.radius,
+              marginTop: 4,
+              opacity: pressed ? 0.85 : 1,
+            })}
+          >
+            <Text
+              style={{
+                color: "#FFFFFF",
+                fontSize: 14,
+                fontFamily: "Inter_600SemiBold",
+              }}
+            >
+              Add First Customer
+            </Text>
+          </Pressable>
+        </View>
+      )}
     </ScrollView>
   );
 }

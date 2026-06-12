@@ -6,12 +6,12 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { MaterialIcons } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 import { Button, Input } from "@/components/ui";
@@ -28,10 +28,13 @@ export default function LoginScreen() {
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
   async function handleLogin() {
-    const newErrors: typeof errors = {};
-    if (!emailOrMobile.trim()) newErrors.email = "Email or mobile is required";
-    if (!password.trim()) newErrors.password = "Password is required";
-    if (Object.keys(newErrors).length > 0) { setErrors(newErrors); return; }
+    const e: typeof errors = {};
+    if (!emailOrMobile.trim()) e.email = "Email or mobile is required";
+    if (!password.trim()) e.password = "Password is required";
+    if (Object.keys(e).length > 0) {
+      setErrors(e);
+      return;
+    }
     setErrors({});
     setLoading(true);
     const result = await login(emailOrMobile.trim(), password);
@@ -43,80 +46,129 @@ export default function LoginScreen() {
     }
   }
 
+  const topPad = Platform.OS === "web" ? 67 : 0;
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: c.background }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScrollView
-        contentContainerStyle={{
-          flexGrow: 1,
-          paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0),
-          paddingBottom: insets.bottom + 24,
-          paddingHorizontal: 24,
-        }}
+        contentContainerStyle={{ flexGrow: 1 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Logo */}
-        <View style={{ alignItems: "center", paddingTop: 40, paddingBottom: 36 }}>
+        {/* ── Top teal banner ──────────────────────── */}
+        <View
+          style={{
+            backgroundColor: c.primary,
+            paddingTop: insets.top + topPad + 40,
+            paddingBottom: 44,
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          {/* Icon */}
           <View
             style={{
-              width: 72,
-              height: 72,
-              borderRadius: 20,
-              backgroundColor: c.primary,
+              width: 80,
+              height: 80,
+              borderRadius: 24,
+              backgroundColor: "rgba(255,255,255,0.18)",
+              borderWidth: 2,
+              borderColor: "rgba(255,255,255,0.3)",
               alignItems: "center",
               justifyContent: "center",
-              marginBottom: 16,
-              shadowColor: c.primary,
-              shadowOffset: { width: 0, height: 6 },
-              shadowOpacity: 0.35,
-              shadowRadius: 12,
-              elevation: 8,
+              overflow: "hidden",
             }}
           >
             <Image
               source={require("@/assets/images/icon.png")}
-              style={{ width: 52, height: 52, borderRadius: 12 }}
+              style={{ width: 72, height: 72 }}
+              resizeMode="cover"
             />
           </View>
-          <Text style={{ fontSize: 26, fontFamily: "Inter_700Bold", color: c.foreground }}>
-            Tailor Book
-          </Text>
-          <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: c.mutedForeground, marginTop: 4 }}>
-            Professional tailoring management
-          </Text>
+
+          <View style={{ alignItems: "center", gap: 4 }}>
+            <Text
+              style={{
+                fontSize: 28,
+                fontFamily: "Inter_700Bold",
+                color: "#FFFFFF",
+                letterSpacing: -0.5,
+              }}
+            >
+              Tailor Book
+            </Text>
+            <Text
+              style={{
+                fontSize: 13,
+                fontFamily: "Inter_400Regular",
+                color: "rgba(255,255,255,0.72)",
+              }}
+            >
+              Professional tailoring management
+            </Text>
+          </View>
         </View>
 
-        {/* Form */}
-        <View style={{ gap: 14 }}>
-          <Input
-            label="Email or Mobile"
-            placeholder="Enter email or mobile number"
-            value={emailOrMobile}
-            onChangeText={setEmailOrMobile}
-            icon="alternate-email"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            error={errors.email}
-          />
-          <Input
-            label="Password"
-            placeholder="Enter password"
-            value={password}
-            onChangeText={setPassword}
-            icon="lock"
-            secureTextEntry={!showPassword}
-            error={errors.password}
-            rightElement={
-              <Pressable onPress={() => setShowPassword(!showPassword)} style={{ padding: 4 }}>
-                <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: c.primary }}>
-                  {showPassword ? "Hide" : "Show"}
-                </Text>
-              </Pressable>
-            }
-          />
+        {/* ── Form card ────────────────────────────── */}
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: c.background,
+            borderTopLeftRadius: 28,
+            borderTopRightRadius: 28,
+            marginTop: -20,
+            paddingHorizontal: 24,
+            paddingTop: 28,
+            paddingBottom: insets.bottom + 32,
+            gap: 18,
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 20,
+              fontFamily: "Inter_700Bold",
+              color: c.foreground,
+            }}
+          >
+            Sign in to your account
+          </Text>
+
+          <View style={{ gap: 14 }}>
+            <Input
+              label="Email or Mobile"
+              placeholder="Enter email or mobile number"
+              value={emailOrMobile}
+              onChangeText={setEmailOrMobile}
+              icon="alternate-email"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              error={errors.email}
+            />
+            <Input
+              label="Password"
+              placeholder="Enter password"
+              value={password}
+              onChangeText={setPassword}
+              icon="lock"
+              secureTextEntry={!showPassword}
+              error={errors.password}
+              rightElement={
+                <Pressable
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={{ paddingHorizontal: 4 }}
+                >
+                  <MaterialIcons
+                    name={showPassword ? "visibility-off" : "visibility"}
+                    size={18}
+                    color={c.mutedForeground}
+                  />
+                </Pressable>
+              }
+            />
+          </View>
 
           <Button
             label="Sign In"
@@ -124,36 +176,68 @@ export default function LoginScreen() {
             loading={loading}
             fullWidth
             size="lg"
-            style={{ marginTop: 6 }}
           />
-        </View>
 
-        {/* Admin hint */}
-        <View
-          style={{
-            marginTop: 20,
-            padding: 14,
-            backgroundColor: c.muted,
-            borderRadius: colors.radius,
-            borderWidth: 1,
-            borderColor: c.border,
-          }}
-        >
-          <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: c.mutedForeground, textAlign: "center" }}>
-            Admin: admin@tailorbook.com / admin123
-          </Text>
-        </View>
-
-        {/* Register link */}
-        <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 28, gap: 4 }}>
-          <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
-            New tailor?
-          </Text>
-          <Pressable onPress={() => router.push("/(auth)/register")}>
-            <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.primary }}>
-              Register here
+          {/* Admin hint */}
+          <View
+            style={{
+              padding: 14,
+              backgroundColor: c.muted,
+              borderRadius: colors.radius,
+              borderWidth: 1,
+              borderColor: c.border,
+              flexDirection: "row",
+              alignItems: "flex-start",
+              gap: 10,
+            }}
+          >
+            <MaterialIcons
+              name="admin-panel-settings"
+              size={16}
+              color={c.mutedForeground}
+              style={{ marginTop: 1 }}
+            />
+            <Text
+              style={{
+                flex: 1,
+                fontSize: 12,
+                fontFamily: "Inter_400Regular",
+                color: c.mutedForeground,
+              }}
+            >
+              Admin demo: admin@tailorbook.com{"\n"}Password: admin123
             </Text>
-          </Pressable>
+          </View>
+
+          {/* Register */}
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "center",
+              gap: 4,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 14,
+                fontFamily: "Inter_400Regular",
+                color: c.mutedForeground,
+              }}
+            >
+              New tailor?
+            </Text>
+            <Pressable onPress={() => router.push("/(auth)/register")}>
+              <Text
+                style={{
+                  fontSize: 14,
+                  fontFamily: "Inter_700Bold",
+                  color: c.primary,
+                }}
+              >
+                Register here
+              </Text>
+            </Pressable>
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

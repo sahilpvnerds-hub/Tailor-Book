@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import {
   ensureAdminExists,
@@ -96,7 +97,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function logout() {
-    await setCurrentUser(null);
+    // Clear all app data except user accounts
+    const usersRaw = await AsyncStorage.getItem("@tailorbook/users");
+    await AsyncStorage.clear();
+    // Restore user accounts so they can still log in
+    if (usersRaw) {
+      await AsyncStorage.setItem("@tailorbook/users", usersRaw);
+    }
     setUser(null);
   }
 
