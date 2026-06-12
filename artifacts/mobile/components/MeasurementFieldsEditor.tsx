@@ -139,17 +139,7 @@ export function MeasurementFieldsEditor({
                   onChangeText={(v) => onChange(field.key, v)}
                   keyboardType="decimal-pad"
                 />
-                <Text
-                  style={{
-                    marginLeft: 6,
-                    fontSize: 12,
-                    color: c.mutedForeground,
-                    fontFamily: "Inter_400Regular",
-                    width: 14,
-                  }}
-                >
-                  {isFilled ? '"' : ""}
-                </Text>
+
                 {sourceMeasurement && (sourceMeasurement as any)[field.key] != null && (
                   <Pressable
                     onPress={() => onChange(field.key, String((sourceMeasurement as any)[field.key]))}

@@ -161,14 +161,20 @@ export default function NewInvoiceScreen() {
   //   touched === false  → auto-fill may overwrite values
   //   touched === true   → leave values alone
   //
-  // The effect is keyed by (customerId, productTypeSignature). It does NOT
-  // depend on `items`, so user keystrokes in any field cannot loop it.
+  // Fix: removed the lastSignatureRef guard that was blocking the initial
+  // auto-fill when customerId is pre-populated from route params. Now we
+  // always run on mount (hasMountedRef = false) and then only re-run when
+  // the signature actually changes.
   const productTypeSignature = items.map((i) => i.productType).join("|");
   const lastSignatureRef = useRef<string>("");
+  const hasMountedRef = useRef(false);
   useEffect(() => {
     if (!selectedCustomerId) return;
     const signature = `${selectedCustomerId}::${productTypeSignature}`;
-    if (lastSignatureRef.current === signature) return;
+    // Allow the very first run even if the signature hasn't changed (covers
+    // the case where customerId is pre-filled from route params).
+    if (hasMountedRef.current && lastSignatureRef.current === signature) return;
+    hasMountedRef.current = true;
     lastSignatureRef.current = signature;
     setItems((prev) => {
       let changed = false;

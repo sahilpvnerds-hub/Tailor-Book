@@ -83,7 +83,7 @@ function parseVoiceText(text: string): { key: MeasurementKey | null; value: numb
 export default function NewMeasurementScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const { addMeasurement, customers } = useData();
+  const { addMeasurement, customers, getCustomerMeasurementForProduct } = useData();
   const params = useLocalSearchParams<{
     customerId?: string;
     customerName?: string;
@@ -95,6 +95,32 @@ export default function NewMeasurementScreen() {
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [values, setValues] = useState<MeasurementValues>({});
   const [notes, setNotes] = useState("");
+  // Tracks whether the user has manually typed any value — prevents auto-fill
+  // from overwriting hand-entered data.
+  const userTouchedRef = useRef(false);
+
+  // ── Auto-fetch last measurement ─────────────────────────────────────────
+  // When customer or product type changes, look up the latest saved
+  // measurement and pre-fill the fields (only when the user hasn't touched
+  // anything yet).
+  useEffect(() => {
+    if (!selectedCustomerId) return;
+    if (userTouchedRef.current) return; // don't clobber manual edits
+    const m = getCustomerMeasurementForProduct(selectedCustomerId, selectedProductType);
+    if (!m) {
+      setValues({});
+      return;
+    }
+    const filled: MeasurementValues = {};
+    for (const f of MEASUREMENT_FIELDS) {
+      const v = (m as any)[f.key];
+      if (typeof v === "number" && !Number.isNaN(v)) {
+        filled[f.key] = String(v);
+      }
+    }
+    setValues(filled);
+  }, [selectedCustomerId, selectedProductType]);
+  // ────────────────────────────────────────────────────────────────────────
 
   // Voice state
   const [voiceActive, setVoiceActive] = useState(false);
@@ -139,6 +165,7 @@ export default function NewMeasurementScreen() {
     const fieldLabel =
       MEASUREMENT_FIELDS.find((f) => f.key === key)?.label ?? key;
     setValues((prev) => ({ ...prev, [key]: String(value) }));
+    userTouchedRef.current = true; // mark as touched so auto-fill won't clobber
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     showToast(fieldLabel, value);
   }
@@ -621,7 +648,10 @@ export default function NewMeasurementScreen() {
               {DEFAULT_PRODUCTS.map((p) => (
                 <Pressable
                   key={p.id}
-                  onPress={() => setSelectedProductType(p.name)}
+                  onPress={() => {
+                    userTouchedRef.current = false; // reset so auto-fill can run for new product
+                    setSelectedProductType(p.name);
+                  }}
                   style={{
                     paddingHorizontal: 16,
                     paddingVertical: 8,
@@ -723,24 +753,12 @@ export default function NewMeasurementScreen() {
                       placeholder="—"
                       placeholderTextColor={c.mutedForeground}
                       value={values[field.key] ?? ""}
-                      onChangeText={(v) =>
-                        setValues((prev) => ({ ...prev, [field.key]: v }))
-                      }
+                      onChangeText={(v) => {
+                        userTouchedRef.current = true; // manual edit — prevent auto-fill clobber
+                        setValues((prev) => ({ ...prev, [field.key]: v }));
+                      }}
                       keyboardType="decimal-pad"
                     />
-
-                    {/* Inch label */}
-                    <Text
-                      style={{
-                        marginLeft: 6,
-                        fontSize: 13,
-                        color: c.mutedForeground,
-                        fontFamily: "Inter_400Regular",
-                        width: 14,
-                      }}
-                    >
-                      {isFilled ? '"' : ""}
-                    </Text>
 
                     {/* Mic per field */}
                     <Pressable
