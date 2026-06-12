@@ -16,6 +16,11 @@ interface AuthContextType {
   login: (emailOrMobile: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (data: RegisterData) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
+  updateProfile: (
+    patch: Partial<
+      Pick<User, "name" | "email" | "mobile" | "shopName" | "shopAddress" | "city" | "state" | "avatarUri">
+    >,
+  ) => Promise<{ success: boolean; error?: string }>;
   approveUser: (userId: string) => Promise<void>;
   rejectUser: (userId: string) => Promise<void>;
   getPendingUsers: () => Promise<User[]>;
@@ -97,14 +102,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function logout() {
-    // Clear all app data except user accounts
-    const usersRaw = await AsyncStorage.getItem("@tailorbook/users");
-    await AsyncStorage.clear();
-    // Restore user accounts so they can still log in
-    if (usersRaw) {
-      await AsyncStorage.setItem("@tailorbook/users", usersRaw);
-    }
+    // Clear only the current session — preserve all data (customers, measurements, invoices, counters)
+    await setCurrentUser(null);
     setUser(null);
+  }
+
+  async function updateProfile(
+    patch: Partial<
+      Pick<User, "name" | "email" | "mobile" | "shopName" | "shopAddress" | "city" | "state" | "avatarUri">
+    >,
+  ) {
+    if (!user) return { success: false, error: "Not signed in" };
+    const users = await getUsers();
+    const updatedUser: User = { ...user, ...patch };
+    const updatedUsers = users.map((u) => (u.id === user.id ? updatedUser : u));
+    await saveUsers(updatedUsers);
+    await setCurrentUser(updatedUser);
+    setUser(updatedUser);
+    return { success: true };
   }
 
   async function approveUser(userId: string) {
@@ -141,6 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         register,
         logout,
+        updateProfile,
         approveUser,
         rejectUser,
         getPendingUsers,

@@ -6,7 +6,7 @@ import { useColors } from "@/hooks/useColors";
 import colors from "@/constants/colors";
 import { Badge } from "./ui";
 import { Customer, Invoice, Measurement } from "@/types";
-import { formatCurrency, formatDate } from "@/utils/storage";
+import { displayOrderLabel, formatCurrency, formatDate } from "@/utils/storage";
 
 // ── CustomerItem ──────────────────────────────────────────────────────────────
 interface CustomerItemProps {
@@ -272,6 +272,7 @@ export function InvoiceItem({ invoice, onPress }: InvoiceItemProps) {
         >
           {invoice.customerName}
         </Text>
+        {/* Two-line: prominent order label below, smaller invoice number above */}
         <Text
           style={{
             fontSize: 12,
@@ -280,7 +281,17 @@ export function InvoiceItem({ invoice, onPress }: InvoiceItemProps) {
             marginTop: 1,
           }}
         >
-          {invoice.invoiceNumber} · {formatDate(invoice.createdAt)}
+          {displayOrderLabel(invoice)} · {formatDate(invoice.createdAt)}
+        </Text>
+        <Text
+          style={{
+            fontSize: 11,
+            fontFamily: "Inter_500Medium",
+            color: c.primary,
+            marginTop: 1,
+          }}
+        >
+          {invoice.invoiceNumber}
         </Text>
       </View>
 

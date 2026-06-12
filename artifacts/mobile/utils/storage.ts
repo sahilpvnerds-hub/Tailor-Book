@@ -8,6 +8,7 @@ export const STORAGE_KEYS = {
   MEASUREMENTS: "@tailorbook/measurements",
   INVOICES: "@tailorbook/invoices",
   INVOICE_COUNTER: "@tailorbook/invoiceCounter",
+  ORDER_COUNTER: "@tailorbook/orderCounter",
 };
 
 export function generateId(): string {
@@ -101,7 +102,28 @@ export async function getNextInvoiceNumber(): Promise<string> {
   const counter = (await getStorageItem<number>(STORAGE_KEYS.INVOICE_COUNTER)) ?? 0;
   const next = counter + 1;
   await setStorageItem(STORAGE_KEYS.INVOICE_COUNTER, next);
-  return `INV-${String(next).padStart(4, "0")}`;
+  return `INV ${String(next).padStart(3, "0")}`;
+}
+
+export async function getNextOrderLabel(): Promise<string> {
+  const counter = (await getStorageItem<number>(STORAGE_KEYS.ORDER_COUNTER)) ?? 0;
+  const next = counter + 1;
+  await setStorageItem(STORAGE_KEYS.ORDER_COUNTER, next);
+  return `ORD ${String(next).padStart(3, "0")}`;
+}
+
+// Backward-compat helpers for invoices that may not yet have orderLabel persisted.
+export function displayOrderLabel(invoice: {
+  invoiceNumber: string;
+  orderLabel?: string;
+}): string {
+  return invoice.orderLabel || invoice.invoiceNumber;
+}
+
+export function withOrderLabel<T extends { invoiceNumber: string; orderLabel?: string }>(
+  inv: T,
+): T & { orderLabel: string } {
+  return { ...inv, orderLabel: inv.orderLabel || inv.invoiceNumber };
 }
 
 // Utility

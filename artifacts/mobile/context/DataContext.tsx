@@ -5,9 +5,11 @@ import {
   getInvoices,
   getMeasurements,
   getNextInvoiceNumber,
+  getNextOrderLabel,
   saveCustomers,
   saveInvoices,
   saveMeasurements,
+  withOrderLabel,
 } from "@/utils/storage";
 import { Customer, Invoice, InvoiceItem, Measurement } from "@/types";
 import { useAuth } from "./AuthContext";
@@ -34,6 +36,7 @@ interface DataContextType {
   updateInvoiceStatus: (id: string, status: Invoice["status"]) => Promise<void>;
   getCustomerMeasurements: (customerId: string) => Measurement[];
   getCustomerInvoices: (customerId: string) => Invoice[];
+  getCustomerMeasurementForProduct: (customerId: string, productType: string) => Measurement | undefined;
 }
 
 const DataContext = createContext<DataContextType>({} as DataContextType);
@@ -53,9 +56,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const filteredC = user.role === "admin" ? c : c.filter((x) => x.tailorId === user.id);
     const filteredM = user.role === "admin" ? m : m.filter((x) => x.tailorId === user.id);
     const filteredI = user.role === "admin" ? i : i.filter((x) => x.tailorId === user.id);
+    // Migrate old invoices — ensure orderLabel is always present for backward compat.
+    const migratedI = filteredI.map(withOrderLabel);
     setCustomers(filteredC);
     setMeasurements(filteredM);
-    setInvoices(filteredI);
+    setInvoices(migratedI);
     setIsLoading(false);
   }, [user]);
 
@@ -123,9 +128,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const gstAmount = (subtotal * data.gstRate) / 100;
     const total = subtotal + gstAmount;
     const invoiceNumber = await getNextInvoiceNumber();
+    const orderLabel = await getNextOrderLabel();
     const inv: Invoice = {
       id: generateId(),
       invoiceNumber,
+      orderLabel,
       tailorId: user.id,
       customerId: data.customerId,
       customerName: data.customerName,
@@ -160,6 +167,32 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return invoices.filter((i) => i.customerId === customerId);
   }
 
+  function getCustomerMeasurementForProduct(customerId: string, productType: string) {
+    // Return the most-recent measurement for this customer+product combination.
+    // We sort by `date` (when the measurement was taken) and then by `createdAt`
+    // as a tie-breaker, so a newer record always wins even when dates are equal.
+    const matches = measurements.filter(
+      (m) => m.customerId === customerId && m.productType === productType,
+    );
+    if (matches.length === 0) {
+      console.log(
+        `[DataContext] getCustomerMeasurementForProduct → no measurement found for customer=${customerId} product=${productType}`,
+      );
+      return undefined;
+    }
+    const sorted = [...matches].sort((a, b) => {
+      const ad = new Date(a.date || a.createdAt).getTime();
+      const bd = new Date(b.date || b.createdAt).getTime();
+      if (bd !== ad) return bd - ad;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+    const latest = sorted[0];
+    console.log(
+      `[DataContext] getCustomerMeasurementForProduct → customer=${customerId} product=${productType} selectedId=${latest.id} totalMatches=${matches.length}`,
+    );
+    return latest;
+  }
+
   return (
     <DataContext.Provider
       value={{
@@ -177,6 +210,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         updateInvoiceStatus,
         getCustomerMeasurements,
         getCustomerInvoices,
+        getCustomerMeasurementForProduct,
       }}
     >
       {children}

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Alert, Linking, Platform, Pressable, ScrollView, Share, Text, View } from "react-native";
+import { Alert, Linking, Modal, Platform, Pressable, ScrollView, Share, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -7,7 +7,7 @@ import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useData } from "@/context/DataContext";
 import { Badge, Button, Card, Divider } from "@/components/ui";
-import { formatCurrency, formatDate } from "@/utils/storage";
+import { displayOrderLabel, formatCurrency, formatDate } from "@/utils/storage";
 import { Invoice } from "@/types";
 import colors from "@/constants/colors";
 
@@ -16,6 +16,7 @@ function buildInvoiceText(invoice: Invoice): string {
     `TAILOR BOOK - INVOICE`,
     `============================`,
     `Invoice #: ${invoice.invoiceNumber}`,
+    `Order #: ${displayOrderLabel(invoice)}`,
     `Date: ${formatDate(invoice.createdAt)}`,
     ``,
     `CUSTOMER DETAILS`,
@@ -48,6 +49,7 @@ export default function InvoiceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { invoices, updateInvoiceStatus } = useData();
   const invoice = invoices.find((i) => i.id === id);
+  const [labelModalOpen, setLabelModalOpen] = useState(false);
 
   const topPad = Platform.OS === "web" ? 67 : 0;
 
@@ -131,6 +133,37 @@ export default function InvoiceDetailScreen() {
           <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.85)" }}>
             {formatDate(invoice.createdAt)}
           </Text>
+          {/* Order label chip — tap to open printable label view */}
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setLabelModalOpen(true);
+            }}
+            style={({ pressed }) => ({
+              alignSelf: "flex-start",
+              marginTop: 8,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+              backgroundColor: "rgba(255,255,255,0.22)",
+              borderRadius: 999,
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              opacity: pressed ? 0.8 : 1,
+            })}
+          >
+            <MaterialIcons name="label" size={14} color="#FFFFFF" />
+            <Text
+              style={{
+                fontSize: 13,
+                fontFamily: "Inter_700Bold",
+                color: "#FFFFFF",
+                letterSpacing: 0.5,
+              }}
+            >
+              Order {displayOrderLabel(invoice)}
+            </Text>
+          </Pressable>
         </View>
 
         {/* Total */}
@@ -306,6 +339,169 @@ export default function InvoiceDetailScreen() {
           </View>
         </Card>
       </View>
+
+      {/* Printable Order Label Modal */}
+      <Modal
+        visible={labelModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLabelModalOpen(false)}
+      >
+        <Pressable
+          onPress={() => setLabelModalOpen(false)}
+          style={{
+            flex: 1,
+            backgroundColor: c.overlay,
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+          }}
+        >
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 380,
+              backgroundColor: c.card,
+              borderRadius: 18,
+              borderWidth: 1,
+              borderColor: c.border,
+              padding: 20,
+              gap: 14,
+            }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <MaterialIcons name="label" size={20} color={c.primary} />
+              <Text
+                style={{
+                  flex: 1,
+                  fontSize: 16,
+                  fontFamily: "Inter_700Bold",
+                  color: c.foreground,
+                }}
+              >
+                Order Label
+              </Text>
+              <Pressable onPress={() => setLabelModalOpen(false)} hitSlop={8}>
+                <MaterialIcons name="close" size={20} color={c.mutedForeground} />
+              </Pressable>
+            </View>
+
+            <View
+              style={{
+                borderWidth: 2,
+                borderStyle: "dashed",
+                borderColor: c.border,
+                borderRadius: colors.radius,
+                padding: 18,
+                gap: 8,
+                alignItems: "center",
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontFamily: "Inter_600SemiBold",
+                  color: c.mutedForeground,
+                  textTransform: "uppercase",
+                  letterSpacing: 1.2,
+                }}
+              >
+                Order Number
+              </Text>
+              <Text
+                style={{
+                  fontSize: 32,
+                  fontFamily: "Inter_700Bold",
+                  color: c.primary,
+                  letterSpacing: 1,
+                }}
+              >
+                {displayOrderLabel(invoice)}
+              </Text>
+              <View
+                style={{ width: "60%", height: 1, backgroundColor: c.border, marginVertical: 4 }}
+              />
+              <Text
+                style={{
+                  fontSize: 15,
+                  fontFamily: "Inter_600SemiBold",
+                  color: c.foreground,
+                  textAlign: "center",
+                }}
+              >
+                {invoice.customerName}
+              </Text>
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontFamily: "Inter_400Regular",
+                  color: c.mutedForeground,
+                }}
+              >
+                {invoice.customerMobile}
+              </Text>
+              <View style={{ width: "100%", marginTop: 6, gap: 4 }}>
+                {invoice.items.map((item, idx) => (
+                  <View
+                    key={idx}
+                    style={{ flexDirection: "row", justifyContent: "space-between" }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontFamily: "Inter_500Medium",
+                        color: c.foreground,
+                      }}
+                    >
+                      {item.productType} x{item.quantity}
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontFamily: "Inter_500Medium",
+                        color: c.mutedForeground,
+                      }}
+                    >
+                      {formatDate(invoice.createdAt)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+
+            <Button
+              label="Print / Share Label"
+              icon="share"
+              onPress={async () => {
+                const text =
+                  `TAILOR BOOK — ORDER LABEL\n` +
+                  `==============================\n` +
+                  `Order: ${displayOrderLabel(invoice)}\n` +
+                  `Invoice: ${invoice.invoiceNumber}\n` +
+                  `Customer: ${invoice.customerName}\n` +
+                  `Mobile: ${invoice.customerMobile}\n` +
+                  `Date: ${formatDate(invoice.createdAt)}\n\n` +
+                  `ITEMS\n` +
+                  invoice.items
+                    .map(
+                      (i) =>
+                        `• ${i.productType} x${i.quantity} — ${formatCurrency(
+                          i.price * i.quantity,
+                        )}`,
+                    )
+                    .join("\n") +
+                  `\n\nTotal: ${formatCurrency(invoice.total)}`;
+                try {
+                  await Share.share({ message: text, title: `Order ${displayOrderLabel(invoice)}` });
+                } catch {}
+              }}
+              fullWidth
+              size="md"
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }

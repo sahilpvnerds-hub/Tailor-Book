@@ -17,6 +17,7 @@ import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useData } from "@/context/DataContext";
 import { Button, Card, Input } from "@/components/ui";
+import { DatePicker } from "@/components/DatePicker";
 import { DEFAULT_PRODUCTS, MEASUREMENT_FIELDS, MeasurementKey } from "@/constants/products";
 import { Measurement } from "@/types";
 import colors from "@/constants/colors";
@@ -651,13 +652,7 @@ export default function NewMeasurementScreen() {
         </View>
 
         {/* Date */}
-        <Input
-          label="Date"
-          placeholder="YYYY-MM-DD"
-          value={date}
-          onChangeText={setDate}
-          icon="calendar-today"
-        />
+        <DatePicker label="Date" value={date} onChange={setDate} />
 
         {/* ── Measurement Fields ──────────────────────── */}
         <View style={{ gap: 6 }}>

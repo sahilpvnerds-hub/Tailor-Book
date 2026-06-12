@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   Alert,
+  Image,
   Platform,
   Pressable,
   RefreshControl,
@@ -8,11 +9,14 @@ import {
   Text,
   View,
 } from "react-native";
+import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 import { Badge, Button, Card, Divider } from "@/components/ui";
+import { pickAvatarImage } from "@/components/AvatarPicker";
 import { User } from "@/types";
 import { formatDate } from "@/utils/storage";
 import colors from "@/constants/colors";
@@ -77,7 +81,7 @@ function MenuItem({
 export default function MoreScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const { user, logout, getPendingUsers, approveUser, rejectUser, getAllTailors } = useAuth();
+  const { user, logout, getPendingUsers, approveUser, rejectUser, getAllTailors, updateProfile } = useAuth();
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [allTailors, setAllTailors] = useState<User[]>([]);
   const [showAdmin, setShowAdmin] = useState(false);
@@ -89,6 +93,17 @@ export default function MoreScreen() {
     const [pending, tailors] = await Promise.all([getPendingUsers(), getAllTailors()]);
     setPendingUsers(pending);
     setAllTailors(tailors);
+  }
+
+  async function handleChangePhoto() {
+    const uri = await pickAvatarImage();
+    if (!uri) return;
+    const res = await updateProfile({ avatarUri: uri });
+    if (!res.success) {
+      Alert.alert("Could not save photo", res.error ?? "Unknown error");
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
   }
 
   useEffect(() => {
@@ -104,7 +119,14 @@ export default function MoreScreen() {
   function handleLogout() {
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
       { text: "Cancel", style: "cancel" },
-      { text: "Sign Out", style: "destructive", onPress: async () => { await logout(); } },
+      {
+        text: "Sign Out",
+        style: "destructive",
+        onPress: async () => {
+          await logout();
+          router.replace("/(auth)/login");
+        },
+      },
     ]);
   }
 
@@ -142,43 +164,109 @@ export default function MoreScreen() {
       showsVerticalScrollIndicator={false}
     >
       {/* Profile Card */}
-      <Card style={{ marginBottom: 20 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-          <View
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: 28,
-              backgroundColor: c.primary,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Text style={{ fontSize: 20, fontFamily: "Inter_700Bold", color: c.primaryForeground }}>
-              {user?.name?.[0]?.toUpperCase()}
-            </Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Text style={{ fontSize: 17, fontFamily: "Inter_700Bold", color: c.foreground }}>
-                {user?.name}
+      <Pressable
+        onPress={() => router.push("/profile" as any)}
+        style={({ pressed }) => ({ marginBottom: 20, opacity: pressed ? 0.9 : 1 })}
+      >
+        <Card>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+            <Pressable
+              onPress={handleChangePhoto}
+              hitSlop={8}
+              style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
+            >
+              <View
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 28,
+                  backgroundColor: c.primary,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  overflow: "hidden",
+                  borderWidth: 2,
+                  borderColor: c.primary + "30",
+                }}
+              >
+                {user?.avatarUri ? (
+                  <Image
+                    source={{ uri: user.avatarUri }}
+                    style={{ width: 56, height: 56, borderRadius: 28 }}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <Text
+                    style={{
+                      fontSize: 20,
+                      fontFamily: "Inter_700Bold",
+                      color: c.primaryForeground,
+                    }}
+                  >
+                    {user?.name?.[0]?.toUpperCase()}
+                  </Text>
+                )}
+                {/* Camera badge */}
+                <View
+                  style={{
+                    position: "absolute",
+                    right: -2,
+                    bottom: -2,
+                    width: 20,
+                    height: 20,
+                    borderRadius: 10,
+                    backgroundColor: c.card,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderWidth: 1.5,
+                    borderColor: c.primary,
+                  }}
+                >
+                  <MaterialIcons name="photo-camera" size={11} color={c.primary} />
+                </View>
+              </View>
+            </Pressable>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Text
+                  style={{
+                    fontSize: 17,
+                    fontFamily: "Inter_700Bold",
+                    color: c.foreground,
+                  }}
+                >
+                  {user?.name}
+                </Text>
+                <Badge
+                  label={user?.role === "admin" ? "Admin" : "Tailor"}
+                  variant={user?.role === "admin" ? "default" : "secondary"}
+                />
+              </View>
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontFamily: "Inter_400Regular",
+                  color: c.mutedForeground,
+                  marginTop: 2,
+                }}
+              >
+                {user?.email}
               </Text>
-              <Badge
-                label={user?.role === "admin" ? "Admin" : "Tailor"}
-                variant={user?.role === "admin" ? "default" : "secondary"}
-              />
+              {user?.shopName && (
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontFamily: "Inter_400Regular",
+                    color: c.mutedForeground,
+                  }}
+                >
+                  {user.shopName}
+                </Text>
+              )}
             </View>
-            <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: c.mutedForeground, marginTop: 2 }}>
-              {user?.email}
-            </Text>
-            {user?.shopName && (
-              <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
-                {user.shopName}
-              </Text>
-            )}
+            <MaterialIcons name="chevron-right" size={20} color={c.mutedForeground} />
           </View>
-        </View>
-      </Card>
+        </Card>
+      </Pressable>
 
       {/* Admin Section */}
       {isAdmin && (
@@ -253,7 +341,7 @@ export default function MoreScreen() {
 
       {/* Menu */}
       <Card style={{ marginBottom: 20, gap: 0 }}>
-        <MenuItem icon="person" label="Profile" onPress={() => {}} />
+        <MenuItem icon="person" label="Profile" onPress={() => router.push("/(tabs)/profile" as any)} />
         <Divider />
         <MenuItem icon="notifications" label="Notifications" onPress={() => {}} />
         <Divider />

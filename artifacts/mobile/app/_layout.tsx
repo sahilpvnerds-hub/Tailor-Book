@@ -46,6 +46,10 @@ function RootLayoutNav() {
       />
       <Stack.Screen name="invoices/[id]" options={{ headerShown: false }} />
       <Stack.Screen
+        name="profile"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
         name="search"
         options={{ presentation: "modal", headerShown: false }}
       />

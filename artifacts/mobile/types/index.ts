@@ -13,6 +13,7 @@ export interface User {
   shopAddress?: string;
   city?: string;
   state?: string;
+  avatarUri?: string;
   status: UserStatus;
   createdAt: string;
 }
@@ -62,11 +63,19 @@ export interface InvoiceItem {
   quantity: number;
   price: number;
   measurementId?: string;
+  // Per-item measurement values (auto-filled from saved measurement for the
+  // product type, then editable). Stored as strings so the user can type
+  // freely; we parse to number only when persisting.
+  measurementValues?: Record<string, string>;
+  // Set to true once the user edits any auto-filled value. We respect this
+  // flag in the auto-fill effect so manual edits are never overwritten.
+  measurementTouched?: boolean;
 }
 
 export interface Invoice {
   id: string;
   invoiceNumber: string;
+  orderLabel: string;
   tailorId: string;
   customerId: string;
   customerName: string;
