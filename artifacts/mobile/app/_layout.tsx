@@ -16,8 +16,12 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/context/AuthContext";
 import { DataProvider } from "@/context/DataContext";
+import { setupApi } from "@/utils/api";
 
 SplashScreen.preventAutoHideAsync();
+
+// Configure the API client as early as possible so contexts can use it
+setupApi();
 
 const queryClient = new QueryClient();
 

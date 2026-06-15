@@ -9,6 +9,7 @@ import {
   Text,
   View,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -17,9 +18,9 @@ import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 import { Badge, Button, Card, Divider } from "@/components/ui";
 import { pickAvatarImage } from "@/components/AvatarPicker";
-import { User } from "@/types";
-import { formatDate } from "@/utils/storage";
+import { formatDate, STORAGE_KEYS } from "@/utils/storage";
 import colors from "@/constants/colors";
+import type { ApiUser } from "@workspace/api-client";
 
 function MenuItem({
   icon,
@@ -82,8 +83,8 @@ export default function MoreScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { user, logout, getPendingUsers, approveUser, rejectUser, getAllTailors, updateProfile } = useAuth();
-  const [pendingUsers, setPendingUsers] = useState<User[]>([]);
-  const [allTailors, setAllTailors] = useState<User[]>([]);
+  const [pendingUsers, setPendingUsers] = useState<ApiUser[]>([]);
+  const [allTailors, setAllTailors] = useState<ApiUser[]>([]);
   const [showAdmin, setShowAdmin] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -124,19 +125,28 @@ export default function MoreScreen() {
         style: "destructive",
         onPress: async () => {
           await logout();
+          // Clear ALL local AsyncStorage data (customers, measurements,
+          // invoices, counters, current user) so the next user starts
+          // with a clean slate — no leaked data, no stale cache.
+          try {
+            await AsyncStorage.multiRemove(Object.values(STORAGE_KEYS));
+          } catch {}
+          // Reset any in-memory state held by the DataContext
+          // (it auto-clears when user becomes null, but force a clean
+          // navigation so the user lands on the login screen).
           router.replace("/(auth)/login");
         },
       },
     ]);
   }
 
-  async function handleApprove(u: User) {
+  async function handleApprove(u: ApiUser) {
     await approveUser(u.id);
     await loadAdminData();
     Alert.alert("Approved", `${u.name} has been approved.`);
   }
 
-  async function handleReject(u: User) {
+  async function handleReject(u: ApiUser) {
     Alert.alert("Reject Tailor", `Reject ${u.name}?`, [
       { text: "Cancel", style: "cancel" },
       {

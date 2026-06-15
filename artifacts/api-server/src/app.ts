@@ -25,7 +25,37 @@ app.use(
     },
   }),
 );
-app.use(cors());
+
+// CORS — allow Expo dev server, React Native, and the local web client.
+// In dev we want to be permissive; in prod you'd lock this down to your
+// known domains.
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. curl, server-to-server, native fetch)
+      if (!origin) return callback(null, true);
+
+      // Allow localhost on any port (web dev server)
+      if (/^http:\/\/localhost(:\d+)?$/.test(origin)) return callback(null, true);
+      if (/^http:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) return callback(null, true);
+
+      // Allow Expo dev server (expo.dev, replit, etc.)
+      if (/^https?:\/\/.*\.expo\.dev$/.test(origin)) return callback(null, true);
+      if (/^https?:\/\/.*\.repl\.co$/.test(origin)) return callback(null, true);
+      if (/^https?:\/\/.*\.replit\.dev$/.test(origin)) return callback(null, true);
+
+      // Allow LAN IPs (for physical devices connecting to dev server)
+      if (/^https?:\/\/192\.168\.\d+\.\d+(:\d+)?$/.test(origin)) return callback(null, true);
+      if (/^https?:\/\/10\.\d+\.\d+\.\d+(:\d+)?$/.test(origin)) return callback(null, true);
+
+      // Lock down everything else
+      callback(new Error(`CORS: origin ${origin} not allowed`));
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "Accept"],
+  }),
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

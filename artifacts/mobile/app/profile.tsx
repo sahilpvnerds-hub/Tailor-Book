@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Image,
@@ -36,6 +36,23 @@ export default function ProfileScreen() {
     city: user?.city ?? "",
     state: user?.state ?? "",
   });
+
+  // Re-sync the form whenever the user object changes (e.g. after a
+  // pull-to-refresh, or when init() picks up a fresher record from
+  // storage). Without this, an updated profile in storage wouldn't show
+  // up in the form fields.
+  useEffect(() => {
+    if (!user) return;
+    setForm({
+      name: user.name ?? "",
+      email: user.email ?? "",
+      mobile: user.mobile ?? "",
+      shopName: user.shopName ?? "",
+      shopAddress: user.shopAddress ?? "",
+      city: user.city ?? "",
+      state: user.state ?? "",
+    });
+  }, [user?.id, user?.name, user?.email, user?.mobile, user?.shopName, user?.shopAddress, user?.city, user?.state]);
 
   if (!user) {
     return (
@@ -400,7 +417,7 @@ export default function ProfileScreen() {
         )}
 
         {/* Sign Out */}
-        <Pressable
+        {/* <Pressable
           onPress={handleLogout}
           style={({ pressed }) => ({
             flexDirection: "row",
@@ -423,7 +440,7 @@ export default function ProfileScreen() {
           >
             Sign Out
           </Text>
-        </Pressable>
+        </Pressable> */}
       </ScrollView>
     </KeyboardAvoidingView>
   );

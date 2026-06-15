@@ -8,18 +8,25 @@
     "./schema": "./src/schema/index.ts"
   },
   "scripts": {
+    "generate": "drizzle-kit generate --config ./drizzle.config.ts",
+    "migrate": "drizzle-kit migrate --config ./drizzle.config.ts",
     "push": "drizzle-kit push --config ./drizzle.config.ts",
-    "push-force": "drizzle-kit push --force --config ./drizzle.config.ts"
+    "push-force": "drizzle-kit push --force --config ./drizzle.config.ts",
+    "studio": "drizzle-kit studio --config ./drizzle.config.ts"
   },
   "dependencies": {
+    "bcryptjs": "catalog:",
+    "dotenv": "^16.4.7",
     "drizzle-orm": "catalog:",
     "drizzle-zod": "^0.8.3",
-    "pg": "^8.20.0",
+    "jsonwebtoken": "catalog:",
+    "mysql2": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "catalog:",
-    "@types/pg": "^8.20.0",
     "drizzle-kit": "^0.31.10"
   }
 }

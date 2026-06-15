@@ -46,7 +46,7 @@ export default function NewInvoiceScreen() {
     productType?: string;
     measurementId?: string;
   }>();
-  const { customers, createInvoice, getCustomerMeasurements, getCustomerMeasurementForProduct } = useData();
+  const { customers, createInvoice, getCustomerMeasurements, getCustomerMeasurementForProduct, fetchLatestMeasurement } = useData();
 
   const [selectedCustomerId, setSelectedCustomerId] = useState(params.customerId ?? "");
   const [gstRate, setGstRate] = useState(0);
@@ -176,13 +176,15 @@ export default function NewInvoiceScreen() {
     if (hasMountedRef.current && lastSignatureRef.current === signature) return;
     hasMountedRef.current = true;
     lastSignatureRef.current = signature;
+
+    // The local cache may be empty on first paint (data is still loading).
+    // Run a synchronous pass over the local cache, then also kick off a
+    // server fetch for each distinct product type so a measurement that
+    // exists on the server but isn't cached yet still gets auto-filled.
     setItems((prev) => {
       let changed = false;
       const next = prev.map((item) => {
-        // Only auto-fill items the user has not manually touched.
         if (item.measurementTouched) {
-          // Still re-attach a matching measurementId if we have one and the
-          // user hasn't chosen anything yet — that's a non-destructive update.
           if (!item.measurementId) {
             const m = getCustomerMeasurementForProduct(selectedCustomerId, item.productType);
             if (m) {
@@ -194,8 +196,6 @@ export default function NewInvoiceScreen() {
         }
         const m = getCustomerMeasurementForProduct(selectedCustomerId, item.productType);
         if (!m) {
-          // No saved measurement for this product → leave fields empty but
-          // also clear any stale measurementId from a prior product type.
           if (item.measurementId) {
             changed = true;
             return {
@@ -219,6 +219,37 @@ export default function NewInvoiceScreen() {
       });
       return changed ? next : prev;
     });
+
+    // Server fallback: for each item that wasn't auto-filled from local
+    // cache, ask the server for the latest measurement. If we find one,
+    // apply it (still respecting the touched flag).
+    (async () => {
+      const productTypes = Array.from(new Set(items.map((i) => i.productType)));
+      for (const pt of productTypes) {
+        try {
+          const m = await fetchLatestMeasurement(selectedCustomerId, pt);
+          if (!m) continue;
+          console.log(
+            `[AutoFill] server lookup productType=${pt} measurementId=${m.id} keys=${Object.keys(measurementToValues(m)).join(",")}`,
+          );
+          setItems((prev) =>
+            prev.map((item) => {
+              if (item.productType !== pt) return item;
+              if (item.measurementTouched) return item;
+              // Don't clobber an already-applied fill.
+              if (item.measurementId === m.id) return item;
+              return {
+                ...item,
+                measurementId: m.id,
+                measurementValues: measurementToValues(m),
+              };
+            })
+          );
+        } catch (err) {
+          console.warn(`[AutoFill] server fetch failed for productType=${pt}`, err);
+        }
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCustomerId, productTypeSignature]);
 

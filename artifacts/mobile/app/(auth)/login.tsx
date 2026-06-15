@@ -40,7 +40,17 @@ export default function LoginScreen() {
     const result = await login(emailOrMobile.trim(), password);
     setLoading(false);
     if (!result.success) {
-      Alert.alert("Login Failed", result.error ?? "Something went wrong");
+      // Make network/server errors more user-friendly
+      const raw = result.error ?? "Something went wrong";
+      let friendly = raw;
+      if (/Network request failed|fetch failed|NetworkError|reach http/i.test(raw)) {
+        friendly =
+          "Cannot reach the API server.\n\n" +
+          "Make sure the backend is running on port 4000:\n" +
+          "  cd artifacts/api-server && npm run dev\n\n" +
+          "Original: " + raw;
+      }
+      Alert.alert("Login Failed", friendly);
     } else {
       router.replace("/(tabs)");
     }

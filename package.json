@@ -10,6 +10,7 @@
   },
   "private": true,
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "lightningcss-win32-x64-msvc": "1.32.0",
     "prettier": "^3.8.3",
     "typescript": "~5.9.3"
