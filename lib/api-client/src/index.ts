@@ -137,6 +137,7 @@ export interface ApiCustomer {
   email?: string | null;
   address?: string | null;
   notes?: string | null;
+  profilePicture?: string | null;
   createdAt: string;
   updatedAt: string;
 }

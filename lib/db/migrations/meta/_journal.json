@@ -8,6 +8,13 @@
       "when": 1718400000000,
       "tag": "0000_initial",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": 7,
+      "when": 1750060800000,
+      "tag": "0001_add_customer_profile_picture",
+      "breakpoints": true
     }
   ]
 }

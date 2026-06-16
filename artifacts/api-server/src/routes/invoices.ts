@@ -213,7 +213,17 @@ router.patch("/:id/status", async (req: Request, res: Response) => {
     .from(invoices)
     .where(eq(invoices.id, id))
     .limit(1);
-  res.json(updated);
+  if (!updated) {
+    res.status(404).json({ error: "Invoice not found" });
+    return;
+  }
+  // Return the full invoice (with items) so the client doesn't have to
+  // re-fetch — consistent with GET /api/invoices/:id and POST /api/invoices.
+  const items = await db
+    .select()
+    .from(invoiceItems)
+    .where(eq(invoiceItems.invoiceId, updated.id));
+  res.json({ ...updated, items: items.sort((a, b) => a.position - b.position) });
 });
 
 // ---- DELETE /api/invoices/:id --------------------------------------------

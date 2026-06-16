@@ -59,6 +59,7 @@ const createSchema = z.object({
   email: z.string().email().optional().nullable(),
   address: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
+  profilePicture: z.string().url().max(2048).optional().nullable(),
 });
 
 router.post("/", async (req: Request, res: Response) => {
@@ -76,6 +77,7 @@ router.post("/", async (req: Request, res: Response) => {
     email: body.data.email ?? null,
     address: body.data.address ?? null,
     notes: body.data.notes ?? null,
+    profilePicture: body.data.profilePicture ?? null,
   });
   const [c] = await db.select().from(customers).where(eq(customers.id, id)).limit(1);
   res.status(201).json(c);

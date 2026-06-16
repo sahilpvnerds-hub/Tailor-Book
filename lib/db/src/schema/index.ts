@@ -41,6 +41,7 @@ export const customers = mysqlTable("customers", {
   email: varchar("email", { length: 150 }),
   address: text("address"),
   notes: text("notes"),
+  profilePicture: text("profile_picture"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
 });

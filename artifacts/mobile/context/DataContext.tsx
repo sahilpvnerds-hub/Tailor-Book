@@ -89,7 +89,9 @@ function apiToInvoice(i: ApiInvoice): Invoice {
     customerId: i.customerId,
     customerName: i.customerName,
     customerMobile: i.customerMobile,
-    items: i.items.map((it) => ({
+    // Defensive: the API usually returns `items`, but a few endpoints return
+    // only the invoice header. Default to an empty list rather than crashing.
+    items: (i.items ?? []).map((it) => ({
       productType: it.productType,
       quantity: it.quantity,
       price: Number(it.price),

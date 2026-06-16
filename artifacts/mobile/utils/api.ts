@@ -9,10 +9,42 @@ import {
   type ApiInvoice,
 } from "@workspace/api-client";
 
-const API_BASE_URL =
-  ((typeof process !== "undefined" && (process as any)?.env?.EXPO_PUBLIC_API_URL) as
-    | string
-    | undefined) || "http://localhost:4000";
+// Resolve the API base URL once, in this order of precedence:
+//   1. EXPO_PUBLIC_API_URL (set this in .env or at start time for LAN access)
+//   2. Auto-detected LAN IP (best-effort, dev only)
+//   3. http://localhost:4000 (works for the web preview / simulator on the same machine)
+function detectLanBaseUrl(): string | null {
+  // Skip in production — never guess a base URL there.
+  if (typeof __DEV__ === "undefined" || __DEV__ === false) return null;
+
+  const envUrl =
+    typeof process !== "undefined"
+      ? (process as any)?.env?.EXPO_PUBLIC_API_URL
+      : undefined;
+  if (envUrl && typeof envUrl === "string") return envUrl;
+
+  // Best-effort: enumerate IPv4 interfaces and pick the first non-loopback one.
+  // Requires Node ≥18 / React Native with 'os' available. If it fails we just
+  // fall back to localhost.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const os = require("os") as typeof import("os");
+    const ifaces = os.networkInterfaces();
+    for (const name of Object.keys(ifaces)) {
+      for (const info of ifaces[name] ?? []) {
+        if (info.family === "IPv4" && !info.internal) {
+          return `http://${info.address}:4000`;
+        }
+      }
+    }
+  } catch {
+    /* 'os' not available — fall through */
+  }
+  return null;
+}
+
+const _fallback = detectLanBaseUrl();
+const API_BASE_URL = _fallback ?? "http://localhost:4000";
 
 // Tokens are stored in AsyncStorage for persistence across app restarts
 const TOKEN_KEY = "tailorbook_token";
