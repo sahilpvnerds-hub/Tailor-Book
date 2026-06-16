@@ -142,6 +142,15 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
     EXPO_PUBLIC_REPL_ID: expoPublicReplId,
   };
 
+  // When running on Replit, the API server is on the same Repl — so the
+  // mobile app can reach it at the public Replit domain. Defaulting to the
+  // same domain avoids the "Network request failed" error users see when
+  // the bundled app still points at http://localhost:4000.
+  if (!env.EXPO_PUBLIC_API_URL) {
+    env.EXPO_PUBLIC_API_URL = `https://${expoPublicDomain}`;
+    console.log(`Setting EXPO_PUBLIC_API_URL=${env.EXPO_PUBLIC_API_URL}`);
+  }
+
   if (expoPublicReplId) {
     console.log(`Setting EXPO_PUBLIC_REPL_ID=${expoPublicReplId}`);
   }

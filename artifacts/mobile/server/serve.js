@@ -16,6 +16,11 @@ const path = require("path");
 const STATIC_ROOT = path.resolve(__dirname, "..", "static-build");
 const TEMPLATE_PATH = path.resolve(__dirname, "templates", "landing-page.html");
 const basePath = (process.env.BASE_PATH || "/").replace(/\/+$/, "");
+// When this server is fronting the API (e.g. on Replit, where only one
+// port is exposed), every /api/* request is proxied to the API server
+// running on this machine. Set API_PROXY_TARGET=http://127.0.0.1:4000 to
+// enable; leave it empty for the standalone static-only behavior.
+const API_PROXY_TARGET = process.env.API_PROXY_TARGET || "";
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -115,6 +120,13 @@ const server = http.createServer((req, res) => {
     pathname = pathname.slice(basePath.length) || "/";
   }
 
+  // Proxy /api/* to the API server. This is the path used on Replit, where
+  // only one port is exposed publicly and the API lives on a separate
+  // internal port.
+  if (API_PROXY_TARGET && pathname.startsWith("/api/")) {
+    return proxyToApi(req, res);
+  }
+
   if (pathname === "/" || pathname === "/manifest") {
     const platform = req.headers["expo-platform"];
     if (platform === "ios" || platform === "android") {
@@ -128,6 +140,26 @@ const server = http.createServer((req, res) => {
 
   serveStaticFile(pathname, res);
 });
+
+function proxyToApi(req, res) {
+  const target = new URL(API_PROXY_TARGET);
+  const opts = {
+    method: req.method,
+    hostname: target.hostname,
+    port: target.port || 80,
+    path: req.url,
+    headers: { ...req.headers, host: target.host },
+  };
+  const proxyReq = http.request(opts, (proxyRes) => {
+    res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
+    proxyRes.pipe(res);
+  });
+  proxyReq.on("error", (err) => {
+    res.writeHead(502, { "content-type": "text/plain" });
+    res.end(`API proxy error: ${err.message}`);
+  });
+  req.pipe(proxyReq);
+}
 
 const port = parseInt(process.env.PORT || "3000", 10);
 server.listen(port, "0.0.0.0", () => {

@@ -35,14 +35,18 @@ app.use(
       // Allow requests with no origin (e.g. curl, server-to-server, native fetch)
       if (!origin) return callback(null, true);
 
-      // Allow localhost on any port (web dev server)
-      if (/^http:\/\/localhost(:\d+)?$/.test(origin)) return callback(null, true);
-      if (/^http:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) return callback(null, true);
+      // Allow localhost on any port, http or https (web dev / preview)
+      if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return callback(null, true);
+      if (/^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) return callback(null, true);
 
       // Allow Expo dev server (expo.dev, replit, etc.)
       if (/^https?:\/\/.*\.expo\.dev$/.test(origin)) return callback(null, true);
+      // Replit deployment domains (covers *.repl.co, *.replit.dev,
+      // *.id.repl.co, and any other *.replit.* subdomain)
       if (/^https?:\/\/.*\.repl\.co$/.test(origin)) return callback(null, true);
       if (/^https?:\/\/.*\.replit\.dev$/.test(origin)) return callback(null, true);
+      if (/^https?:\/\/.*\.replit\.app$/.test(origin)) return callback(null, true);
+      if (/^https?:\/\/.*\.repl\.com$/.test(origin)) return callback(null, true);
 
       // Allow LAN IPs (for physical devices connecting to dev server)
       if (/^https?:\/\/192\.168\.\d+\.\d+(:\d+)?$/.test(origin)) return callback(null, true);
