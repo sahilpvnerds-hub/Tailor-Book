@@ -15,8 +15,11 @@ export default function Index() {
     );
   }
 
-  if (!user) {
-    return <Redirect href="/(auth)/login" />;
+  if (!user) return <Redirect href="/(auth)/login" />;
+
+  // Show onboarding for tailors who haven't completed it
+  if (user.role === "tailor" && !user.onboardingComplete) {
+    return <Redirect href="/onboarding" />;
   }
 
   return <Redirect href="/(tabs)" />;

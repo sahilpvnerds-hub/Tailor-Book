@@ -125,10 +125,6 @@ export default function ProfileScreen() {
       state: form.state.trim(),
     });
     setSaving(false);
-    if (!res.success) {
-      Alert.alert("Could not save", res.error ?? "Unknown error");
-      return;
-    }
     setEditing(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }

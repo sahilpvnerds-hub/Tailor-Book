@@ -30,7 +30,6 @@ function buildInvoiceText(invoice: Invoice): string {
     ),
     ``,
     `Subtotal: ${formatCurrency(invoice.subtotal)}`,
-    invoice.gstRate > 0 ? `GST (${invoice.gstRate}%): ${formatCurrency(invoice.gstAmount)}` : "",
     `TOTAL: ${formatCurrency(invoice.total)}`,
     ``,
     `Status: ${invoice.status.toUpperCase()}`,
@@ -219,16 +218,6 @@ export default function InvoiceDetailScreen() {
           <Divider style={{ marginVertical: 8 }} />
 
           <View style={{ gap: 8 }}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-              <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>Subtotal</Text>
-              <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: c.foreground }}>{formatCurrency(invoice.subtotal)}</Text>
-            </View>
-            {invoice.gstRate > 0 && (
-              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>GST ({invoice.gstRate}%)</Text>
-                <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: c.foreground }}>{formatCurrency(invoice.gstAmount)}</Text>
-              </View>
-            )}
             <View style={{ flexDirection: "row", justifyContent: "space-between", paddingTop: 4 }}>
               <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>Total</Text>
               <Text style={{ fontSize: 18, fontFamily: "Inter_700Bold", color: "#059669" }}>{formatCurrency(invoice.total)}</Text>

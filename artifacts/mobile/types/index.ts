@@ -1,6 +1,9 @@
 export type UserRole = "admin" | "tailor";
 export type UserStatus = "pending" | "approved" | "rejected";
 export type InvoiceStatus = "pending" | "completed" | "cancelled";
+export type Gender = "male" | "female" | "unisex";
+export type Speciality = "male" | "female" | "unisex";
+export type Relation = "father" | "mother" | "son" | "daughter" | "wife" | "husband" | "other";
 
 export interface User {
   id: string;
@@ -9,12 +12,14 @@ export interface User {
   mobile: string;
   password: string;
   role: UserRole;
+  speciality?: Speciality;
   shopName?: string;
   shopAddress?: string;
   city?: string;
   state?: string;
   avatarUri?: string;
   status: UserStatus;
+  onboardingComplete?: boolean;
   createdAt: string;
 }
 
@@ -23,15 +28,39 @@ export interface Customer {
   tailorId: string;
   name: string;
   mobile: string;
-  email?: string;
-  address?: string;
-  notes?: string;
+  gender: Gender;
   createdAt: string;
+}
+
+export interface FamilyMember {
+  id: string;
+  customerId: string;
+  tailorId: string;
+  name: string;
+  relation: Relation;
+  gender: Gender;
+  createdAt: string;
+}
+
+export interface ProductType {
+  id: string;
+  tailorId: string;
+  name: string;
+  amount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface MeasurementField {
   label: string;
   value: number;
+}
+
+export interface CustomMeasurementField {
+  id: string;
+  tailorId: string;
+  fieldName: string;
+  createdAt: string;
 }
 
 export interface Measurement {
@@ -40,7 +69,9 @@ export interface Measurement {
   tailorId: string;
   customerName: string;
   date: string;
+  deliveryDate?: string;
   productType: string;
+  productTypeId?: string;
   chest?: number;
   shoulder?: number;
   neck?: number;
@@ -60,16 +91,9 @@ export interface Measurement {
 
 export interface InvoiceItem {
   productType: string;
+  productTypeId?: string;
   quantity: number;
   price: number;
-  measurementId?: string;
-  // Per-item measurement values (auto-filled from saved measurement for the
-  // product type, then editable). Stored as strings so the user can type
-  // freely; we parse to number only when persisting.
-  measurementValues?: Record<string, string>;
-  // Set to true once the user edits any auto-filled value. We respect this
-  // flag in the auto-fill effect so manual edits are never overwritten.
-  measurementTouched?: boolean;
 }
 
 export interface Invoice {
@@ -82,16 +106,19 @@ export interface Invoice {
   customerMobile: string;
   items: InvoiceItem[];
   subtotal: number;
-  gstRate: number;
-  gstAmount: number;
   total: number;
   status: InvoiceStatus;
   notes?: string;
   createdAt: string;
 }
 
-export interface Product {
+export interface Notification {
   id: string;
-  name: string;
-  price: number;
+  tailorId: string;
+  title: string;
+  message: string;
+  isRead: boolean;
+  type: "delivery_due_today" | "delivery_due_tomorrow" | "pending_invoice" | "general";
+  relatedId?: string;
+  createdAt: string;
 }

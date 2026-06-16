@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -15,252 +15,81 @@ import { MaterialIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useData } from "@/context/DataContext";
-import { Button, Card, Input } from "@/components/ui";
-import { MeasurementFieldsEditor } from "@/components/MeasurementFieldsEditor";
-import { DEFAULT_PRODUCTS, GST_RATES, MEASUREMENT_FIELDS } from "@/constants/products";
-import { InvoiceItem, Measurement } from "@/types";
-import { formatCurrency, formatDate } from "@/utils/storage";
+import { Button, Input } from "@/components/ui";
+import { InvoiceItem } from "@/types";
+import { formatCurrency } from "@/utils/storage";
 import colors from "@/constants/colors";
-
-// Build a {key: string} map from a saved Measurement, dropping undefined/NaN
-// values so unfilled fields stay empty in the order item.
-function measurementToValues(m: Measurement | undefined): Record<string, string> {
-  const out: Record<string, string> = {};
-  if (!m) return out;
-  for (const f of MEASUREMENT_FIELDS) {
-    const v = (m as any)[f.key];
-    if (typeof v === "number" && !Number.isNaN(v)) {
-      out[f.key] = String(v);
-    }
-  }
-  return out;
-}
 
 export default function NewInvoiceScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{
-    customerId?: string;
-    customerName?: string;
-    customerMobile?: string;
-    productType?: string;
-    measurementId?: string;
-  }>();
-  const { customers, createInvoice, getCustomerMeasurements, getCustomerMeasurementForProduct, fetchLatestMeasurement } = useData();
+  const params = useLocalSearchParams<{ customerId?: string; customerName?: string; customerMobile?: string }>();
+  const { customers, productTypes, createInvoice } = useData();
 
+  const [customerSearch, setCustomerSearch] = useState(params.customerName ?? "");
   const [selectedCustomerId, setSelectedCustomerId] = useState(params.customerId ?? "");
-  const [gstRate, setGstRate] = useState(0);
+  const [showCustomerList, setShowCustomerList] = useState(!params.customerId);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
-
-  // One invoice item. (Multi-item support is preserved in `addItem` and the
-  // per-item auto-fill effect below — each item keeps its own
-  // `measurementValues` and `measurementTouched`.)
   const [items, setItems] = useState<InvoiceItem[]>([
-    {
-      productType: params.productType ?? DEFAULT_PRODUCTS[0].name,
-      quantity: 1,
-      price: DEFAULT_PRODUCTS.find((p) => p.name === params.productType)?.price ?? DEFAULT_PRODUCTS[0].price,
-      measurementId: params.measurementId,
-      measurementValues: {},
-      measurementTouched: false,
-    },
+    { productType: productTypes[0]?.name ?? "", productTypeId: productTypes[0]?.id, quantity: 1, price: productTypes[0]?.amount ?? 0 },
   ]);
 
-  const selectedCustomer = customers.find((c) => c.id === selectedCustomerId);
-  const customerMeasurements = selectedCustomerId
-    ? getCustomerMeasurements(selectedCustomerId)
-    : [];
+  const filteredCustomers = customers.filter(
+    (cu) =>
+      cu.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+      cu.mobile.includes(customerSearch)
+  );
+
+  const selectedCustomer = customers.find((cu) => cu.id === selectedCustomerId);
+  const subtotal = items.reduce((s, it) => s + it.price * it.quantity, 0);
+
+  function selectCustomer(id: string) {
+    const cu = customers.find((c) => c.id === id);
+    if (cu) {
+      setSelectedCustomerId(id);
+      setCustomerSearch(cu.name);
+      setShowCustomerList(false);
+    }
+  }
 
   function addItem() {
-    setItems((prev) => [
-      ...prev,
-      {
-        productType: DEFAULT_PRODUCTS[0].name,
-        quantity: 1,
-        price: DEFAULT_PRODUCTS[0].price,
-        measurementValues: {},
-        measurementTouched: false,
-      },
-    ]);
+    const first = productTypes[0];
+    setItems((prev) => [...prev, {
+      productType: first?.name ?? "",
+      productTypeId: first?.id,
+      quantity: 1,
+      price: first?.amount ?? 0,
+    }]);
   }
 
-  function removeItem(index: number) {
-    setItems((prev) => prev.filter((_, i) => i !== index));
+  function removeItem(idx: number) {
+    if (items.length <= 1) return;
+    setItems((prev) => prev.filter((_, i) => i !== idx));
   }
 
-  function updateItem(index: number, key: keyof InvoiceItem, value: string | number) {
-    setItems((prev) =>
-      prev.map((item, i) => {
-        if (i !== index) return item;
-        if (key === "productType") {
-          const product = DEFAULT_PRODUCTS.find((p) => p.name === value);
-          // Product type changed — reset touched flag so the new product's
-          // auto-fill is allowed to write into this item. The auto-fill
-          // effect below handles the actual field population.
-          return {
-            ...item,
-            productType: value as string,
-            price: product?.price ?? item.price,
-            measurementTouched: false,
-            measurementId: undefined,
-          };
-        }
-        return { ...item, [key]: value };
-      })
-    );
-  }
-
-  // Update a single measurement field on an item. Marks the item as "touched"
-  // so the auto-fill effect will not clobber manual edits.
-  function updateItemMeasurementField(index: number, key: string, value: string) {
-    setItems((prev) =>
-      prev.map((item, i) => {
-        if (i !== index) return item;
-        return {
-          ...item,
-          measurementValues: { ...(item.measurementValues ?? {}), [key]: value },
-          measurementTouched: true,
-        };
-      })
-    );
-  }
-
-  function setItemMeasurement(index: number, measurementId: string | undefined) {
-    setItems((prev) =>
-      prev.map((item, i) => {
-        if (i !== index) return item;
-        // If the user is explicitly picking a measurement, treat the values as
-        // derived from that selection — clear the touched flag so the new
-        // values can populate the fields.
-        if (measurementId) {
-          const m = customerMeasurements.find((cm) => cm.id === measurementId);
-          return {
-            ...item,
-            measurementId,
-            measurementValues: measurementToValues(m),
-            measurementTouched: false,
-          };
-        }
-        return { ...item, measurementId: undefined };
-      })
-    );
-  }
-
-  // Auto-fill effect.
-  //
-  // Runs whenever:
-  //   - the customer changes
-  //   - any item's product type changes
-  //
-  // It fetches the latest saved measurement for (customer, productType) and
-  // fills in the item's measurement fields. The `measurementTouched` flag on
-  // each item prevents the effect from clobbering manual edits, so the
-  // per-item invariant is:
-  //
-  //   touched === false  → auto-fill may overwrite values
-  //   touched === true   → leave values alone
-  //
-  // Fix: removed the lastSignatureRef guard that was blocking the initial
-  // auto-fill when customerId is pre-populated from route params. Now we
-  // always run on mount (hasMountedRef = false) and then only re-run when
-  // the signature actually changes.
-  const productTypeSignature = items.map((i) => i.productType).join("|");
-  const lastSignatureRef = useRef<string>("");
-  const hasMountedRef = useRef(false);
-  useEffect(() => {
-    if (!selectedCustomerId) return;
-    const signature = `${selectedCustomerId}::${productTypeSignature}`;
-    // Allow the very first run even if the signature hasn't changed (covers
-    // the case where customerId is pre-filled from route params).
-    if (hasMountedRef.current && lastSignatureRef.current === signature) return;
-    hasMountedRef.current = true;
-    lastSignatureRef.current = signature;
-
-    // The local cache may be empty on first paint (data is still loading).
-    // Run a synchronous pass over the local cache, then also kick off a
-    // server fetch for each distinct product type so a measurement that
-    // exists on the server but isn't cached yet still gets auto-filled.
+  function updateItem(idx: number, field: keyof InvoiceItem, value: any) {
     setItems((prev) => {
-      let changed = false;
-      const next = prev.map((item) => {
-        if (item.measurementTouched) {
-          if (!item.measurementId) {
-            const m = getCustomerMeasurementForProduct(selectedCustomerId, item.productType);
-            if (m) {
-              changed = true;
-              return { ...item, measurementId: m.id };
-            }
-          }
-          return item;
-        }
-        const m = getCustomerMeasurementForProduct(selectedCustomerId, item.productType);
-        if (!m) {
-          if (item.measurementId) {
-            changed = true;
-            return {
-              ...item,
-              measurementId: undefined,
-              measurementValues: {},
-            };
-          }
-          return item;
-        }
-        const values = measurementToValues(m);
-        console.log(
-          `[AutoFill] applying to item productType=${item.productType} measurementId=${m.id} keys=${Object.keys(values).join(",")}`,
-        );
-        changed = true;
-        return {
-          ...item,
-          measurementId: m.id,
-          measurementValues: values,
-        };
-      });
-      return changed ? next : prev;
-    });
-
-    // Server fallback: for each item that wasn't auto-filled from local
-    // cache, ask the server for the latest measurement. If we find one,
-    // apply it (still respecting the touched flag).
-    (async () => {
-      const productTypes = Array.from(new Set(items.map((i) => i.productType)));
-      for (const pt of productTypes) {
-        try {
-          const m = await fetchLatestMeasurement(selectedCustomerId, pt);
-          if (!m) continue;
-          console.log(
-            `[AutoFill] server lookup productType=${pt} measurementId=${m.id} keys=${Object.keys(measurementToValues(m)).join(",")}`,
-          );
-          setItems((prev) =>
-            prev.map((item) => {
-              if (item.productType !== pt) return item;
-              if (item.measurementTouched) return item;
-              // Don't clobber an already-applied fill.
-              if (item.measurementId === m.id) return item;
-              return {
-                ...item,
-                measurementId: m.id,
-                measurementValues: measurementToValues(m),
-              };
-            })
-          );
-        } catch (err) {
-          console.warn(`[AutoFill] server fetch failed for productType=${pt}`, err);
+      const updated = [...prev];
+      updated[idx] = { ...updated[idx], [field]: value };
+      // Auto-fill price when product type changes
+      if (field === "productTypeId") {
+        const pt = productTypes.find((p) => p.id === value);
+        if (pt) {
+          updated[idx].productType = pt.name;
+          updated[idx].price = pt.amount;
         }
       }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCustomerId, productTypeSignature]);
-
-  const subtotal = items.reduce((s, i) => s + i.price * i.quantity, 0);
-  const gstAmount = (subtotal * gstRate) / 100;
-  const total = subtotal + gstAmount;
+      return updated;
+    });
+  }
 
   async function handleCreate() {
     if (!selectedCustomerId) { Alert.alert("Error", "Please select a customer"); return; }
-    if (items.length === 0) { Alert.alert("Error", "Add at least one item"); return; }
-    const customer = customers.find((c) => c.id === selectedCustomerId);
+    if (items.some((it) => !it.productType)) { Alert.alert("Error", "Each item needs a product type"); return; }
+    if (items.some((it) => it.price <= 0)) { Alert.alert("Error", "Each item must have a valid price"); return; }
+
+    const customer = customers.find((cu) => cu.id === selectedCustomerId);
     if (!customer) { Alert.alert("Error", "Customer not found"); return; }
 
     setLoading(true);
@@ -269,8 +98,7 @@ export default function NewInvoiceScreen() {
       customerName: customer.name,
       customerMobile: customer.mobile,
       items,
-      gstRate,
-      notes,
+      notes: notes.trim() || undefined,
     });
     setLoading(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -285,321 +113,191 @@ export default function NewInvoiceScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       {/* Header */}
-      <View
-        style={{
-          paddingTop: insets.top + topPad + 16,
-          paddingHorizontal: 20,
-          paddingBottom: 16,
-          backgroundColor: c.card,
-          borderBottomWidth: 1,
-          borderBottomColor: c.border,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 14,
-        }}
-      >
+      <View style={{ paddingTop: insets.top + topPad + 16, paddingHorizontal: 20, paddingBottom: 16, backgroundColor: c.card, borderBottomWidth: 1, borderBottomColor: c.border, flexDirection: "row", alignItems: "center", gap: 12 }}>
         <Pressable onPress={() => router.back()} style={{ backgroundColor: c.muted, borderRadius: 10, padding: 8 }}>
           <MaterialIcons name="arrow-back" size={20} color={c.foreground} />
         </Pressable>
-        <Text style={{ flex: 1, fontSize: 20, fontFamily: "Inter_700Bold", color: c.foreground }}>
-          New Order
-        </Text>
+        <Text style={{ flex: 1, fontSize: 18, fontFamily: "Inter_700Bold", color: c.foreground }}>New Invoice</Text>
         <Button label="Create" onPress={handleCreate} loading={loading} size="sm" />
       </View>
 
-      <ScrollView
-        contentContainerStyle={{ padding: 20, gap: 16, paddingBottom: insets.bottom + 40 }}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Customer */}
+      <ScrollView contentContainerStyle={{ padding: 20, gap: 16, paddingBottom: insets.bottom + 50 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+
+        {/* Customer Search */}
         <View style={{ gap: 6 }}>
-          <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: c.mutedForeground }}>
+          <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
             Customer *
           </Text>
-          {params.customerId && selectedCustomer ? (
-            <Card style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-              <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: c.primary + "20", alignItems: "center", justifyContent: "center" }}>
-                <Text style={{ fontFamily: "Inter_600SemiBold", color: c.primary }}>{selectedCustomer.name[0]}</Text>
+
+          {selectedCustomer && !showCustomerList ? (
+            <Pressable
+              onPress={() => { setShowCustomerList(true); setSelectedCustomerId(""); }}
+              style={{ backgroundColor: c.card, borderRadius: colors.radius, padding: 14, flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1.5, borderColor: c.primary }}
+            >
+              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: c.primary + "20", alignItems: "center", justifyContent: "center" }}>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: c.primary }}>{selectedCustomer.name[0]}</Text>
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: c.foreground }}>{selectedCustomer.name}</Text>
                 <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>{selectedCustomer.mobile}</Text>
               </View>
-            </Card>
+              <MaterialIcons name="edit" size={16} color={c.mutedForeground} />
+            </Pressable>
           ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20, paddingHorizontal: 20 }}>
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                {customers.map((cust) => (
-                  <Pressable
-                    key={cust.id}
-                    onPress={() => setSelectedCustomerId(cust.id)}
-                    style={{
-                      paddingHorizontal: 14,
-                      paddingVertical: 10,
-                      borderRadius: colors.radius,
-                      backgroundColor: selectedCustomerId === cust.id ? c.primary : c.card,
-                      borderWidth: 1,
-                      borderColor: selectedCustomerId === cust.id ? c.primary : c.border,
-                    }}
-                  >
-                    <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: selectedCustomerId === cust.id ? c.primaryForeground : c.foreground }}>
-                      {cust.name}
-                    </Text>
+            <View style={{ gap: 8 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: c.input, borderRadius: colors.radius, borderWidth: 1.5, borderColor: c.border, paddingHorizontal: 14 }}>
+                <MaterialIcons name="search" size={18} color={c.mutedForeground} style={{ marginRight: 8 }} />
+                <TextInput
+                  style={{ flex: 1, fontSize: 15, fontFamily: "Inter_400Regular", color: c.foreground, paddingVertical: 12 }}
+                  placeholder="Search by name or mobile..."
+                  placeholderTextColor={c.mutedForeground}
+                  value={customerSearch}
+                  onChangeText={(v) => { setCustomerSearch(v); setShowCustomerList(true); }}
+                  autoFocus={!params.customerId}
+                />
+                {customerSearch.length > 0 && (
+                  <Pressable onPress={() => { setCustomerSearch(""); setSelectedCustomerId(""); }}>
+                    <MaterialIcons name="close" size={18} color={c.mutedForeground} />
                   </Pressable>
-                ))}
+                )}
               </View>
-            </ScrollView>
+              {filteredCustomers.length > 0 && (
+                <View style={{ backgroundColor: c.card, borderRadius: colors.radius, borderWidth: 1, borderColor: c.border, overflow: "hidden", maxHeight: 200 }}>
+                  <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                    {filteredCustomers.map((cu, i) => (
+                      <Pressable
+                        key={cu.id}
+                        onPress={() => selectCustomer(cu.id)}
+                        style={({ pressed }) => ({
+                          flexDirection: "row",
+                          alignItems: "center",
+                          padding: 12,
+                          gap: 10,
+                          backgroundColor: pressed ? c.muted : "transparent",
+                          borderBottomWidth: i < filteredCustomers.length - 1 ? 1 : 0,
+                          borderBottomColor: c.border,
+                        })}
+                      >
+                        <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: c.primary + "18", alignItems: "center", justifyContent: "center" }}>
+                          <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: c.primary }}>{cu.name[0]}</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.foreground }}>{cu.name}</Text>
+                          <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>{cu.mobile}</Text>
+                        </View>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </View>
           )}
         </View>
 
         {/* Items */}
         <View style={{ gap: 10 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: c.foreground }}>Order Items</Text>
+            <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
+              Order Items
+            </Text>
             <Pressable onPress={addItem} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
               <MaterialIcons name="add" size={16} color={c.primary} />
               <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: c.primary }}>Add Item</Text>
             </Pressable>
           </View>
 
-          {items.map((item, index) => {
-            // Per-item source measurement used by the editor. The editor only
-            // *reads* it (for the per-field "reset to saved" icon and for
-            // debug logging). All writing of `measurementValues` happens in
-            // the auto-fill effect above.
-            const sourceMeasurement = item.measurementId
-              ? customerMeasurements.find((m) => m.id === item.measurementId)
-              : customerMeasurements
-                  .filter((m) => m.productType === item.productType)
-                  .sort((a, b) => {
-                    const ad = new Date(a.date || a.createdAt).getTime();
-                    const bd = new Date(b.date || b.createdAt).getTime();
-                    if (bd !== ad) return bd - ad;
-                    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-                  })[0];
+          {items.map((item, idx) => (
+            <View key={idx} style={{ backgroundColor: c.card, borderRadius: colors.radius, padding: 14, gap: 12, borderWidth: 1, borderColor: c.border }}>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.foreground }}>Item {idx + 1}</Text>
+                {items.length > 1 && (
+                  <Pressable onPress={() => removeItem(idx)} style={{ padding: 4 }}>
+                    <MaterialIcons name="remove-circle" size={20} color={c.destructive} />
+                  </Pressable>
+                )}
+              </View>
 
-            return (
-              <Card key={index} style={{ gap: 12 }}>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                  <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.foreground }}>
-                    Item {index + 1}
-                  </Text>
-                  {items.length > 1 && (
-                    <Pressable onPress={() => removeItem(index)}>
-                      <MaterialIcons name="close" size={18} color={c.destructive} />
-                    </Pressable>
-                  )}
-                </View>
-
-                {/* Product select */}
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -16, paddingHorizontal: 16 }}>
-                  <View style={{ flexDirection: "row", gap: 6 }}>
-                    {DEFAULT_PRODUCTS.map((p) => (
+              {/* Product Type */}
+              <View style={{ gap: 5 }}>
+                <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.4 }}>Product</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4 }}>
+                  <View style={{ flexDirection: "row", gap: 6, paddingHorizontal: 4 }}>
+                    {productTypes.map((pt) => (
                       <Pressable
-                        key={p.id}
-                        onPress={() => updateItem(index, "productType", p.name)}
+                        key={pt.id}
+                        onPress={() => updateItem(idx, "productTypeId", pt.id)}
                         style={{
-                          paddingHorizontal: 10,
-                          paddingVertical: 6,
-                          borderRadius: 16,
-                          backgroundColor: item.productType === p.name ? c.primary : c.muted,
+                          paddingHorizontal: 12,
+                          paddingVertical: 7,
+                          borderRadius: 20,
+                          backgroundColor: item.productTypeId === pt.id ? c.primary : c.muted,
+                          borderWidth: 1,
+                          borderColor: item.productTypeId === pt.id ? c.primary : "transparent",
                         }}
                       >
-                        <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: item.productType === p.name ? c.primaryForeground : c.mutedForeground }}>
-                          {p.name}
+                        <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: item.productTypeId === pt.id ? "#FFFFFF" : c.mutedForeground }}>
+                          {pt.name}
                         </Text>
                       </Pressable>
                     ))}
                   </View>
                 </ScrollView>
+              </View>
 
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  <View style={{ flex: 1, gap: 4 }}>
-                    <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: c.mutedForeground }}>Qty</Text>
-                    <TextInput
-                      style={{
-                        fontSize: 15,
-                        fontFamily: "Inter_400Regular",
-                        color: c.foreground,
-                        backgroundColor: c.input,
-                        borderRadius: 8,
-                        padding: 10,
-                        borderWidth: 1,
-                        borderColor: c.border,
-                        textAlign: "center",
-                      }}
-                      value={String(item.quantity)}
-                      onChangeText={(v) => updateItem(index, "quantity", parseInt(v) || 1)}
-                      keyboardType="number-pad"
-                    />
-                  </View>
-                  <View style={{ flex: 2, gap: 4 }}>
-                    <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: c.mutedForeground }}>Price (₹)</Text>
-                    <TextInput
-                      style={{
-                        fontSize: 15,
-                        fontFamily: "Inter_400Regular",
-                        color: c.foreground,
-                        backgroundColor: c.input,
-                        borderRadius: 8,
-                        padding: 10,
-                        borderWidth: 1,
-                        borderColor: c.border,
-                      }}
-                      value={String(item.price)}
-                      onChangeText={(v) => updateItem(index, "price", parseFloat(v) || 0)}
-                      keyboardType="decimal-pad"
-                    />
-                  </View>
-                  <View style={{ gap: 4, justifyContent: "flex-end" }}>
-                    <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: c.mutedForeground }}>Total</Text>
-                    <View style={{ backgroundColor: c.muted, borderRadius: 8, padding: 10 }}>
-                      <Text style={{ fontSize: 15, fontFamily: "Inter_700Bold", color: c.foreground }}>
-                        {formatCurrency(item.price * item.quantity)}
-                      </Text>
-                    </View>
+              {/* Qty & Price */}
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 5 }}>Qty</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: c.input, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: c.border }}>
+                    <Pressable onPress={() => updateItem(idx, "quantity", Math.max(1, item.quantity - 1))}>
+                      <MaterialIcons name="remove" size={18} color={c.foreground} />
+                    </Pressable>
+                    <Text style={{ flex: 1, textAlign: "center", fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>{item.quantity}</Text>
+                    <Pressable onPress={() => updateItem(idx, "quantity", item.quantity + 1)}>
+                      <MaterialIcons name="add" size={18} color={c.foreground} />
+                    </Pressable>
                   </View>
                 </View>
+                <View style={{ flex: 2 }}>
+                  <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 5 }}>Price (₹)</Text>
+                  <TextInput
+                    style={{ backgroundColor: c.input, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground, borderWidth: 1, borderColor: c.border }}
+                    value={String(item.price)}
+                    onChangeText={(v) => updateItem(idx, "price", parseFloat(v) || 0)}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+              </View>
 
-                {/* Saved-measurement switcher (kept for the multi-history case
-                    where the customer has more than one measurement of the
-                    same product type on file). The auto-fill effect above
-                    also wires up the *latest* one automatically. */}
-                {selectedCustomerId && (() => {
-                  const matches = customerMeasurements.filter(
-                    (m) => m.productType === item.productType,
-                  );
-                  if (matches.length === 0) {
-                    return (
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          fontFamily: "Inter_400Regular",
-                          color: c.mutedForeground,
-                          marginTop: 2,
-                        }}
-                      >
-                        No saved measurement for {item.productType}. You can type values manually below.
-                      </Text>
-                    );
-                  }
-                  return (
-                    <View style={{ gap: 6, marginTop: 2 }}>
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          fontFamily: "Inter_500Medium",
-                          color: c.mutedForeground,
-                        }}
-                      >
-                        Saved {item.productType} measurements
-                      </Text>
-                      <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        style={{ marginHorizontal: -16 }}
-                        contentContainerStyle={{ paddingHorizontal: 16, gap: 6 }}
-                      >
-                        {matches.map((m) => {
-                          const isSel = item.measurementId === m.id;
-                          return (
-                            <Pressable
-                              key={m.id}
-                              onPress={() => setItemMeasurement(index, m.id)}
-                              style={{
-                                paddingHorizontal: 10,
-                                paddingVertical: 6,
-                                borderRadius: 16,
-                                backgroundColor: isSel ? c.primary : c.muted,
-                              }}
-                            >
-                              <Text
-                                style={{
-                                  fontSize: 12,
-                                  fontFamily: "Inter_500Medium",
-                                  color: isSel ? c.primaryForeground : c.mutedForeground,
-                                }}
-                              >
-                                {formatDate(m.date)}
-                              </Text>
-                            </Pressable>
-                          );
-                        })}
-                      </ScrollView>
-                    </View>
-                  );
-                })()}
-
-                {/* Per-item measurement field editor — this is the auto-fill
-                    surface. Values are derived from the latest saved
-                    measurement (or the user's manual edits). */}
-                <MeasurementFieldsEditor
-                  productType={item.productType}
-                  sourceMeasurement={sourceMeasurement}
-                  values={item.measurementValues ?? {}}
-                  onChange={(key, value) => updateItemMeasurementField(index, key, value)}
-                  customerId={selectedCustomerId}
-                />
-              </Card>
-            );
-          })}
-        </View>
-
-        {/* GST */}
-        <View style={{ gap: 6 }}>
-          <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: c.mutedForeground }}>GST Rate</Text>
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            {GST_RATES.map((rate) => (
-              <Pressable
-                key={rate}
-                onPress={() => setGstRate(rate)}
-                style={{
-                  flex: 1,
-                  paddingVertical: 10,
-                  borderRadius: 10,
-                  backgroundColor: gstRate === rate ? c.primary : c.muted,
-                  alignItems: "center",
-                }}
-              >
-                <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: gstRate === rate ? c.primaryForeground : c.mutedForeground }}>
-                  {rate}%
+              <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
+                <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.primary }}>
+                  Item total: {formatCurrency(item.price * item.quantity)}
                 </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        {/* Summary */}
-        <Card style={{ gap: 10 }}>
-          <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: c.foreground, marginBottom: 4 }}>
-            Summary
-          </Text>
-          {[
-            { label: "Subtotal", value: formatCurrency(subtotal) },
-            { label: `GST (${gstRate}%)`, value: formatCurrency(gstAmount) },
-          ].map((row) => (
-            <View key={row.label} style={{ flexDirection: "row", justifyContent: "space-between" }}>
-              <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>{row.label}</Text>
-              <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: c.foreground }}>{row.value}</Text>
+              </View>
             </View>
           ))}
-          <View style={{ height: 1, backgroundColor: c.border }} />
-          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-            <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>Total</Text>
-            <Text style={{ fontSize: 18, fontFamily: "Inter_700Bold", color: c.primary }}>{formatCurrency(total)}</Text>
-          </View>
-        </Card>
+        </View>
 
         {/* Notes */}
-        <Input
-          label="Notes"
-          placeholder="Additional notes..."
-          value={notes}
-          onChangeText={setNotes}
-          icon="notes"
-          multiline
-        />
+        <Input label="Notes" placeholder="Special instructions..." value={notes} onChangeText={setNotes} icon="notes" multiline />
+
+        {/* Total */}
+        <View style={{ backgroundColor: c.primary, borderRadius: 18, padding: 18, gap: 10 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+            <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.8)" }}>
+              {items.length} item{items.length > 1 ? "s" : ""}
+            </Text>
+            <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.8)" }}>
+              Subtotal: {formatCurrency(subtotal)}
+            </Text>
+          </View>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Text style={{ fontSize: 18, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>Total</Text>
+            <Text style={{ fontSize: 26, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>
+              {formatCurrency(subtotal)}
+            </Text>
+          </View>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );

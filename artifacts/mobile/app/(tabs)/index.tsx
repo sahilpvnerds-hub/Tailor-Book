@@ -1,13 +1,5 @@
 import React, { useState } from "react";
-import {
-  Dimensions,
-  Platform,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { Platform, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -17,8 +9,6 @@ import { useData } from "@/context/DataContext";
 import { CustomerItem, InvoiceItem } from "@/components/ListItems";
 import { formatCurrency, formatDate } from "@/utils/storage";
 import colors from "@/constants/colors";
-
-const { width } = Dimensions.get("window");
 
 function QuickAction({
   icon,
@@ -56,14 +46,7 @@ function QuickAction({
       >
         <MaterialIcons name={icon} size={24} color={color} />
       </View>
-      <Text
-        style={{
-          fontSize: 11,
-          fontFamily: "Inter_500Medium",
-          color: c.mutedForeground,
-          textAlign: "center",
-        }}
-      >
+      <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: c.mutedForeground, textAlign: "center" }}>
         {label}
       </Text>
     </Pressable>
@@ -74,27 +57,16 @@ export default function DashboardScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { customers, measurements, invoices, refresh } = useData();
+  const { customers, measurements, invoices, unreadCount, refresh } = useData();
   const [refreshing, setRefreshing] = useState(false);
 
-  const totalRevenue = invoices
-    .filter((i) => i.status === "completed")
-    .reduce((s, i) => s + i.total, 0);
-
-  const pendingRevenue = invoices
-    .filter((i) => i.status === "pending")
-    .reduce((s, i) => s + i.total, 0);
-
-  const completedInvoices = invoices.filter((i) => i.status === "completed").length;
+  const totalRevenue = invoices.filter((i) => i.status === "completed").reduce((s, i) => s + i.total, 0);
+  const pendingRevenue = invoices.filter((i) => i.status === "pending").reduce((s, i) => s + i.total, 0);
+  const completedCount = invoices.filter((i) => i.status === "completed").length;
   const pendingCount = invoices.filter((i) => i.status === "pending").length;
 
-  const recentCustomers = [...customers]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 3);
-
-  const recentInvoices = [...invoices]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 4);
+  const recentCustomers = [...customers].slice(0, 3);
+  const recentInvoices = [...invoices].slice(0, 4);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -104,26 +76,17 @@ export default function DashboardScreen() {
 
   const topPad = Platform.OS === "web" ? 67 : 0;
   const today = new Date().toLocaleDateString("en-IN", {
-    weekday: "short",
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
+    weekday: "short", day: "2-digit", month: "short", year: "numeric",
   });
 
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: c.background }}
       contentContainerStyle={{ paddingBottom: insets.bottom + 110 }}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor={c.primary}
-        />
-      }
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.primary} />}
       showsVerticalScrollIndicator={false}
     >
-      {/* ── Hero Header ─────────────────────────────────── */}
+      {/* Hero Header */}
       <View
         style={{
           backgroundColor: c.primary,
@@ -132,60 +95,56 @@ export default function DashboardScreen() {
           paddingBottom: 32,
         }}
       >
-        {/* Top row */}
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 24,
-          }}
-        >
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
           <View style={{ flex: 1 }}>
-            <Text
-              style={{
-                fontSize: 12,
-                fontFamily: "Inter_400Regular",
-                color: "rgba(255,255,255,0.65)",
-                marginBottom: 2,
-              }}
-            >
+            <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.65)", marginBottom: 2 }}>
               {today}
             </Text>
-            <Text
-              style={{
-                fontSize: 20,
-                fontFamily: "Inter_700Bold",
-                color: "#FFFFFF",
-              }}
-            >
-              Hi, {user?.name?.split(" ")[0]} 
+            <Text style={{ fontSize: 20, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>
+              Hi, {user?.name?.split(" ")[0]}
             </Text>
             {user?.shopName ? (
-              <Text
-                style={{
-                  fontSize: 12,
-                  fontFamily: "Inter_400Regular",
-                  color: "rgba(255,255,255,0.6)",
-                  marginTop: 1,
-                }}
-              >
+              <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.6)", marginTop: 1 }}>
                 {user.shopName}
               </Text>
             ) : null}
           </View>
+
+          {/* Notification bell */}
           <Pressable
-            onPress={() => router.push("/search")}
-            style={{
+            onPress={() => router.push("/notifications/index" as any)}
+            style={({ pressed }) => ({
               width: 40,
               height: 40,
               borderRadius: 12,
               backgroundColor: "rgba(255,255,255,0.18)",
               alignItems: "center",
               justifyContent: "center",
-            }}
+              opacity: pressed ? 0.8 : 1,
+            })}
           >
-            <MaterialIcons name="search" size={20} color="#FFFFFF" />
+            <MaterialIcons name="notifications" size={20} color="#FFFFFF" />
+            {unreadCount > 0 && (
+              <View
+                style={{
+                  position: "absolute",
+                  top: 5,
+                  right: 5,
+                  width: 16,
+                  height: 16,
+                  borderRadius: 8,
+                  backgroundColor: "#EF4444",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderWidth: 1.5,
+                  borderColor: c.primary,
+                }}
+              >
+                <Text style={{ fontSize: 9, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </Text>
+              </View>
+            )}
           </Pressable>
         </View>
 
@@ -199,96 +158,30 @@ export default function DashboardScreen() {
             borderColor: "rgba(255,255,255,0.18)",
           }}
         >
-          <Text
-            style={{
-              fontSize: 12,
-              fontFamily: "Inter_500Medium",
-              color: "rgba(255,255,255,0.7)",
-              marginBottom: 4,
-            }}
-          >
+          <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.7)", marginBottom: 4 }}>
             Total Revenue
           </Text>
-          <Text
-            style={{
-              fontSize: 34,
-              fontFamily: "Inter_700Bold",
-              color: "#FFFFFF",
-              marginBottom: 14,
-            }}
-          >
+          <Text style={{ fontSize: 34, fontFamily: "Inter_700Bold", color: "#FFFFFF", marginBottom: 14 }}>
             {formatCurrency(totalRevenue)}
           </Text>
           <View style={{ flexDirection: "row", gap: 20 }}>
             <View>
-              <Text
-                style={{
-                  fontSize: 11,
-                  fontFamily: "Inter_400Regular",
-                  color: "rgba(255,255,255,0.6)",
-                }}
-              >
-                Pending
-              </Text>
-              <Text
-                style={{
-                  fontSize: 16,
-                  fontFamily: "Inter_600SemiBold",
-                  color: "#FCD34D",
-                }}
-              >
+              <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.6)" }}>Pending</Text>
+              <Text style={{ fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#FCD34D" }}>
                 {formatCurrency(pendingRevenue)}
               </Text>
             </View>
-            <View
-              style={{
-                width: 1,
-                backgroundColor: "rgba(255,255,255,0.2)",
-              }}
-            />
+            <View style={{ width: 1, backgroundColor: "rgba(255,255,255,0.2)" }} />
             <View>
-              <Text
-                style={{
-                  fontSize: 11,
-                  fontFamily: "Inter_400Regular",
-                  color: "rgba(255,255,255,0.6)",
-                }}
-              >
-                Invoices
-              </Text>
-              <Text
-                style={{
-                  fontSize: 16,
-                  fontFamily: "Inter_600SemiBold",
-                  color: "#6EE7E7",
-                }}
-              >
-                {completedInvoices} done
+              <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.6)" }}>Completed</Text>
+              <Text style={{ fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#6EE7E7" }}>
+                {completedCount} paid
               </Text>
             </View>
-            <View
-              style={{
-                width: 1,
-                backgroundColor: "rgba(255,255,255,0.2)",
-              }}
-            />
+            <View style={{ width: 1, backgroundColor: "rgba(255,255,255,0.2)" }} />
             <View>
-              <Text
-                style={{
-                  fontSize: 11,
-                  fontFamily: "Inter_400Regular",
-                  color: "rgba(255,255,255,0.6)",
-                }}
-              >
-                Customers
-              </Text>
-              <Text
-                style={{
-                  fontSize: 16,
-                  fontFamily: "Inter_600SemiBold",
-                  color: "#FFFFFF",
-                }}
-              >
+              <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.6)" }}>Customers</Text>
+              <Text style={{ fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#FFFFFF" }}>
                 {customers.length}
               </Text>
             </View>
@@ -296,34 +189,12 @@ export default function DashboardScreen() {
         </View>
       </View>
 
-      {/* ── Stats pills ──────────────────────────────────── */}
-      <View
-        style={{
-          flexDirection: "row",
-          marginHorizontal: 22,
-          marginTop: -20,
-          gap: 10,
-        }}
-      >
+      {/* Stats pills */}
+      <View style={{ flexDirection: "row", marginHorizontal: 22, marginTop: -20, gap: 10 }}>
         {[
-          {
-            icon: "people" as const,
-            label: "Customers",
-            value: customers.length,
-            color: "#6366F1",
-          },
-          {
-            icon: "straighten" as const,
-            label: "Measurements",
-            value: measurements.length,
-            color: "#F59E0B",
-          },
-          {
-            icon: "receipt" as const,
-            label: "Pending",
-            value: pendingCount,
-            color: "#EF4444",
-          },
+          { icon: "people" as const, label: "Customers", value: customers.length, color: "#6366F1" },
+          { icon: "straighten" as const, label: "Measurements", value: measurements.length, color: "#F59E0B" },
+          { icon: "receipt" as const, label: "Pending", value: pendingCount, color: "#EF4444" },
         ].map((s) => (
           <View
             key={s.label}
@@ -343,51 +214,20 @@ export default function DashboardScreen() {
               borderColor: c.border,
             }}
           >
-            <View
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 10,
-                backgroundColor: s.color + "18",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
+            <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: s.color + "18", alignItems: "center", justifyContent: "center" }}>
               <MaterialIcons name={s.icon} size={18} color={s.color} />
             </View>
-            <Text
-              style={{
-                fontSize: 20,
-                fontFamily: "Inter_700Bold",
-                color: c.foreground,
-              }}
-            >
-              {s.value}
-            </Text>
-            <Text
-              style={{
-                fontSize: 10,
-                fontFamily: "Inter_400Regular",
-                color: c.mutedForeground,
-                textAlign: "center",
-              }}
-            >
+            <Text style={{ fontSize: 20, fontFamily: "Inter_700Bold", color: c.foreground }}>{s.value}</Text>
+            <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: c.mutedForeground, textAlign: "center" }}>
               {s.label}
             </Text>
           </View>
         ))}
       </View>
 
-      {/* ── Quick Actions ─────────────────────────────── */}
+      {/* Quick Actions — Customer + Invoice only */}
       <View style={{ marginHorizontal: 22, marginTop: 24 }}>
-        <Text
-          style={{
-            fontSize: 16,
-            fontFamily: "Inter_700Bold",
-            color: c.foreground,
-            marginBottom: 14,
-          }}
-        >
+        <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground, marginBottom: 14 }}>
           Quick Actions
         </Text>
         <View
@@ -412,14 +252,8 @@ export default function DashboardScreen() {
             onPress={() => router.push("/customers/new")}
           />
           <QuickAction
-            icon="straighten"
-            label="Measure"
-            color="#0D6E6E"
-            onPress={() => router.push("/measurements/new")}
-          />
-          <QuickAction
             icon="receipt"
-            label="Invoice"
+            label="New Invoice"
             color="#059669"
             onPress={() => router.push("/invoices/new")}
           />
@@ -429,10 +263,16 @@ export default function DashboardScreen() {
             color="#F59E0B"
             onPress={() => router.push("/search")}
           />
+          <QuickAction
+            icon="notifications"
+            label="Alerts"
+            color={unreadCount > 0 ? "#EF4444" : "#6B7280"}
+            onPress={() => router.push("/notifications/index" as any)}
+          />
         </View>
       </View>
 
-      {/* ── Pending alert ─────────────────────────────── */}
+      {/* Pending alert */}
       {pendingCount > 0 && (
         <Pressable
           onPress={() => router.push("/(tabs)/invoices")}
@@ -450,36 +290,14 @@ export default function DashboardScreen() {
             opacity: pressed ? 0.85 : 1,
           })}
         >
-          <View
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 10,
-              backgroundColor: "#FDE68A",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
+          <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#FDE68A", alignItems: "center", justifyContent: "center" }}>
             <MaterialIcons name="schedule" size={18} color="#92400E" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text
-              style={{
-                fontSize: 13,
-                fontFamily: "Inter_600SemiBold",
-                color: "#92400E",
-              }}
-            >
-              {pendingCount} pending{" "}
-              {pendingCount === 1 ? "invoice" : "invoices"}
+            <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#92400E" }}>
+              {pendingCount} pending invoice{pendingCount > 1 ? "s" : ""}
             </Text>
-            <Text
-              style={{
-                fontSize: 11,
-                fontFamily: "Inter_400Regular",
-                color: "#B45309",
-              }}
-            >
+            <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: "#B45309" }}>
               {formatCurrency(pendingRevenue)} awaiting collection
             </Text>
           </View>
@@ -487,37 +305,15 @@ export default function DashboardScreen() {
         </Pressable>
       )}
 
-      {/* ── Recent Customers ──────────────────────────── */}
+      {/* Recent Customers */}
       {recentCustomers.length > 0 && (
         <View style={{ marginTop: 24 }}>
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginHorizontal: 22,
-              marginBottom: 12,
-            }}
-          >
-            <Text
-              style={{
-                fontSize: 16,
-                fontFamily: "Inter_700Bold",
-                color: c.foreground,
-              }}
-            >
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginHorizontal: 22, marginBottom: 12 }}>
+            <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>
               Recent Customers
             </Text>
             <Pressable onPress={() => router.push("/(tabs)/customers")}>
-              <Text
-                style={{
-                  fontSize: 13,
-                  fontFamily: "Inter_500Medium",
-                  color: c.primary,
-                }}
-              >
-                See all
-              </Text>
+              <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: c.primary }}>See all</Text>
             </Pressable>
           </View>
           <View style={{ marginHorizontal: 22, gap: 8 }}>
@@ -526,61 +322,31 @@ export default function DashboardScreen() {
                 key={cust.id}
                 customer={cust}
                 onPress={() => router.push(`/customers/${cust.id}` as any)}
-                measurementCount={
-                  measurements.filter((m) => m.customerId === cust.id).length
-                }
+                measurementCount={measurements.filter((m) => m.customerId === cust.id).length}
               />
             ))}
           </View>
         </View>
       )}
 
-      {/* ── Recent Invoices ───────────────────────────── */}
+      {/* Recent Invoices */}
       {recentInvoices.length > 0 && (
         <View style={{ marginTop: 24 }}>
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginHorizontal: 22,
-              marginBottom: 12,
-            }}
-          >
-            <Text
-              style={{
-                fontSize: 16,
-                fontFamily: "Inter_700Bold",
-                color: c.foreground,
-              }}
-            >
-              Recent Invoices
-            </Text>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginHorizontal: 22, marginBottom: 12 }}>
+            <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>Recent Invoices</Text>
             <Pressable onPress={() => router.push("/(tabs)/invoices")}>
-              <Text
-                style={{
-                  fontSize: 13,
-                  fontFamily: "Inter_500Medium",
-                  color: c.primary,
-                }}
-              >
-                See all
-              </Text>
+              <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: c.primary }}>See all</Text>
             </Pressable>
           </View>
           <View style={{ marginHorizontal: 22, gap: 8 }}>
             {recentInvoices.map((inv) => (
-              <InvoiceItem
-                key={inv.id}
-                invoice={inv}
-                onPress={() => router.push(`/invoices/${inv.id}` as any)}
-              />
+              <InvoiceItem key={inv.id} invoice={inv} onPress={() => router.push(`/invoices/${inv.id}` as any)} />
             ))}
           </View>
         </View>
       )}
 
-      {/* ── Empty first-run ───────────────────────────── */}
+      {/* Empty state */}
       {customers.length === 0 && (
         <View
           style={{
@@ -595,37 +361,13 @@ export default function DashboardScreen() {
             borderColor: c.border,
           }}
         >
-          <View
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: 20,
-              backgroundColor: c.primary + "18",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
+          <View style={{ width: 64, height: 64, borderRadius: 20, backgroundColor: c.primary + "18", alignItems: "center", justifyContent: "center" }}>
             <MaterialIcons name="people" size={32} color={c.primary} />
           </View>
-          <Text
-            style={{
-              fontSize: 17,
-              fontFamily: "Inter_700Bold",
-              color: c.foreground,
-              textAlign: "center",
-            }}
-          >
+          <Text style={{ fontSize: 17, fontFamily: "Inter_700Bold", color: c.foreground, textAlign: "center" }}>
             Start your first order
           </Text>
-          <Text
-            style={{
-              fontSize: 13,
-              fontFamily: "Inter_400Regular",
-              color: c.mutedForeground,
-              textAlign: "center",
-              lineHeight: 20,
-            }}
-          >
+          <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: c.mutedForeground, textAlign: "center", lineHeight: 20 }}>
             Add a customer, record their measurements, and create an invoice.
           </Text>
           <Pressable
@@ -639,13 +381,7 @@ export default function DashboardScreen() {
               opacity: pressed ? 0.85 : 1,
             })}
           >
-            <Text
-              style={{
-                color: "#FFFFFF",
-                fontSize: 14,
-                fontFamily: "Inter_600SemiBold",
-              }}
-            >
+            <Text style={{ color: "#FFFFFF", fontSize: 14, fontFamily: "Inter_600SemiBold" }}>
               Add First Customer
             </Text>
           </Pressable>

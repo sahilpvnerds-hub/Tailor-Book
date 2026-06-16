@@ -12,16 +12,11 @@ import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/context/AuthContext";
 import { DataProvider } from "@/context/DataContext";
-import { setupApi } from "@/utils/api";
 
 SplashScreen.preventAutoHideAsync();
-
-// Configure the API client as early as possible so contexts can use it
-setupApi();
 
 const queryClient = new QueryClient();
 
@@ -31,32 +26,16 @@ function RootLayoutNav() {
       <Stack.Screen name="index" />
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(tabs)" />
-      <Stack.Screen
-        name="customers/new"
-        options={{ presentation: "modal", headerShown: false }}
-      />
+      <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+      <Stack.Screen name="customers/new" options={{ presentation: "modal", headerShown: false }} />
       <Stack.Screen name="customers/[id]" options={{ headerShown: false }} />
-      <Stack.Screen
-        name="measurements/new"
-        options={{ presentation: "modal", headerShown: false }}
-      />
-      <Stack.Screen
-        name="measurements/[id]"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="invoices/new"
-        options={{ presentation: "modal", headerShown: false }}
-      />
+      <Stack.Screen name="measurements/new" options={{ presentation: "modal", headerShown: false }} />
+      <Stack.Screen name="measurements/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="invoices/new" options={{ presentation: "modal", headerShown: false }} />
       <Stack.Screen name="invoices/[id]" options={{ headerShown: false }} />
-      <Stack.Screen
-        name="profile"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="search"
-        options={{ presentation: "modal", headerShown: false }}
-      />
+      <Stack.Screen name="product-types/index" options={{ headerShown: false }} />
+      <Stack.Screen name="notifications/index" options={{ headerShown: false }} />
+      <Stack.Screen name="search" options={{ presentation: "modal", headerShown: false }} />
     </Stack>
   );
 }

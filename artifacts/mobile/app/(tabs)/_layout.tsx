@@ -15,13 +15,13 @@ function NativeTabLayout() {
         <Icon sf={{ default: "house", selected: "house.fill" }} />
         <Label>Home</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="products">
+        <Icon sf={{ default: "tag", selected: "tag.fill" }} />
+        <Label>Products</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="customers">
         <Icon sf={{ default: "person.2", selected: "person.2.fill" }} />
         <Label>Customers</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="measurements">
-        <Icon sf={{ default: "ruler", selected: "ruler.fill" }} />
-        <Label>Measure</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="invoices">
         <Icon sf={{ default: "doc.text", selected: "doc.text.fill" }} />
@@ -58,23 +58,11 @@ function ClassicTabLayout() {
         },
         tabBarBackground: () =>
           isIOS ? (
-            <BlurView
-              intensity={100}
-              tint={isDark ? "dark" : "light"}
-              style={StyleSheet.absoluteFill}
-            />
+            <BlurView intensity={100} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
           ) : isWeb ? (
-            <View
-              style={[
-                StyleSheet.absoluteFill,
-                { backgroundColor: colors.background },
-              ]}
-            />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]} />
           ) : null,
-        tabBarLabelStyle: {
-          fontFamily: "Inter_500Medium",
-          fontSize: 11,
-        },
+        tabBarLabelStyle: { fontFamily: "Inter_500Medium", fontSize: 11 },
       }}
     >
       <Tabs.Screen
@@ -82,11 +70,15 @@ function ClassicTabLayout() {
         options={{
           title: "Home",
           tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="house" tintColor={color} size={24} />
-            ) : (
-              <Feather name="home" size={22} color={color} />
-            ),
+            isIOS ? <SymbolView name="house" tintColor={color} size={24} /> : <Feather name="home" size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="products"
+        options={{
+          title: "Products",
+          tabBarIcon: ({ color }) =>
+            isIOS ? <SymbolView name="tag" tintColor={color} size={24} /> : <MaterialIcons name="local-offer" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -94,23 +86,7 @@ function ClassicTabLayout() {
         options={{
           title: "Customers",
           tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="person.2" tintColor={color} size={24} />
-            ) : (
-              <Feather name="users" size={22} color={color} />
-            ),
-        }}
-      />
-      <Tabs.Screen
-        name="measurements"
-        options={{
-          title: "Measure",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="ruler" tintColor={color} size={24} />
-            ) : (
-              <MaterialIcons name="straighten" size={22} color={color} />
-            ),
+            isIOS ? <SymbolView name="person.2" tintColor={color} size={24} /> : <Feather name="users" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -118,11 +94,7 @@ function ClassicTabLayout() {
         options={{
           title: "Invoices",
           tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="doc.text" tintColor={color} size={24} />
-            ) : (
-              <MaterialIcons name="receipt" size={22} color={color} />
-            ),
+            isIOS ? <SymbolView name="doc.text" tintColor={color} size={24} /> : <MaterialIcons name="receipt" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -130,20 +102,16 @@ function ClassicTabLayout() {
         options={{
           title: "More",
           tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="ellipsis" tintColor={color} size={24} />
-            ) : (
-              <Feather name="more-horizontal" size={22} color={color} />
-            ),
+            isIOS ? <SymbolView name="ellipsis" tintColor={color} size={24} /> : <Feather name="more-horizontal" size={22} color={color} />,
         }}
       />
+      {/* Hide measurements tab – accessible via customers */}
+      <Tabs.Screen name="measurements" options={{ href: null }} />
     </Tabs>
   );
 }
 
 export default function TabLayout() {
-  if (isLiquidGlassAvailable()) {
-    return <NativeTabLayout />;
-  }
+  if (isLiquidGlassAvailable()) return <NativeTabLayout />;
   return <ClassicTabLayout />;
 }

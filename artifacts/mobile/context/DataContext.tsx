@@ -1,341 +1,308 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { api } from "@/utils/api";
-import { Customer, Invoice, InvoiceItem, Measurement, Product } from "@/types";
+import {
+  Customer,
+  CustomMeasurementField,
+  FamilyMember,
+  Invoice,
+  InvoiceItem,
+  Measurement,
+  Notification,
+  ProductType,
+} from "@/types";
 import { useAuth } from "./AuthContext";
-import type { ApiCustomer, ApiMeasurement, ApiInvoice, ApiUser } from "@workspace/api-client";
+import {
+  generateId,
+  generateNotifications,
+  getCustomers,
+  getCustomFields,
+  getFamilyMembers,
+  getInvoices,
+  getMeasurements,
+  getNextInvoiceNumber,
+  getNextOrderLabel,
+  getNotifications,
+  getProductTypes,
+  getStorageItem,
+  saveAllCustomers,
+  saveAllCustomFields,
+  saveAllFamilyMembers,
+  saveAllInvoices,
+  saveAllMeasurements,
+  saveAllNotifications,
+  saveAllProductTypes,
+  STORAGE_KEYS,
+} from "@/utils/storage";
 
 interface DataContextType {
   customers: Customer[];
+  familyMembers: FamilyMember[];
   measurements: Measurement[];
   invoices: Invoice[];
+  productTypes: ProductType[];
+  customFields: CustomMeasurementField[];
+  notifications: Notification[];
+  unreadCount: number;
   isLoading: boolean;
   refresh: () => Promise<void>;
   addCustomer: (data: Omit<Customer, "id" | "tailorId" | "createdAt">) => Promise<Customer>;
-  updateCustomer: (id: string, data: Partial<Customer>) => Promise<void>;
+  updateCustomer: (id: string, data: Partial<Pick<Customer, "name" | "mobile" | "gender">>) => Promise<void>;
   deleteCustomer: (id: string) => Promise<void>;
+  addFamilyMember: (data: Omit<FamilyMember, "id" | "tailorId" | "createdAt">) => Promise<FamilyMember>;
+  deleteFamilyMember: (id: string) => Promise<void>;
+  addProductType: (data: { name: string; amount: number }) => Promise<ProductType>;
+  updateProductType: (id: string, data: { name?: string; amount?: number }) => Promise<void>;
+  deleteProductType: (id: string) => Promise<void>;
+  addCustomField: (fieldName: string) => Promise<CustomMeasurementField>;
+  deleteCustomField: (id: string) => Promise<void>;
   addMeasurement: (data: Omit<Measurement, "id" | "tailorId" | "createdAt">) => Promise<Measurement>;
   deleteMeasurement: (id: string) => Promise<void>;
+  getCustomerMeasurements: (customerId: string) => Measurement[];
   createInvoice: (data: {
     customerId: string;
     customerName: string;
     customerMobile: string;
     items: InvoiceItem[];
-    gstRate: number;
     notes?: string;
   }) => Promise<Invoice>;
   updateInvoiceStatus: (id: string, status: Invoice["status"]) => Promise<void>;
-  getCustomerMeasurements: (customerId: string) => Measurement[];
   getCustomerInvoices: (customerId: string) => Invoice[];
-  getCustomerMeasurementForProduct: (customerId: string, productType: string) => Measurement | undefined;
-  fetchLatestMeasurement: (customerId: string, productType: string) => Promise<Measurement | null>;
+  markNotificationRead: (id: string) => Promise<void>;
+  markAllRead: () => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType>({} as DataContextType);
 
-// Convert API customer → local Customer shape
-function apiToCustomer(c: ApiCustomer): Customer {
-  return {
-    id: c.id,
-    tailorId: c.tailorId,
-    name: c.name,
-    mobile: c.mobile,
-    email: c.email ?? undefined,
-    address: c.address ?? undefined,
-    notes: c.notes ?? undefined,
-    createdAt: c.createdAt,
-  };
-}
-
-// Convert API measurement → local Measurement shape
-function apiToMeasurement(m: ApiMeasurement): Measurement {
-  // The API stores decimals as strings; convert to numbers
-  const toNum = (v: string | null | undefined) => {
-    if (v == null) return undefined;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : undefined;
-  };
-  return {
-    id: m.id,
-    customerId: m.customerId,
-    tailorId: m.tailorId,
-    customerName: m.customerName,
-    date: m.measurementDate,
-    productType: m.productType,
-    chest: toNum(m.chest),
-    shoulder: toNum(m.shoulder),
-    neck: toNum(m.neck),
-    sleeve: toNum(m.sleeve),
-    waist: toNum(m.waist),
-    length: toNum(m.length),
-    hip: toNum(m.hip),
-    thigh: toNum(m.thigh),
-    pantLength: toNum(m.pantLength),
-    bottomWidth: toNum(m.bottomWidth),
-    armhole: toNum(m.armhole),
-    wrist: toNum(m.wrist),
-    customMeasurements: m.customMeasurements ?? [],
-    notes: m.notes ?? undefined,
-    createdAt: m.createdAt,
-  };
-}
-
-// Convert API invoice → local Invoice shape
-function apiToInvoice(i: ApiInvoice): Invoice {
-  return {
-    id: i.id,
-    invoiceNumber: i.invoiceNumber,
-    orderLabel: i.orderLabel,
-    tailorId: i.tailorId,
-    customerId: i.customerId,
-    customerName: i.customerName,
-    customerMobile: i.customerMobile,
-    // Defensive: the API usually returns `items`, but a few endpoints return
-    // only the invoice header. Default to an empty list rather than crashing.
-    items: (i.items ?? []).map((it) => ({
-      productType: it.productType,
-      quantity: it.quantity,
-      price: Number(it.price),
-      measurementId: it.measurementId ?? undefined,
-      measurementValues: it.measurementValues ?? undefined,
-    })),
-    subtotal: Number(i.subtotal),
-    gstRate: Number(i.gstRate),
-    gstAmount: Number(i.gstAmount),
-    total: Number(i.total),
-    status: i.status,
-    notes: i.notes ?? undefined,
-    createdAt: i.createdAt,
-  };
-}
-
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [productTypes, setProductTypes] = useState<ProductType[]>([]);
+  const [customFields, setCustomFields] = useState<CustomMeasurementField[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     if (!user) {
-      setCustomers([]);
-      setMeasurements([]);
-      setInvoices([]);
-      setIsLoading(false);
+      setCustomers([]); setFamilyMembers([]); setMeasurements([]);
+      setInvoices([]); setProductTypes([]); setCustomFields([]);
+      setNotifications([]); setIsLoading(false);
       return;
     }
     setIsLoading(true);
-    try {
-      const [customersData, measurementsData, invoicesData] = await Promise.all([
-        api().listCustomers(),
-        api().listMeasurements(),
-        api().listInvoices(),
-      ]);
-      setCustomers(customersData.map(apiToCustomer));
-      setMeasurements(measurementsData.map(apiToMeasurement));
-      setInvoices(invoicesData.map(apiToInvoice));
-    } catch (err) {
-      console.error("[DataContext] refresh failed:", err);
-    } finally {
-      setIsLoading(false);
-    }
+    const [c, fm, m, inv, pt, cf] = await Promise.all([
+      getCustomers(user.id),
+      getFamilyMembers(user.id),
+      getMeasurements(user.id),
+      getInvoices(user.id),
+      getProductTypes(user.id),
+      getCustomFields(user.id),
+    ]);
+    setCustomers(c.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+    setFamilyMembers(fm);
+    setMeasurements(m.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+    setInvoices(inv.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+    setProductTypes(pt);
+    setCustomFields(cf);
+    // Generate & reload notifications
+    await generateNotifications(user.id, m, inv);
+    const notifs = await getNotifications(user.id);
+    setNotifications(notifs);
+    setIsLoading(false);
   }, [user]);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  useEffect(() => { refresh(); }, [refresh]);
 
-  async function addCustomer(data: Omit<Customer, "id" | "tailorId" | "createdAt">) {
-    const created = await api().createCustomer({
-      name: data.name,
-      mobile: data.mobile,
-      email: data.email ?? null,
-      address: data.address ?? null,
-      notes: data.notes ?? null,
-    });
-    const local = apiToCustomer(created);
-    setCustomers((prev) => [local, ...prev]);
-    return local;
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+  // Raw helpers to read/write the full global arrays
+  async function rawGet<T>(key: string): Promise<T[]> {
+    return (await getStorageItem<T[]>(key)) ?? [];
   }
 
-  async function updateCustomer(id: string, data: Partial<Customer>) {
-    const updated = await api().updateCustomer(id, {
-      name: data.name,
-      mobile: data.mobile,
-      email: data.email ?? null,
-      address: data.address ?? null,
-      notes: data.notes ?? null,
-    });
-    const local = apiToCustomer(updated);
-    setCustomers((prev) => prev.map((c) => (c.id === id ? local : c)));
+  // ── Customers ────────────────────────────────────────────────────────────
+  async function addCustomer(data: Omit<Customer, "id" | "tailorId" | "createdAt">) {
+    if (!user) throw new Error("Not authenticated");
+    const all = await rawGet<Customer>(STORAGE_KEYS.CUSTOMERS);
+    const c: Customer = { id: generateId(), tailorId: user.id, createdAt: new Date().toISOString(), ...data };
+    await saveAllCustomers([...all, c]);
+    setCustomers((prev) => [c, ...prev]);
+    return c;
+  }
+
+  async function updateCustomer(id: string, data: Partial<Pick<Customer, "name" | "mobile" | "gender">>) {
+    const all = await rawGet<Customer>(STORAGE_KEYS.CUSTOMERS);
+    await saveAllCustomers(all.map((c) => (c.id === id ? { ...c, ...data } : c)));
+    setCustomers((prev) => prev.map((c) => (c.id === id ? { ...c, ...data } : c)));
   }
 
   async function deleteCustomer(id: string) {
-    await api().deleteCustomer(id);
+    const [allC, allM, allI] = await Promise.all([
+      rawGet<Customer>(STORAGE_KEYS.CUSTOMERS),
+      rawGet<Measurement>(STORAGE_KEYS.MEASUREMENTS),
+      rawGet<Invoice>(STORAGE_KEYS.INVOICES),
+    ]);
+    await Promise.all([
+      saveAllCustomers(allC.filter((c) => c.id !== id)),
+      saveAllMeasurements(allM.filter((m) => m.customerId !== id)),
+      saveAllInvoices(allI.filter((i) => i.customerId !== id)),
+    ]);
     setCustomers((prev) => prev.filter((c) => c.id !== id));
-    // Also remove their measurements and invoices from local state so the
-    // UI is consistent (the server cascades the delete).
     setMeasurements((prev) => prev.filter((m) => m.customerId !== id));
     setInvoices((prev) => prev.filter((i) => i.customerId !== id));
   }
 
+  // ── Family Members ────────────────────────────────────────────────────────
+  async function addFamilyMember(data: Omit<FamilyMember, "id" | "tailorId" | "createdAt">) {
+    if (!user) throw new Error("Not authenticated");
+    const all = await rawGet<FamilyMember>(STORAGE_KEYS.FAMILY_MEMBERS);
+    const f: FamilyMember = { id: generateId(), tailorId: user.id, createdAt: new Date().toISOString(), ...data };
+    await saveAllFamilyMembers([...all, f]);
+    setFamilyMembers((prev) => [...prev, f]);
+    return f;
+  }
+
+  async function deleteFamilyMember(id: string) {
+    const all = await rawGet<FamilyMember>(STORAGE_KEYS.FAMILY_MEMBERS);
+    await saveAllFamilyMembers(all.filter((f) => f.id !== id));
+    setFamilyMembers((prev) => prev.filter((f) => f.id !== id));
+  }
+
+  // ── Product Types ─────────────────────────────────────────────────────────
+  async function addProductType(data: { name: string; amount: number }) {
+    if (!user) throw new Error("Not authenticated");
+    const all = await rawGet<ProductType>(STORAGE_KEYS.PRODUCT_TYPES);
+    const now = new Date().toISOString();
+    const pt: ProductType = { id: generateId(), tailorId: user.id, createdAt: now, updatedAt: now, ...data };
+    await saveAllProductTypes([...all, pt]);
+    setProductTypes((prev) => [...prev, pt]);
+    return pt;
+  }
+
+  async function updateProductType(id: string, data: { name?: string; amount?: number }) {
+    const all = await rawGet<ProductType>(STORAGE_KEYS.PRODUCT_TYPES);
+    await saveAllProductTypes(
+      all.map((p) => (p.id === id ? { ...p, ...data, updatedAt: new Date().toISOString() } : p))
+    );
+    setProductTypes((prev) => prev.map((p) => (p.id === id ? { ...p, ...data } : p)));
+  }
+
+  async function deleteProductType(id: string) {
+    const all = await rawGet<ProductType>(STORAGE_KEYS.PRODUCT_TYPES);
+    await saveAllProductTypes(all.filter((p) => p.id !== id));
+    setProductTypes((prev) => prev.filter((p) => p.id !== id));
+  }
+
+  // ── Custom Fields ─────────────────────────────────────────────────────────
+  async function addCustomField(fieldName: string) {
+    if (!user) throw new Error("Not authenticated");
+    const all = await rawGet<CustomMeasurementField>(STORAGE_KEYS.CUSTOM_FIELDS);
+    const f: CustomMeasurementField = { id: generateId(), tailorId: user.id, fieldName, createdAt: new Date().toISOString() };
+    await saveAllCustomFields([...all, f]);
+    setCustomFields((prev) => [...prev, f]);
+    return f;
+  }
+
+  async function deleteCustomField(id: string) {
+    const all = await rawGet<CustomMeasurementField>(STORAGE_KEYS.CUSTOM_FIELDS);
+    await saveAllCustomFields(all.filter((f) => f.id !== id));
+    setCustomFields((prev) => prev.filter((f) => f.id !== id));
+  }
+
+  // ── Measurements ──────────────────────────────────────────────────────────
   async function addMeasurement(data: Omit<Measurement, "id" | "tailorId" | "createdAt">) {
     if (!user) throw new Error("Not authenticated");
-    // The API expects the same fields our local shape uses. We always provide
-    // an explicit "chest"/etc. as either a number (which we stringify) or
-    // null/undefined. The server will accept the body as-is.
-    const payload: any = {
-      customerId: data.customerId,
-      productType: data.productType,
-      measurementDate: data.date,
+    const all = await rawGet<Measurement>(STORAGE_KEYS.MEASUREMENTS);
+    const m: Measurement = {
+      id: generateId(), tailorId: user.id,
+      createdAt: new Date().toISOString(),
+      ...data,
+      customMeasurements: data.customMeasurements ?? [],
     };
-    const fields: (keyof Measurement)[] = [
-      "chest", "shoulder", "neck", "sleeve",
-      "waist", "length", "hip", "thigh",
-      "pantLength", "bottomWidth", "armhole", "wrist",
-    ];
-    for (const f of fields) {
-      const v = (data as any)[f];
-      if (v != null && !Number.isNaN(v)) {
-        payload[f] = String(v);
-      } else {
-        payload[f] = null;
-      }
-    }
-    if (data.customMeasurements && data.customMeasurements.length > 0) {
-      payload.customMeasurements = data.customMeasurements;
-    }
-    if (data.notes) {
-      payload.notes = data.notes;
-    }
-
-    const created = await api().createMeasurement(payload);
-    const local = apiToMeasurement(created);
-    setMeasurements((prev) => [local, ...prev]);
-    return local;
+    await saveAllMeasurements([...all, m]);
+    setMeasurements((prev) => [m, ...prev]);
+    return m;
   }
 
   async function deleteMeasurement(id: string) {
-    await api().deleteMeasurement(id);
+    const all = await rawGet<Measurement>(STORAGE_KEYS.MEASUREMENTS);
+    await saveAllMeasurements(all.filter((m) => m.id !== id));
     setMeasurements((prev) => prev.filter((m) => m.id !== id));
-  }
-
-  async function createInvoice(data: {
-    customerId: string;
-    customerName: string;
-    customerMobile: string;
-    items: InvoiceItem[];
-    gstRate: number;
-    notes?: string;
-  }) {
-    if (!user) throw new Error("Not authenticated");
-    const created = await api().createInvoice({
-      customerId: data.customerId,
-      customerName: data.customerName,
-      customerMobile: data.customerMobile,
-      gstRate: data.gstRate,
-      notes: data.notes,
-      items: data.items.map((it) => ({
-        productType: it.productType,
-        quantity: it.quantity,
-        price: it.price,
-        measurementId: it.measurementId ?? null,
-        measurementValues: it.measurementValues ?? null,
-      })),
-    });
-    const local = apiToInvoice(created);
-    setInvoices((prev) => [local, ...prev]);
-    return local;
-  }
-
-  async function updateInvoiceStatus(id: string, status: Invoice["status"]) {
-    const updated = await api().updateInvoiceStatus(id, status);
-    const local = apiToInvoice(updated);
-    setInvoices((prev) => prev.map((i) => (i.id === id ? local : i)));
   }
 
   function getCustomerMeasurements(customerId: string) {
     return measurements.filter((m) => m.customerId === customerId);
   }
 
+  // ── Invoices ──────────────────────────────────────────────────────────────
+  async function createInvoice(data: {
+    customerId: string;
+    customerName: string;
+    customerMobile: string;
+    items: InvoiceItem[];
+    notes?: string;
+  }) {
+    if (!user) throw new Error("Not authenticated");
+    const all = await rawGet<Invoice>(STORAGE_KEYS.INVOICES);
+    const [invoiceNumber, orderLabel] = await Promise.all([
+      getNextInvoiceNumber(),
+      getNextOrderLabel(),
+    ]);
+    const subtotal = data.items.reduce((s, it) => s + it.price * it.quantity, 0);
+    const inv: Invoice = {
+      id: generateId(),
+      invoiceNumber,
+      orderLabel,
+      tailorId: user.id,
+      subtotal,
+      total: subtotal,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      ...data,
+    };
+    await saveAllInvoices([...all, inv]);
+    setInvoices((prev) => [inv, ...prev]);
+    return inv;
+  }
+
+  async function updateInvoiceStatus(id: string, status: Invoice["status"]) {
+    const all = await rawGet<Invoice>(STORAGE_KEYS.INVOICES);
+    await saveAllInvoices(all.map((i) => (i.id === id ? { ...i, status } : i)));
+    setInvoices((prev) => prev.map((i) => (i.id === id ? { ...i, status } : i)));
+  }
+
   function getCustomerInvoices(customerId: string) {
     return invoices.filter((i) => i.customerId === customerId);
   }
 
-  function getCustomerMeasurementForProduct(customerId: string, productType: string) {
-    const matches = measurements.filter(
-      (m) => m.customerId === customerId && m.productType === productType,
-    );
-    if (matches.length === 0) {
-      console.log(
-        `[DataContext] getCustomerMeasurementForProduct → no measurement found for customer=${customerId} product=${productType}`,
-      );
-      // Fall through and try the server: this handles the "fresh login, no
-      // local data yet" race, where the order screen mounts before the
-      // measurements list has finished loading.
-      // We can't await here (this is a sync function), so the consumer
-      // should also call fetchLatestMeasurement(...) when no local match
-      // is found. The auto-fill effect does this — see invoices/new.tsx.
-      return undefined;
-    }
-    const sorted = [...matches].sort((a, b) => {
-      const ad = new Date(a.date || a.createdAt).getTime();
-      const bd = new Date(b.date || b.createdAt).getTime();
-      if (bd !== ad) return bd - ad;
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-    const latest = sorted[0];
-    console.log(
-      `[DataContext] getCustomerMeasurementForProduct → customer=${customerId} product=${productType} selectedId=${latest.id} totalMatches=${matches.length}`,
-    );
-    return latest;
+  // ── Notifications ─────────────────────────────────────────────────────────
+  async function markNotificationRead(id: string) {
+    const all = await rawGet<Notification>(STORAGE_KEYS.NOTIFICATIONS);
+    await saveAllNotifications(all.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
   }
 
-  /**
-   * Fetch the latest measurement directly from the server for a (customer,
-   * product) pair. Used when the local list is empty but the server may
-   * still have data — e.g. right after a fresh login.
-   */
-  async function fetchLatestMeasurement(customerId: string, productType: string): Promise<Measurement | null> {
-    if (!customerId || !productType) return null;
-    try {
-      const data = await api().getLatestMeasurement(customerId, productType);
-      const local = apiToMeasurement(data);
-      // Cache it in local state for next time
-      setMeasurements((prev) => {
-        if (prev.some((m) => m.id === local.id)) return prev;
-        return [local, ...prev];
-      });
-      return local;
-    } catch (err) {
-      // 404 just means "no measurement yet" — not an error worth surfacing.
-      console.log(
-        `[DataContext] fetchLatestMeasurement → no measurement for customer=${customerId} product=${productType}`,
-      );
-      return null;
-    }
+  async function markAllRead() {
+    const all = await rawGet<Notification>(STORAGE_KEYS.NOTIFICATIONS);
+    await saveAllNotifications(all.map((n) => ({ ...n, isRead: true })));
+    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
   }
 
   return (
-    <DataContext.Provider
-      value={{
-        customers,
-        measurements,
-        invoices,
-        isLoading,
-        refresh,
-        addCustomer,
-        updateCustomer,
-        deleteCustomer,
-        addMeasurement,
-        deleteMeasurement,
-        createInvoice,
-        updateInvoiceStatus,
-        getCustomerMeasurements,
-        getCustomerInvoices,
-        getCustomerMeasurementForProduct,
-        fetchLatestMeasurement,
-      }}
-    >
+    <DataContext.Provider value={{
+      customers, familyMembers, measurements, invoices,
+      productTypes, customFields, notifications, unreadCount,
+      isLoading, refresh,
+      addCustomer, updateCustomer, deleteCustomer,
+      addFamilyMember, deleteFamilyMember,
+      addProductType, updateProductType, deleteProductType,
+      addCustomField, deleteCustomField,
+      addMeasurement, deleteMeasurement, getCustomerMeasurements,
+      createInvoice, updateInvoiceStatus, getCustomerInvoices,
+      markNotificationRead, markAllRead,
+    }}>
       {children}
     </DataContext.Provider>
   );

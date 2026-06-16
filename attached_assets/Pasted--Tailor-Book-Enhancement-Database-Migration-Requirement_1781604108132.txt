@@ -1,0 +1,490 @@
+# Tailor Book - Enhancement & Database Migration Requirements
+
+Project: Tailor Book (React Native + Backend + Database)
+
+Please implement the following changes across the application and create all required database migrations, APIs, validations, and UI updates.
+
+## 1. Global Validations
+
+Apply validation throughout the project.
+
+### Mobile Number
+
+* Allow numbers only
+* Exactly 10 digits
+* No alphabets or special characters
+
+### Email
+
+* Validate proper email format
+* Show error for invalid email
+
+### Password
+
+* Minimum 8 characters
+* At least 1 uppercase letter
+* At least 1 lowercase letter
+* At least 1 number
+* At least 1 special character
+
+### Required Fields
+
+* Display proper validation messages
+* Prevent form submission until validation passes
+
+---
+
+# 2. Registration Module
+
+## Email OTP Verification
+
+Registration flow:
+
+1. User enters details
+2. OTP sent to email
+3. User verifies OTP
+4. Registration completes only after successful verification
+
+Rules:
+
+* If email is not verified, do not allow registration
+* Show message:
+  "Please verify your email address before continuing."
+
+## New Field
+
+Add:
+
+Speciality
+
+Options:
+
+* Male
+* Female
+* Unisex
+
+Purpose:
+Defines which type of tailoring services the tailor provides.
+
+## Shop Information
+
+Current:
+Mandatory
+
+Change To:
+Optional
+
+---
+
+# 3. Tailor Dashboard
+
+Applicable only for Tailor users.
+
+Do not show for Admin users.
+
+## Onboarding
+
+Show onboarding/tutorial screens on first login.
+
+Screens:
+
+* Feature overview
+* Measurement management
+* Invoice management
+
+Buttons:
+
+* Next
+* Previous
+* Skip
+
+After completion:
+Do not show again.
+
+---
+
+## Quick Actions
+
+Remove:
+
+* Measurements shortcut
+* Invoice shortcut
+
+---
+
+## Notification System
+
+Add notification icon with count badge.
+
+Show alerts for:
+
+* Delivery due tomorrow
+* Delivery due today
+* Pending invoices
+* Pending measurements
+
+Notification click:
+Open notification list screen.
+
+---
+
+## Product Type Master
+
+Add new menu after Dashboard.
+
+Fields:
+
+* Product Type Name
+* Amount
+
+Examples:
+
+* Shirt = 500
+* Pant = 700
+* Kurta = 1000
+
+Features:
+
+* Add Product Type
+* Edit Product Type
+* Delete Product Type
+* Search Product Type
+
+Used during:
+
+* Measurements
+* Invoice generation
+
+---
+
+# 4. Customer Module
+
+Fields:
+
+Keep only:
+
+* Full Name
+* Mobile Number
+* Gender
+
+Remove unnecessary fields.
+
+## Family Member Support
+
+Add:
+
+Family Member Customer
+
+Examples:
+
+* Father
+* Mother
+* Son
+* Daughter
+* Wife
+
+Reason:
+Single customer can have multiple family member measurements and orders.
+
+Database relationship:
+Customer -> Family Members
+
+---
+
+# 5. Measurement Module
+
+## New Fields
+
+Add:
+
+* Measurement Date
+* Delivery Date
+
+Delivery Date:
+Expected cloth ready date.
+
+---
+
+## Remove GST
+
+Remove GST completely from:
+
+* Measurement flow
+* Invoice flow
+* Database
+* Reports
+
+---
+
+## Product-wise Measurement Fields
+
+Show only relevant fields.
+
+Example:
+
+### Shirt
+
+* Chest
+* Shoulder
+* Neck
+* Sleeve
+* Length
+
+### Pant
+
+* Waist
+* Hip
+* Length
+* Bottom
+
+### Kurta
+
+* Chest
+* Shoulder
+* Sleeve
+* Length
+
+Do not display unrelated measurements.
+
+---
+
+## Custom Measurement Fields
+
+Add:
+
+"Add Custom Measurement"
+
+Workflow:
+
+1. Click button
+2. Open popup
+3. Enter field name
+4. Save
+
+Examples:
+
+* Collar Width
+* Arm Opening
+* Extra Length
+
+Saved measurements become reusable.
+
+---
+
+# 6. Invoice / New Order
+
+## Customer Search
+
+When creating invoice:
+
+Customer selection must be searchable.
+
+Example:
+If 500+ customers exist:
+
+* Search by name
+* Search by mobile
+
+---
+
+## Remove
+
+Remove:
+
+* Measurement dropdown
+* GST
+
+---
+
+## Product Price
+
+Auto-fetch amount from Product Type Master.
+
+Example:
+
+Shirt = 500
+Pant = 700
+
+Invoice total calculated automatically.
+
+---
+
+# 7. More Screen
+
+Remove:
+
+* Profile
+* Notifications
+
+Keep:
+
+* Help & Support
+
+Help & Support should display static information:
+
+Support Email:
+[support@tailorbook.com](mailto:support@tailorbook.com)
+
+Support Mobile:
++91 9999999999
+
+Read-only information.
+
+---
+
+# 8. Measurement History
+
+Dashboard → Measurements
+
+Workflow:
+
+Select Customer
+
+Show all measurements grouped by Product Type.
+
+Example:
+
+Customer:
+Rahul
+
+Measurements:
+
+* Shirt (01-Jan-2026)
+* Shirt (15-Feb-2026)
+* Pant (20-Feb-2026)
+* Kurta (10-Mar-2026)
+
+Filters:
+
+* Shirt
+* Pant
+* Kurta
+* All
+
+Clicking a record:
+Open that specific measurement.
+
+Add button:
+
+"Create Invoice From Measurement"
+
+Auto-populate invoice details.
+
+---
+
+# Database Migration Requirements
+
+Create migration files for:
+
+## users
+
+Add:
+
+* speciality ENUM('male','female','unisex')
+* email_verified BOOLEAN
+* email_verified_at DATETIME
+
+---
+
+## customers
+
+Keep:
+
+* full_name
+* mobile
+* gender
+
+---
+
+## family_members
+
+Fields:
+
+* id
+* customer_id
+* name
+* relation
+* gender
+* created_at
+* updated_at
+
+---
+
+## product_types
+
+Fields:
+
+* id
+* name
+* amount
+* created_by
+* created_at
+* updated_at
+
+---
+
+## measurements
+
+Add:
+
+* product_type_id
+* delivery_date
+* measurement_date
+
+---
+
+## custom_measurement_fields
+
+Fields:
+
+* id
+* tailor_id
+* product_type_id
+* field_name
+* created_at
+
+---
+
+## notifications
+
+Fields:
+
+* id
+* tailor_id
+* title
+* message
+* is_read
+* created_at
+
+---
+
+## invoices
+
+Remove:
+
+* gst
+* gst_amount
+
+Add:
+
+* product_type_id
+
+---
+
+# Migration Commands
+
+Generate migrations.
+
+Run:
+
+npm install
+
+npm run migrate
+
+npm run db:migrate
+
+npm run db:seed
+
+npm run dev
+
+Ensure all migrations run successfully and existing data remains intact.

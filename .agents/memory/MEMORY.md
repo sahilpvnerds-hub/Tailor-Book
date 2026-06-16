@@ -1,0 +1,1 @@
+- [Tailor Book architecture](tailor-book-arch.md) — AsyncStorage-only Expo app; no backend dependency; all types/context fully custom.

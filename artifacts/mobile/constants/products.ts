@@ -1,32 +1,40 @@
-import { Product } from "@/types";
+import { MeasurementKey } from "./measurementFields";
 
-export const DEFAULT_PRODUCTS: Product[] = [
-  { id: "shirt", name: "Shirt", price: 500 },
-  { id: "pant", name: "Pant", price: 700 },
-  { id: "blazer", name: "Blazer", price: 2000 },
-  { id: "kurta", name: "Kurta", price: 600 },
-  { id: "lenga", name: "Lenga", price: 2500 },
-  { id: "coat", name: "Coat", price: 3000 },
-  { id: "safari_suit", name: "Safari Suit", price: 1800 },
-  { id: "jacket", name: "Jacket", price: 1500 },
-  { id: "school_uniform", name: "School Uniform", price: 800 },
+export { MEASUREMENT_FIELDS, MeasurementKey } from "./measurementFields";
+
+// Default product types (seeded on first launch if none exist)
+export const DEFAULT_PRODUCT_TYPES = [
+  { name: "Shirt", amount: 500 },
+  { name: "Pant", amount: 700 },
+  { name: "Kurta", amount: 600 },
+  { name: "Blazer", amount: 2000 },
+  { name: "Lenga", amount: 2500 },
+  { name: "Coat", amount: 3000 },
+  { name: "Safari Suit", amount: 1800 },
+  { name: "Jacket", amount: 1500 },
+  { name: "School Uniform", amount: 800 },
 ];
 
-export const MEASUREMENT_FIELDS = [
-  { key: "chest", label: "Chest" },
-  { key: "shoulder", label: "Shoulder" },
-  { key: "neck", label: "Neck" },
-  { key: "sleeve", label: "Sleeve" },
-  { key: "waist", label: "Waist" },
-  { key: "length", label: "Length" },
-  { key: "hip", label: "Hip" },
-  { key: "thigh", label: "Thigh" },
-  { key: "pantLength", label: "Pant Length" },
-  { key: "bottomWidth", label: "Bottom Width" },
-  { key: "armhole", label: "Armhole" },
-  { key: "wrist", label: "Wrist" },
-] as const;
+// Which measurement fields to show for each product type
+export const PRODUCT_FIELDS: Record<string, MeasurementKey[]> = {
+  Shirt:          ["chest", "shoulder", "neck", "sleeve", "length"],
+  Pant:           ["waist", "hip", "pantLength", "bottomWidth", "thigh"],
+  Kurta:          ["chest", "shoulder", "sleeve", "length", "hip"],
+  Blazer:         ["chest", "shoulder", "sleeve", "length", "armhole"],
+  Coat:           ["chest", "shoulder", "sleeve", "length", "armhole", "wrist"],
+  Lenga:          ["waist", "hip", "length", "chest"],
+  "Safari Suit":  ["chest", "shoulder", "sleeve", "length", "waist"],
+  Jacket:         ["chest", "shoulder", "sleeve", "length", "armhole"],
+  "School Uniform": ["chest", "shoulder", "sleeve", "length", "waist"],
+};
 
-export type MeasurementKey = (typeof MEASUREMENT_FIELDS)[number]["key"];
+// Fallback: all fields for unknown product types
+export const ALL_MEASUREMENT_KEYS: MeasurementKey[] = [
+  "chest", "shoulder", "neck", "sleeve", "waist",
+  "length", "hip", "thigh", "pantLength", "bottomWidth",
+  "armhole", "wrist",
+];
 
-export const GST_RATES = [0, 5, 12, 18];
+export function getFieldsForProduct(productName: string): MeasurementKey[] {
+  return PRODUCT_FIELDS[productName] ?? ALL_MEASUREMENT_KEYS;
+}
