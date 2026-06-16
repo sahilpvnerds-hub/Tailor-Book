@@ -16,10 +16,11 @@ import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 import { Button, Card, Input } from "@/components/ui";
-import { pickAvatarImage } from "@/components/AvatarPicker";
+// import { pickAvatarImage } from "@/components/AvatarPicker"; // profile-photo upload disabled
 import colors from "@/constants/colors";
 
 type Field = "name" | "email" | "mobile" | "shopName" | "shopAddress" | "city" | "state";
+// | "avatarUri"; // upload disabled
 
 export default function ProfileScreen() {
   const c = useColors();
@@ -80,16 +81,16 @@ export default function ProfileScreen() {
 
   const topPad = Platform.OS === "web" ? 67 : 0;
 
-  async function handlePickAvatar() {
-    const uri = await pickAvatarImage();
-    if (!uri) return;
-    const res = await updateProfile({ avatarUri: uri });
-    if (!res.success) {
-      Alert.alert("Could not save photo", res.error ?? "Unknown error");
-    } else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-  }
+  // async function handlePickAvatar() {
+  //   const uri = await pickAvatarImage();
+  //   if (!uri) return;
+  //   const res = await updateProfile({ avatarUri: uri });
+  //   if (!res.success) {
+  //     Alert.alert("Could not save photo", res.error ?? "Unknown error");
+  //   } else {
+  //     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  //   }
+  // }
 
   function startEdit() {
     setForm({
@@ -246,9 +247,10 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* Avatar */}
+        {/* Avatar — upload disabled */}
         <View style={{ alignItems: "center", gap: 10 }}>
-          <Pressable onPress={handlePickAvatar}>
+          {/* eslint-disable-next-line @typescript-eslint/no-unused-vars */}
+          <View pointerEvents="none">
             <View
               style={{
                 width: 88,
@@ -280,19 +282,8 @@ export default function ProfileScreen() {
                 </Text>
               )}
             </View>
-          </Pressable>
-          <Pressable onPress={handlePickAvatar} hitSlop={6}>
-            <Text
-              style={{
-                fontSize: 13,
-                fontFamily: "Inter_500Medium",
-                color: "#FFFFFF",
-                opacity: 0.9,
-              }}
-            >
-              Tap to change photo
-            </Text>
-          </Pressable>
+          </View>
+          {/* "Tap to change photo" link removed — upload disabled */}
           <Text
             style={{
               fontSize: 20,

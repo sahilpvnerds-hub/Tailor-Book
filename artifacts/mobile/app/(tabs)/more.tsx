@@ -13,11 +13,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics";
+// import * as Haptics from "expo-haptics"; // unused after hiding avatar upload
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 import { Badge, Button, Card, Divider } from "@/components/ui";
-import { pickAvatarImage } from "@/components/AvatarPicker";
+// import { pickAvatarImage } from "@/components/AvatarPicker"; // profile-photo upload disabled
 import { formatDate, STORAGE_KEYS } from "@/utils/storage";
 import colors from "@/constants/colors";
 import type { ApiUser } from "@workspace/api-client";
@@ -82,7 +82,7 @@ function MenuItem({
 export default function MoreScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const { user, logout, getPendingUsers, approveUser, rejectUser, getAllTailors, updateProfile } = useAuth();
+  const { user, logout, getPendingUsers, approveUser, rejectUser, getAllTailors } = useAuth(); // updateProfile: unused after hiding avatar upload
   const [pendingUsers, setPendingUsers] = useState<ApiUser[]>([]);
   const [allTailors, setAllTailors] = useState<ApiUser[]>([]);
   const [showAdmin, setShowAdmin] = useState(false);
@@ -96,16 +96,16 @@ export default function MoreScreen() {
     setAllTailors(tailors);
   }
 
-  async function handleChangePhoto() {
-    const uri = await pickAvatarImage();
-    if (!uri) return;
-    const res = await updateProfile({ avatarUri: uri });
-    if (!res.success) {
-      Alert.alert("Could not save photo", res.error ?? "Unknown error");
-    } else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-  }
+  // async function handleChangePhoto() {
+  //   const uri = await pickAvatarImage();
+  //   if (!uri) return;
+  //   const res = await updateProfile({ avatarUri: uri });
+  //   if (!res.success) {
+  //     Alert.alert("Could not save photo", res.error ?? "Unknown error");
+  //   } else {
+  //     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  //   }
+  // }
 
   useEffect(() => {
     if (isAdmin) loadAdminData();
@@ -180,11 +180,9 @@ export default function MoreScreen() {
       >
         <Card>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-            <Pressable
-              onPress={handleChangePhoto}
-              hitSlop={8}
-              style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
-            >
+            {/* Avatar — upload disabled */}
+            {/* eslint-disable-next-line @typescript-eslint/no-unused-vars */}
+            <View pointerEvents="none">
               <View
                 style={{
                   width: 56,
@@ -215,26 +213,28 @@ export default function MoreScreen() {
                     {user?.name?.[0]?.toUpperCase()}
                   </Text>
                 )}
-                {/* Camera badge */}
-                <View
-                  style={{
-                    position: "absolute",
-                    right: -2,
-                    bottom: -2,
-                    width: 20,
-                    height: 20,
-                    borderRadius: 10,
-                    backgroundColor: c.card,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    borderWidth: 1.5,
-                    borderColor: c.primary,
-                  }}
-                >
-                  <MaterialIcons name="photo-camera" size={11} color={c.primary} />
-                </View>
+                {/* Camera badge — hidden because upload is disabled */}
+                {false && (
+                  <View
+                    style={{
+                      position: "absolute",
+                      right: -2,
+                      bottom: -2,
+                      width: 20,
+                      height: 20,
+                      borderRadius: 10,
+                      backgroundColor: c.card,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderWidth: 1.5,
+                      borderColor: c.primary,
+                    }}
+                  >
+                    <MaterialIcons name="photo-camera" size={11} color={c.primary} />
+                  </View>
+                )}
               </View>
-            </Pressable>
+            </View>
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                 <Text
