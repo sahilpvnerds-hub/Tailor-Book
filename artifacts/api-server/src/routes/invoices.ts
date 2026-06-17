@@ -102,7 +102,7 @@ const createSchema = z.object({
   customerId: z.string().min(1),
   customerName: z.string().min(1),
   customerMobile: z.string().min(1),
-  gstRate: z.number().nonnegative().default(0),
+  deliveryDate: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
   items: z.array(itemSchema).min(1),
 });
@@ -130,8 +130,7 @@ router.post("/", async (req: Request, res: Response) => {
   }
 
   const subtotal = d.items.reduce((s, i) => s + i.price * i.quantity, 0);
-  const gstAmount = (subtotal * d.gstRate) / 100;
-  const total = subtotal + gstAmount;
+  const total = subtotal;
 
   const invoiceSeq = await nextCounterValue("invoice");
   const orderSeq = await nextCounterValue("order");
@@ -149,10 +148,9 @@ router.post("/", async (req: Request, res: Response) => {
       customerName: d.customerName,
       customerMobile: d.customerMobile,
       subtotal: String(subtotal),
-      gstRate: String(d.gstRate),
-      gstAmount: String(gstAmount),
       total: String(total),
       status: "pending",
+      deliveryDate: d.deliveryDate ? new Date(d.deliveryDate) : null,
       notes: d.notes ?? null,
     });
 

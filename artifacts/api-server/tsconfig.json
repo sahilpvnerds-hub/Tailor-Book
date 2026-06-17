@@ -5,7 +5,12 @@
     "tsBuildInfoFile": ".tsbuildinfo",
     "outDir": "dist",
     "rootDir": "src",
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@workspace/db/*": ["../../lib/db/src/*"],
+      "@workspace/api-zod/*": ["../../lib/api-zod/src/*"]
+    },
+    "skipLibCheck": true
   },
   "include": ["src"],
   "references": [

@@ -3,14 +3,15 @@ export type UserStatus = "pending" | "approved" | "rejected";
 export type InvoiceStatus = "pending" | "completed" | "cancelled";
 export type Gender = "male" | "female" | "unisex";
 export type Speciality = "male" | "female" | "unisex";
-export type Relation = "father" | "mother" | "son" | "daughter" | "wife" | "husband" | "other";
+export type Relation =
+  | "father" | "mother" | "son" | "daughter"
+  | "wife" | "husband" | "brother" | "sister" | "other";
 
 export interface User {
   id: string;
   name: string;
   email: string;
   mobile: string;
-  password: string;
   role: UserRole;
   speciality?: Speciality;
   shopName?: string;
@@ -19,23 +20,55 @@ export interface User {
   state?: string;
   avatarUri?: string;
   status: UserStatus;
+  emailVerifiedAt?: string | null;
   onboardingComplete?: boolean;
   createdAt: string;
+}
+
+export interface RegisterData {
+  name: string;
+  email: string;
+  mobile: string;
+  password: string;
+  speciality?: Speciality;
+  shopName?: string;
+  shopAddress?: string;
+  city?: string;
+  state?: string;
+  emailVerifiedAt?: string;
+}
+
+export interface UpdateProfileData {
+  name?: string;
+  email?: string;
+  mobile?: string;
+  shopName?: string;
+  shopAddress?: string;
+  city?: string;
+  state?: string;
+  avatarUri?: string;
+  speciality?: Speciality;
+  onboardingComplete?: boolean;
 }
 
 export interface Customer {
   id: string;
   tailorId: string;
+  familyId?: string;
   name: string;
   mobile: string;
   gender: Gender;
+  email?: string;
+  address?: string;
+  notes?: string;
+  profilePicture?: string;
   createdAt: string;
 }
 
 export interface FamilyMember {
   id: string;
-  customerId: string;
   tailorId: string;
+  primaryCustomerId: string;
   name: string;
   relation: Relation;
   gender: Gender;
@@ -86,6 +119,7 @@ export interface Measurement {
   wrist?: number;
   customMeasurements: MeasurementField[];
   notes?: string;
+  photos?: string[];
   createdAt: string;
 }
 
@@ -94,6 +128,12 @@ export interface InvoiceItem {
   productTypeId?: string;
   quantity: number;
   price: number;
+  measurementId?: string;
+  measurementValues?: Record<string, string>;
+  /** ID of the family member this item belongs to (undefined = primary customer) */
+  familyMemberId?: string;
+  /** Display name of the family member (or primary customer name) */
+  familyMemberName?: string;
 }
 
 export interface Invoice {
@@ -108,6 +148,7 @@ export interface Invoice {
   subtotal: number;
   total: number;
   status: InvoiceStatus;
+  deliveryDate?: string;
   notes?: string;
   createdAt: string;
 }
@@ -118,7 +159,24 @@ export interface Notification {
   title: string;
   message: string;
   isRead: boolean;
-  type: "delivery_due_today" | "delivery_due_tomorrow" | "pending_invoice" | "general";
+  type: "delivery_due_today" | "delivery_due_tomorrow" | "delivery_overdue" | "pending_invoice" | "general";
   relatedId?: string;
+  deliveryDate?: string;   // ISO string – used for countdown calculation
+  /** Invoice this notification belongs to */
+  invoiceId?: string;
+  invoiceNumber?: string;
+  customerName?: string;
+  customerMobile?: string;
+  /** Comma-separated product types e.g. ["Shirt", "Pant"] */
+  itemTypes?: string[];
   createdAt: string;
+}
+
+
+// ── Pending OTP (transient, per-registration) ───────────────────────────
+export interface PendingOtp {
+  email: string;
+  otp: string;
+  expiresAt: number; // epoch ms
+  formData: Record<string, string>;
 }

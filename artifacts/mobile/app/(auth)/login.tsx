@@ -37,22 +37,48 @@ export default function LoginScreen() {
     }
     setErrors({});
     setLoading(true);
-    const result = await login(emailOrMobile.trim(), password);
-    setLoading(false);
-    if (!result.success) {
-      // Make network/server errors more user-friendly
-      const raw = result.error ?? "Something went wrong";
-      let friendly = raw;
-      if (/Network request failed|fetch failed|NetworkError|reach http/i.test(raw)) {
-        friendly =
-          "Cannot reach the API server.\n\n" +
-          "Make sure the backend is running on port 4000:\n" +
-          "  cd artifacts/api-server && npm run dev\n\n" +
-          "Original: " + raw;
+    try {
+      const result = await login(emailOrMobile.trim(), password);
+      setLoading(false);
+      if (!result.success) {
+        const raw = result.error ?? "Something went wrong";
+        // Pending approval — give a friendly, actionable message
+        if (/pending admin approval/i.test(raw)) {
+          Alert.alert(
+            "⏳ Account Pending Approval",
+            "Your registration has been submitted.\n\nAn admin will review and approve your account. You will be able to log in once approved.",
+            [{ text: "OK" }]
+          );
+        } else if (/rejected/i.test(raw)) {
+          Alert.alert(
+            "Account Rejected",
+            "Your account registration was not approved. Please contact support.",
+            [{ text: "OK" }]
+          );
+        } else if (/Network request failed|fetch failed|NetworkError|reach http|HTML instead of JSON/i.test(raw)) {
+          Alert.alert(
+            "Cannot Reach Server",
+            "Make sure the API server is running on port 4000 and your device is on the same network.\n\nOriginal: " + raw,
+            [{ text: "OK" }]
+          );
+        } else {
+          Alert.alert("Login Failed", raw);
+        }
+      } else {
+        router.replace("/(tabs)");
       }
-      Alert.alert("Login Failed", friendly);
-    } else {
-      router.replace("/(tabs)");
+    } catch (err) {
+      setLoading(false);
+      const msg = (err as Error).message ?? "Unknown error";
+      if (/HTML instead of JSON/i.test(msg)) {
+        Alert.alert(
+          "Cannot Reach Server",
+          "The API server returned an unexpected response. Make sure it is running on port 4000.\n\nTried: " + msg,
+          [{ text: "OK" }]
+        );
+      } else {
+        Alert.alert("Login Error", msg);
+      }
     }
   }
 

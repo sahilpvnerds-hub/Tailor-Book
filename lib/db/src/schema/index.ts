@@ -8,6 +8,7 @@ import {
   decimal,
   date,
   json,
+  boolean,
 } from "drizzle-orm/mysql-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -23,12 +24,15 @@ export const users = mysqlTable("users", {
   mobile: varchar("mobile", { length: 20 }).notNull().unique(),
   password: varchar("password", { length: 255 }).notNull(),
   role: mysqlEnum("role", ["admin", "tailor"]).notNull().default("tailor"),
+  speciality: mysqlEnum("speciality", ["male", "female", "unisex"]),
   shopName: varchar("shop_name", { length: 150 }),
   shopAddress: varchar("shop_address", { length: 255 }),
   city: varchar("city", { length: 100 }),
   state: varchar("state", { length: 100 }),
   avatarUri: text("avatar_uri"),
   status: mysqlEnum("status", ["pending", "approved", "rejected"]).notNull().default("pending"),
+  emailVerifiedAt: timestamp("email_verified_at"),
+  onboardingComplete: boolean("onboarding_complete").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
 });
@@ -36,14 +40,50 @@ export const users = mysqlTable("users", {
 export const customers = mysqlTable("customers", {
   id: varchar("id", { length: 36 }).notNull().primaryKey(),
   tailorId: varchar("tailor_id", { length: 36 }).notNull(),
+  familyId: varchar("family_id", { length: 36 }),
   name: varchar("name", { length: 100 }).notNull(),
   mobile: varchar("mobile", { length: 20 }).notNull(),
+  gender: mysqlEnum("gender", ["male", "female", "unisex"]).notNull().default("unisex"),
   email: varchar("email", { length: 150 }),
   address: text("address"),
   notes: text("notes"),
   profilePicture: text("profile_picture"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+
+// Family members belong to a "primary" customer (the account holder) so the
+// whole family can be invoiced under one umbrella.
+export const familyMembers = mysqlTable("family_members", {
+  id: varchar("id", { length: 36 }).notNull().primaryKey(),
+  tailorId: varchar("tailor_id", { length: 36 }).notNull(),
+  primaryCustomerId: varchar("primary_customer_id", { length: 36 }).notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  relation: mysqlEnum("relation", [
+    "father", "mother", "son", "daughter", "wife", "husband", "brother", "sister", "other",
+  ]).notNull().default("other"),
+  gender: mysqlEnum("gender", ["male", "female", "unisex"]).notNull().default("unisex"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+
+// Per-tailor product-type master (shirt, pant, kurta, etc.)
+export const productTypes = mysqlTable("product_types", {
+  id: varchar("id", { length: 36 }).notNull().primaryKey(),
+  tailorId: varchar("tailor_id", { length: 36 }).notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+
+// Per-tailor custom measurement field names ("Cuff", "Bicep", etc.) that the
+// tailor can attach to any measurement in addition to the standard fields.
+export const customMeasurementFields = mysqlTable("custom_measurement_fields", {
+  id: varchar("id", { length: 36 }).notNull().primaryKey(),
+  tailorId: varchar("tailor_id", { length: 36 }).notNull(),
+  fieldName: varchar("field_name", { length: 100 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 export const measurements = mysqlTable("measurements", {
@@ -53,6 +93,7 @@ export const measurements = mysqlTable("measurements", {
   customerName: varchar("customer_name", { length: 100 }).notNull(),
   productType: varchar("product_type", { length: 50 }).notNull(),
   measurementDate: date("measurement_date").notNull(),
+  deliveryDate: date("delivery_date"),
 
   // Body measurements (inches) — optional
   chest: decimal("chest", { precision: 6, scale: 2 }),
@@ -72,6 +113,8 @@ export const measurements = mysqlTable("measurements", {
   customMeasurements: json("custom_measurements").$type<{ label: string; value: number }[]>().default([]),
 
   notes: text("notes"),
+  // base64-encoded photo strings (local-storage friendly)
+  photos: json("photos").$type<string[]>().default([]),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
 });
@@ -85,10 +128,9 @@ export const invoices = mysqlTable("invoices", {
   customerName: varchar("customer_name", { length: 100 }).notNull(),
   customerMobile: varchar("customer_mobile", { length: 20 }).notNull(),
   subtotal: decimal("subtotal", { precision: 12, scale: 2 }).notNull().default("0"),
-  gstRate: decimal("gst_rate", { precision: 5, scale: 2 }).notNull().default("0"),
-  gstAmount: decimal("gst_amount", { precision: 12, scale: 2 }).notNull().default("0"),
   total: decimal("total", { precision: 12, scale: 2 }).notNull().default("0"),
   status: mysqlEnum("status", ["pending", "completed", "cancelled"]).notNull().default("pending"),
+  deliveryDate: date("delivery_date"),
   notes: text("notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
@@ -111,6 +153,32 @@ export const counters = mysqlTable("counters", {
   value: int("value").notNull().default(0),
 });
 
+export const notifications = mysqlTable("notifications", {
+  id: varchar("id", { length: 36 }).notNull().primaryKey(),
+  tailorId: varchar("tailor_id", { length: 36 }).notNull(),
+  title: varchar("title", { length: 200 }).notNull(),
+  message: text("message").notNull(),
+  type: mysqlEnum("type", [
+    "delivery_due_today", "delivery_due_tomorrow", "pending_invoice", "general",
+  ]).notNull().default("general"),
+  relatedId: varchar("related_id", { length: 36 }),
+  isRead: boolean("is_read").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Email-OTP records generated during the registration flow. They have a TTL
+// and an attempt counter so we can rate-limit and expire them. The latest OTP
+// for a given email wins — older rows for the same email can be deleted.
+export const pendingOtps = mysqlTable("pending_otps", {
+  id: varchar("id", { length: 36 }).notNull().primaryKey(),
+  email: varchar("email", { length: 150 }).notNull(),
+  otp: varchar("otp", { length: 6 }).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  attempts: int("attempts").notNull().default(0),
+  consumed: boolean("consumed").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // ---------------------------------------------------------------------------
 // Zod insert schemas for input validation
 // ---------------------------------------------------------------------------
@@ -129,6 +197,26 @@ export const insertCustomerSchema = createInsertSchema(customers).omit({
   tailorId: true,
   createdAt: true,
   updatedAt: true,
+});
+
+export const insertFamilyMemberSchema = createInsertSchema(familyMembers).omit({
+  id: true,
+  tailorId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertProductTypeSchema = createInsertSchema(productTypes).omit({
+  id: true,
+  tailorId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCustomMeasurementFieldSchema = createInsertSchema(customMeasurementFields).omit({
+  id: true,
+  tailorId: true,
+  createdAt: true,
 });
 
 export const insertMeasurementSchema = createInsertSchema(measurements).omit({
@@ -153,12 +241,23 @@ export const insertInvoiceItemSchema = createInsertSchema(invoiceItems).omit({
 
 export const insertCounterSchema = createInsertSchema(counters);
 
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  tailorId: true,
+  createdAt: true,
+});
+
 // ---------------------------------------------------------------------------
 // TypeScript types inferred from the Drizzle table definitions
 // ---------------------------------------------------------------------------
 export type User = typeof users.$inferSelect;
 export type Customer = typeof customers.$inferSelect;
+export type FamilyMember = typeof familyMembers.$inferSelect;
+export type ProductType = typeof productTypes.$inferSelect;
+export type CustomMeasurementField = typeof customMeasurementFields.$inferSelect;
 export type Measurement = typeof measurements.$inferSelect;
 export type Invoice = typeof invoices.$inferSelect;
 export type InvoiceItem = typeof invoiceItems.$inferSelect;
 export type Counter = typeof counters.$inferSelect;
+export type Notification = typeof notifications.$inferSelect;
+export type PendingOtp = typeof pendingOtps.$inferSelect;

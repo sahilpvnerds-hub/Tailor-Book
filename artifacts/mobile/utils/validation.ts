@@ -41,6 +41,31 @@ export function validateConfirmPassword(password: string, confirm: string): stri
   return undefined;
 }
 
+// OTP: 6 digits, numeric
+export function validateOtp(value: string): string | undefined {
+  if (!value) return "OTP is required";
+  if (!/^\d{6}$/.test(value)) return "OTP must be 6 digits";
+  return undefined;
+}
+
+// Amount: positive number up to 7 digits (avoids overflow + weird input)
+export function validateAmount(value: string | number): string | undefined {
+  const n = typeof value === "number" ? value : parseFloat(String(value).trim());
+  if (Number.isNaN(n)) return "Enter a valid amount";
+  if (n < 0) return "Amount cannot be negative";
+  if (n > 9999999) return "Amount is too large";
+  return undefined;
+}
+
+// Name: required, max length, trims, allows letters / spaces / dots / hyphens
+export function validateName(value: string, maxLen = 50, label = "Name"): string | undefined {
+  const v = (value ?? "").trim();
+  if (!v) return `${label} is required`;
+  if (v.length > maxLen) return `${label} must be ${maxLen} characters or fewer`;
+  if (!/^[\p{L}\s.'-]+$/u.test(v)) return `${label} contains invalid characters`;
+  return undefined;
+}
+
 // Generic validator: runs all rules and returns errors object
 export function runValidation(
   rules: Array<{ field: string; error: string | undefined }>

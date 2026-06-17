@@ -33,7 +33,6 @@ function RootLayoutNav() {
       <Stack.Screen name="measurements/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="invoices/new" options={{ presentation: "modal", headerShown: false }} />
       <Stack.Screen name="invoices/[id]" options={{ headerShown: false }} />
-      <Stack.Screen name="product-types/index" options={{ headerShown: false }} />
       <Stack.Screen name="notifications/index" options={{ headerShown: false }} />
       <Stack.Screen name="search" options={{ presentation: "modal", headerShown: false }} />
     </Stack>

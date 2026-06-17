@@ -15,6 +15,20 @@
       "when": 1750060800000,
       "tag": "0001_add_customer_profile_picture",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": 7,
+      "when": 1781598000000,
+      "tag": "0002_tailor_book_v2_features",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": 7,
+      "when": 1781685000000,
+      "tag": "0003_pending_otps",
+      "breakpoints": true
     }
   ]
 }

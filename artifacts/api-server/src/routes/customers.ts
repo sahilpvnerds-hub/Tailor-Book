@@ -56,6 +56,8 @@ router.get("/:id", async (req: Request, res: Response) => {
 const createSchema = z.object({
   name: z.string().min(1),
   mobile: z.string().min(5),
+  gender: z.enum(["male", "female", "unisex"]).default("unisex"),
+  familyId: z.string().nullable().optional(),
   email: z.string().email().optional().nullable(),
   address: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
@@ -72,8 +74,10 @@ router.post("/", async (req: Request, res: Response) => {
   await db.insert(customers).values({
     id,
     tailorId: req.user!.id,
+    familyId: body.data.familyId ?? null,
     name: body.data.name,
     mobile: body.data.mobile,
+    gender: body.data.gender,
     email: body.data.email ?? null,
     address: body.data.address ?? null,
     notes: body.data.notes ?? null,

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Alert, Linking, Modal, Platform, Pressable, ScrollView, Share, Text, View } from "react-native";
+import { Alert, Image, Linking, Modal, Platform, Pressable, ScrollView, Share, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -8,6 +8,7 @@ import { useColors } from "@/hooks/useColors";
 import { useData } from "@/context/DataContext";
 import { Badge, Button, Card, Divider } from "@/components/ui";
 import { displayOrderLabel, formatCurrency, formatDate } from "@/utils/storage";
+import { base64ToDataUri } from "@/utils/photos";
 import { Invoice } from "@/types";
 import colors from "@/constants/colors";
 
@@ -24,10 +25,10 @@ function buildInvoiceText(invoice: Invoice): string {
     `Mobile: ${invoice.customerMobile}`,
     ``,
     `ORDER ITEMS`,
-    ...invoice.items.map(
-      (item) =>
-        `${item.productType} x${item.quantity} @ ${formatCurrency(item.price)} = ${formatCurrency(item.price * item.quantity)}`
-    ),
+    ...invoice.items.map((item) => {
+      const forLabel = item.familyMemberName ? ` (${item.familyMemberName})` : ``;
+      return `${item.productType}${forLabel} x${item.quantity} @ ${formatCurrency(item.price)} = ${formatCurrency(item.price * item.quantity)}`;
+    }),
     ``,
     `Subtotal: ${formatCurrency(invoice.subtotal)}`,
     `TOTAL: ${formatCurrency(invoice.total)}`,
@@ -46,8 +47,22 @@ export default function InvoiceDetailScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { invoices, updateInvoiceStatus } = useData();
+  const { invoices, updateInvoiceStatus, measurements } = useData();
   const invoice = invoices.find((i) => i.id === id);
+
+  // Collect photos from the underlying measurement(s) referenced by each line item.
+  const linkedMeasurementIds = Array.from(
+    new Set(
+      (invoice?.items ?? [])
+        .map((it) => it.measurementId)
+        .filter((mid): mid is string => !!mid)
+    )
+  );
+  const linkedMeasurements = linkedMeasurementIds
+    .map((mid) => measurements.find((m) => m.id === mid))
+    .filter((m): m is NonNullable<typeof m> => !!m);
+  const allLinkedPhotos = linkedMeasurements.flatMap((m) => m.photos ?? []);
+  const [photoView, setPhotoView] = useState<string | null>(null);
   const [labelModalOpen, setLabelModalOpen] = useState(false);
 
   const topPad = Platform.OS === "web" ? 67 : 0;
@@ -175,6 +190,63 @@ export default function InvoiceDetailScreen() {
       </View>
 
       <View style={{ padding: 20, gap: 16 }}>
+        {/* Delivery Date */}
+        {invoice.deliveryDate && (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 12,
+              backgroundColor: "#FFF7ED",
+              borderRadius: colors.radius,
+              padding: 14,
+              borderWidth: 1,
+              borderColor: "#FED7AA",
+            }}
+          >
+            <View
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                backgroundColor: "#F97316" + "20",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <MaterialIcons name="event" size={20} color="#F97316" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#9A3412" }}>
+                Delivery Date
+              </Text>
+              <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#9A3412" }}>
+                {formatDate(invoice.deliveryDate)}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Photos from linked measurements */}
+        {allLinkedPhotos.length > 0 && (
+          <Card>
+            <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 12 }}>
+              Measurement Photos ({allLinkedPhotos.length})
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+              {allLinkedPhotos.map((p, idx) => (
+                <Pressable key={idx} onPress={() => setPhotoView(p)}>
+                  <Image
+                    source={{ uri: base64ToDataUri(p) }}
+                    style={{ width: 100, height: 100, borderRadius: 12, backgroundColor: c.muted }}
+                    resizeMode="cover"
+                  />
+                </Pressable>
+              ))}
+            </ScrollView>
+          </Card>
+        )}
+
         {/* Customer */}
         <Card>
           <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 12 }}>
@@ -199,10 +271,33 @@ export default function InvoiceDetailScreen() {
           <View style={{ gap: 0 }}>
             {invoice.items.map((item, idx) => (
               <React.Fragment key={idx}>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 10, alignItems: "center" }}>
-                  <View>
-                    <Text style={{ fontSize: 15, fontFamily: "Inter_500Medium", color: c.foreground }}>{item.productType}</Text>
-                    <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 10, alignItems: "flex-start" }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 15, fontFamily: "Inter_500Medium", color: c.foreground }}>
+                      {item.productType}
+                    </Text>
+                    {/* Family member attribution */}
+                    {item.familyMemberName && (
+                      <View
+                        style={{
+                          alignSelf: "flex-start",
+                          marginTop: 3,
+                          backgroundColor: "#EEF2FF",
+                          borderRadius: 6,
+                          paddingHorizontal: 7,
+                          paddingVertical: 2,
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 3,
+                        }}
+                      >
+                        <MaterialIcons name="group" size={11} color="#6366F1" />
+                        <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: "#6366F1" }}>
+                          {item.familyMemberName}
+                        </Text>
+                      </View>
+                    )}
+                    <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground, marginTop: 2 }}>
                       {item.quantity} x {formatCurrency(item.price)}
                     </Text>
                   </View>
@@ -488,6 +583,28 @@ export default function InvoiceDetailScreen() {
               fullWidth
               size="md"
             />
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Photo viewer modal */}
+      <Modal visible={!!photoView} transparent animationType="fade" onRequestClose={() => setPhotoView(null)}>
+        <Pressable
+          onPress={() => setPhotoView(null)}
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.92)", alignItems: "center", justifyContent: "center" }}
+        >
+          {photoView && (
+            <Image
+              source={{ uri: base64ToDataUri(photoView) }}
+              style={{ width: "92%", height: "78%", borderRadius: 12 }}
+              resizeMode="contain"
+            />
+          )}
+          <Pressable
+            onPress={() => setPhotoView(null)}
+            style={{ position: "absolute", top: insets.top + 20, right: 20, backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 20, padding: 8 }}
+          >
+            <MaterialIcons name="close" size={22} color="#FFFFFF" />
           </Pressable>
         </Pressable>
       </Modal>

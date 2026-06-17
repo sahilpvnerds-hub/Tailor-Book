@@ -6,6 +6,7 @@ import {
   Invoice,
   Measurement,
   Notification,
+  PendingOtp,
   ProductType,
   User,
 } from "@/types";
@@ -23,6 +24,7 @@ export const STORAGE_KEYS = {
   PRODUCT_TYPES: "@tailorbook/productTypes",
   CUSTOM_FIELDS: "@tailorbook/customFields",
   NOTIFICATIONS: "@tailorbook/notifications",
+  PENDING_OTP: "@tailorbook/pendingOtp",
 };
 
 export function generateId(): string {
@@ -63,25 +65,6 @@ export async function setCurrentUser(user: User | null): Promise<void> {
     await setStorageItem(STORAGE_KEYS.CURRENT_USER, user);
   } else {
     await AsyncStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
-  }
-}
-
-export async function ensureAdminExists(): Promise<void> {
-  const users = await getUsers();
-  const adminExists = users.some((u) => u.role === "admin");
-  if (!adminExists) {
-    const admin: User = {
-      id: generateId(),
-      name: "Admin",
-      email: "admin@tailorbook.com",
-      mobile: "9999999999",
-      password: "Admin@123",
-      role: "admin",
-      status: "approved",
-      onboardingComplete: true,
-      createdAt: new Date().toISOString(),
-    };
-    await saveUsers([admin]);
   }
 }
 
@@ -186,55 +169,120 @@ export async function saveAllNotifications(notifs: Notification[]): Promise<void
   await setStorageItem(STORAGE_KEYS.NOTIFICATIONS, notifs);
 }
 
+// ── Pending OTP (transient, per-registration) ──────────────────────────
+export async function getPendingOtp(): Promise<PendingOtp | null> {
+  return getStorageItem<PendingOtp>(STORAGE_KEYS.PENDING_OTP);
+}
+
+export async function setPendingOtp(p: PendingOtp | null): Promise<void> {
+  if (p) {
+    await setStorageItem(STORAGE_KEYS.PENDING_OTP, p);
+  } else {
+    await AsyncStorage.removeItem(STORAGE_KEYS.PENDING_OTP);
+  }
+}
+
 export async function generateNotifications(
   tailorId: string,
   measurements: Measurement[],
   invoices: Invoice[]
 ): Promise<void> {
   const existing = await getNotifications(tailorId);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const tomorrowStart = new Date(todayStart);
+  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+  const todayKey = todayStart.toISOString().split("T")[0]; // "YYYY-MM-DD"
 
   const newNotifs: Notification[] = [];
 
-  for (const m of measurements) {
-    if (!m.deliveryDate) continue;
-    const del = new Date(m.deliveryDate);
-    del.setHours(0, 0, 0, 0);
-    const key = `delivery_${m.id}`;
-    const alreadyExists = existing.some((n) => n.relatedId === key);
-    if (alreadyExists) continue;
+  // ── Delivery alerts from invoices (have full order details) ──────────────
+  for (const inv of invoices) {
+    if (!inv.deliveryDate || inv.status === "cancelled" || inv.status === "completed") continue;
 
-    if (del.getTime() === today.getTime()) {
+    const del = new Date(inv.deliveryDate);
+    del.setHours(0, 0, 0, 0);
+    const delMs = del.getTime();
+
+    // Date-scoped key — new alert each day
+    const dayKey = `inv_delivery_${inv.id}_${todayKey}`;
+    if (existing.some((n) => n.relatedId === dayKey)) continue;
+
+    // Collect unique item types
+    const itemTypes = [...new Set(inv.items.map((it) => it.productType))];
+
+    const base = {
+      id: generateId(),
+      tailorId,
+      isRead: false,
+      relatedId: dayKey,
+      deliveryDate: inv.deliveryDate,
+      invoiceId: inv.id,
+      invoiceNumber: inv.invoiceNumber,
+      customerName: inv.customerName,
+      customerMobile: inv.customerMobile,
+      itemTypes,
+      createdAt: new Date().toISOString(),
+    };
+
+    if (delMs < todayStart.getTime()) {
       newNotifs.push({
-        id: generateId(),
-        tailorId,
-        title: "Delivery Due Today",
-        message: `${m.customerName}'s ${m.productType} is due today`,
-        isRead: false,
-        type: "delivery_due_today",
-        relatedId: key,
-        createdAt: new Date().toISOString(),
+        ...base,
+        title: "Delivery Overdue",
+        message: `Order ${inv.invoiceNumber} for ${inv.customerName} is overdue`,
+        type: "delivery_overdue",
       });
-    } else if (del.getTime() === tomorrow.getTime()) {
+    } else if (delMs === todayStart.getTime()) {
       newNotifs.push({
-        id: generateId(),
-        tailorId,
+        ...base,
+        title: "Delivery Due Today",
+        message: `Order ${inv.invoiceNumber} for ${inv.customerName} is due today`,
+        type: "delivery_due_today",
+      });
+    } else if (delMs === tomorrowStart.getTime()) {
+      newNotifs.push({
+        ...base,
         title: "Delivery Due Tomorrow",
-        message: `${m.customerName}'s ${m.productType} is due tomorrow`,
-        isRead: false,
+        message: `Order ${inv.invoiceNumber} for ${inv.customerName} is due tomorrow`,
         type: "delivery_due_tomorrow",
-        relatedId: key,
-        createdAt: new Date().toISOString(),
       });
     }
   }
 
+  // ── Fallback: delivery alerts from measurements without an invoice ────────
+  for (const m of measurements) {
+    if (!m.deliveryDate) continue;
+    // Skip if an invoice-based alert already covers this customer+date
+    const del = new Date(m.deliveryDate);
+    del.setHours(0, 0, 0, 0);
+    const delMs = del.getTime();
+    const dayKey = `meas_delivery_${m.id}_${todayKey}`;
+    if (existing.some((n) => n.relatedId === dayKey)) continue;
+
+    const base = {
+      id: generateId(),
+      tailorId,
+      isRead: false,
+      relatedId: dayKey,
+      deliveryDate: m.deliveryDate,
+      customerName: m.customerName,
+      itemTypes: [m.productType],
+      createdAt: new Date().toISOString(),
+    };
+
+    if (delMs < todayStart.getTime()) {
+      newNotifs.push({ ...base, title: "Delivery Overdue", message: `${m.customerName}'s ${m.productType} delivery is overdue`, type: "delivery_overdue" });
+    } else if (delMs === todayStart.getTime()) {
+      newNotifs.push({ ...base, title: "Delivery Due Today", message: `${m.customerName}'s ${m.productType} is due today`, type: "delivery_due_today" });
+    } else if (delMs === tomorrowStart.getTime()) {
+      newNotifs.push({ ...base, title: "Delivery Due Tomorrow", message: `${m.customerName}'s ${m.productType} is due tomorrow`, type: "delivery_due_tomorrow" });
+    }
+  }
+
+  // ── Pending invoice summary (one per day) ─────────────────────────────────
   const pendingInvoices = invoices.filter((i) => i.status === "pending");
   if (pendingInvoices.length > 0) {
-    const key = `pending_inv_${today.toISOString().split("T")[0]}`;
+    const key = `pending_inv_${todayKey}`;
     if (!existing.some((n) => n.relatedId === key)) {
       newNotifs.push({
         id: generateId(),

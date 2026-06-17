@@ -1,13 +1,11 @@
 import React, { useState } from "react";
-import { Dimensions, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 import colors from "@/constants/colors";
-
-const { width } = Dimensions.get("window");
 
 const SLIDES = [
   {
@@ -19,8 +17,14 @@ const SLIDES = [
   {
     icon: "straighten" as const,
     title: "Smart Measurements",
-    subtitle: "Record accurate measurements for each customer by product type. Use voice input to capture measurements hands-free while you work.",
+    subtitle: "Record precise measurements for each customer by product type. All fields are validated to ensure accuracy and consistency.",
     color: "#6366F1",
+  },
+  {
+    icon: "notifications-active" as const,
+    title: "Delivery Reminders",
+    subtitle: "Never miss a delivery. Get automatic alerts the day before an order is due so you always stay on schedule.",
+    color: "#D97706",
   },
   {
     icon: "receipt" as const,

@@ -1,0 +1,31 @@
+=== DB CONNECTION TEST ===
+✅ SELECT 1: [{"ok":1}]
+
+=== AUTHENTICATION ===
+✅ Admin exists (admin@tailorbook.com): {"name":"Admin Updated","role":"admin","status":"approved","pwd_len":60,"pwd_is_bcrypt":true}
+✅ Search 'deep': "NOT FOUND (no user with 'deep' in name)"
+✅ Search 'patel': ["Sahil Patel"]
+✅ Test bcrypt: admin123 against admin hash: "✅ MATCH"
+✅ Test bcrypt: Admin@123 against admin hash: "❌ MISMATCH"
+
+=== TABLE COUNTS ===
+✅ COUNT users: 6
+✅ COUNT customers: 11
+✅ COUNT measurements: 18
+✅ COUNT invoices: 13
+✅ COUNT invoice_items: 14
+✅ COUNT notifications: 0
+✅ COUNT product_types: 0
+✅ COUNT family_members: 0
+✅ COUNT custom_measurement_fields: 0
+✅ COUNT counters: 2
+
+=== V2 NEW COLUMNS EXIST? ===
+✅ users.speciality column: {"speciality":null,"hasField":true}
+✅ users.email_verified_at column: {"emailVerifiedAt":null,"hasField":true}
+✅ customers.gender column: {"gender":"unisex","hasField":true}
+✅ customers.family_id column: {"familyId":null,"hasField":true}
+✅ measurements.photos column: {"photos":[],"hasField":true}
+✅ measurements.delivery_date column: {"deliveryDate":null,"hasField":true}
+✅ invoices.delivery_date column: {"deliveryDate":null,"hasField":true}
+✅ invoices.gst columns (should be GONE): {"hasGstRate":false,"hasGstAmount":false}

@@ -110,42 +110,61 @@ export default function DashboardScreen() {
             ) : null}
           </View>
 
-          {/* Notification bell */}
-          <Pressable
-            onPress={() => router.push("/notifications/index" as any)}
-            style={({ pressed }) => ({
-              width: 40,
-              height: 40,
-              borderRadius: 12,
-              backgroundColor: "rgba(255,255,255,0.18)",
-              alignItems: "center",
-              justifyContent: "center",
-              opacity: pressed ? 0.8 : 1,
-            })}
-          >
-            <MaterialIcons name="notifications" size={20} color="#FFFFFF" />
-            {unreadCount > 0 && (
-              <View
-                style={{
-                  position: "absolute",
-                  top: 5,
-                  right: 5,
-                  width: 16,
-                  height: 16,
-                  borderRadius: 8,
-                  backgroundColor: "#EF4444",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderWidth: 1.5,
-                  borderColor: c.primary,
-                }}
-              >
-                <Text style={{ fontSize: 9, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>
-                  {unreadCount > 9 ? "9+" : unreadCount}
-                </Text>
-              </View>
-            )}
-          </Pressable>
+          {/* Header action buttons: Notification → Search */}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            {/* Notification bell */}
+            <Pressable
+              onPress={() => router.push("/notifications/index" as any)}
+              style={({ pressed }) => ({
+                width: 40,
+                height: 40,
+                borderRadius: 12,
+                backgroundColor: "rgba(255,255,255,0.18)",
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: pressed ? 0.8 : 1,
+              })}
+            >
+              <MaterialIcons name="notifications" size={20} color="#FFFFFF" />
+              {unreadCount > 0 && (
+                <View
+                  style={{
+                    position: "absolute",
+                    top: 5,
+                    right: 5,
+                    width: 16,
+                    height: 16,
+                    borderRadius: 8,
+                    backgroundColor: "#EF4444",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderWidth: 1.5,
+                    borderColor: c.primary,
+                  }}
+                >
+                  <Text style={{ fontSize: 9, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+
+            {/* Search icon */}
+            <Pressable
+              onPress={() => router.push("/search" as any)}
+              style={({ pressed }) => ({
+                width: 40,
+                height: 40,
+                borderRadius: 12,
+                backgroundColor: "rgba(255,255,255,0.18)",
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: pressed ? 0.8 : 1,
+              })}
+            >
+              <MaterialIcons name="search" size={20} color="#FFFFFF" />
+            </Pressable>
+          </View>
         </View>
 
         {/* Revenue card */}
@@ -256,18 +275,6 @@ export default function DashboardScreen() {
             label="New Invoice"
             color="#059669"
             onPress={() => router.push("/invoices/new")}
-          />
-          <QuickAction
-            icon="search"
-            label="Search"
-            color="#F59E0B"
-            onPress={() => router.push("/search")}
-          />
-          <QuickAction
-            icon="notifications"
-            label="Alerts"
-            color={unreadCount > 0 ? "#EF4444" : "#6B7280"}
-            onPress={() => router.push("/notifications/index" as any)}
           />
         </View>
       </View>

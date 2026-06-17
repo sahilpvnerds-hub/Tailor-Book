@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -20,9 +20,16 @@ import {
   validateConfirmPassword,
   validateEmail,
   validateMobile,
+  validateOtp,
   validatePassword,
   validateRequired,
 } from "@/utils/validation";
+import {
+  api,
+  clearOtpPending,
+  getOtpPending,
+  setOtpPending,
+} from "@/utils/api";
 import colors from "@/constants/colors";
 
 type Step = "form" | "otp";
@@ -33,18 +40,17 @@ const SPECIALITY_OPTIONS: { value: Speciality; label: string; icon: string }[] =
   { value: "unisex", label: "Unisex", icon: "people" },
 ];
 
-function generateOtp(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
-}
-
 export default function RegisterScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { register } = useAuth();
   const [step, setStep] = useState<Step>("form");
   const [loading, setLoading] = useState(false);
-  const [otpCode, setOtpCode] = useState("");
-  const [generatedOtp, setGeneratedOtp] = useState("");
+  const [resending, setResending] = useState(false);
+  // The server-issued devOtp is shown in the demo alert so the user can
+  // copy it. In production it would be emailed.
+  const [devOtp, setDevOtp] = useState<string | null>(null);
+  const [otpExpiresAt, setOtpExpiresAt] = useState(0);
   const [enteredOtp, setEnteredOtp] = useState("");
   const [otpError, setOtpError] = useState("");
 
@@ -62,6 +68,33 @@ export default function RegisterScreen() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Restore any in-flight OTP + form data from a previous session so a
+  // reload / app backgrounding doesn't lose progress.
+  useEffect(() => {
+    (async () => {
+      const pending = await getOtpPending();
+      if (!pending) return;
+      if (Date.now() > pending.expiresAt) {
+        await clearOtpPending();
+        return;
+      }
+      setForm((f) => ({
+        ...f,
+        name: pending.formData.name ?? f.name,
+        email: pending.formData.email ?? f.email,
+        mobile: pending.formData.mobile ?? f.mobile,
+        speciality: (pending.formData.speciality as Speciality) ?? f.speciality,
+        shopName: pending.formData.shopName ?? f.shopName,
+        shopAddress: pending.formData.shopAddress ?? f.shopAddress,
+        city: pending.formData.city ?? f.city,
+        state: pending.formData.state ?? f.state,
+      }));
+      setDevOtp(null); // devOtp is not cached — only the expiry
+      setOtpExpiresAt(pending.expiresAt);
+      setStep("otp");
+    })();
+  }, []);
+
   function set(key: keyof typeof form, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
     setErrors((e) => ({ ...e, [key]: undefined as any }));
@@ -73,39 +106,118 @@ export default function RegisterScreen() {
       { field: "email", error: validateEmail(form.email) },
       { field: "mobile", error: validateMobile(form.mobile) },
       { field: "password", error: validatePassword(form.password) },
-      { field: "confirmPassword", error: validateConfirmPassword(form.password, form.confirmPassword) },
+      {
+        field: "confirmPassword",
+        error: validateConfirmPassword(form.password, form.confirmPassword),
+      },
     ]);
   }
 
-  function handleSendOtp() {
+  function snapshotFormData() {
+    return {
+      name: form.name.trim(),
+      email: form.email.trim().toLowerCase(),
+      mobile: form.mobile.trim(),
+      speciality: form.speciality,
+      shopName: form.shopName.trim(),
+      shopAddress: form.shopAddress.trim(),
+      city: form.city.trim(),
+      state: form.state.trim(),
+    };
+  }
+
+  async function handleSendOtp() {
     const e = validate();
     if (Object.keys(e).length > 0) {
       setErrors(e);
       return;
     }
-    const otp = generateOtp();
-    setGeneratedOtp(otp);
-    setStep("otp");
-    // In production: send email. For demo, show alert.
-    setTimeout(() => {
-      Alert.alert(
-        "OTP Sent (Demo)",
-        `Your OTP is: ${otp}\n\nIn production this would be emailed to ${form.email}`,
-        [{ text: "OK" }]
-      );
-    }, 300);
+    setLoading(true);
+    try {
+      const email = form.email.trim().toLowerCase();
+      const result = await api.auth.sendOtp(email);
+      const expiresAt = Date.now() + 10 * 60 * 1000; // 10 min — matches server
+      setDevOtp(result.devOtp ?? null);
+      setOtpExpiresAt(expiresAt);
+      await setOtpPending({
+        email,
+        otp: "", // server holds the OTP; we only cache expiry + form
+        expiresAt,
+        formData: snapshotFormData(),
+      });
+      setStep("otp");
+      // In production: result.message is "OTP sent to ..." and the server
+      // dispatches the email. In demo mode we get the OTP back so the user
+      // can copy it.
+      if (result.devOtp) {
+        setTimeout(() => {
+          Alert.alert(
+            "OTP Sent (Demo)",
+            `Your OTP is: ${result.devOtp}\n\nIn production this would be emailed to ${email}.`,
+            [{ text: "OK" }]
+          );
+        }, 300);
+      }
+    } catch (err) {
+      Alert.alert("Could Not Send OTP", (err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleResendOtp() {
+    setResending(true);
+    try {
+      const email = form.email.trim().toLowerCase();
+      const result = await api.auth.sendOtp(email);
+      const expiresAt = Date.now() + 10 * 60 * 1000;
+      setDevOtp(result.devOtp ?? null);
+      setOtpExpiresAt(expiresAt);
+      await setOtpPending({
+        email,
+        otp: "",
+        expiresAt,
+        formData: snapshotFormData(),
+      });
+      if (result.devOtp) {
+        Alert.alert("New OTP (Demo)", `Your new OTP is: ${result.devOtp}`);
+      } else {
+        Alert.alert("OTP Resent", `A new OTP was sent to ${email}.`);
+      }
+    } catch (err) {
+      Alert.alert("Resend Failed", (err as Error).message);
+    } finally {
+      setResending(false);
+    }
   }
 
   async function handleVerifyAndRegister() {
-    if (enteredOtp.trim() !== generatedOtp) {
-      setOtpError("Invalid OTP. Please check and try again.");
+    const otpErr = validateOtp(enteredOtp.trim());
+    if (otpErr) {
+      setOtpError(otpErr);
+      return;
+    }
+    if (Date.now() > otpExpiresAt) {
+      setOtpError("OTP has expired. Please request a new one.");
       return;
     }
     setOtpError("");
     setLoading(true);
+    const email = form.email.trim().toLowerCase();
+
+    let verifiedAt: string;
+    try {
+      const verify = await api.auth.verifyOtp(email, enteredOtp.trim());
+      verifiedAt = verify.emailVerifiedAt;
+    } catch (err) {
+      setLoading(false);
+      setOtpError((err as Error).message);
+      return;
+    }
+
     const result = await register({
       name: form.name.trim(),
-      email: form.email.trim().toLowerCase(),
+      email,
       mobile: form.mobile.trim(),
       password: form.password,
       speciality: form.speciality,
@@ -113,11 +225,14 @@ export default function RegisterScreen() {
       shopAddress: form.shopAddress.trim() || undefined,
       city: form.city.trim() || undefined,
       state: form.state.trim() || undefined,
+      emailVerifiedAt: verifiedAt,
     });
     setLoading(false);
     if (!result.success) {
       Alert.alert("Registration Failed", result.error);
     } else {
+      // Clear the pending OTP so the next reload starts from the form.
+      await clearOtpPending();
       Alert.alert(
         "Registration Submitted",
         "Your account is pending admin approval. You will be notified once approved.",
@@ -168,23 +283,69 @@ export default function RegisterScreen() {
             <MaterialIcons name="mark-email-unread" size={36} color={c.primary} />
           </View>
 
-          <Text style={{ fontSize: 24, fontFamily: "Inter_700Bold", color: c.foreground, marginBottom: 8 }}>
+          <Text
+            style={{
+              fontSize: 24,
+              fontFamily: "Inter_700Bold",
+              color: c.foreground,
+              marginBottom: 8,
+            }}
+          >
             Verify Email
           </Text>
-          <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: c.mutedForeground, marginBottom: 28, lineHeight: 20 }}>
+          <Text
+            style={{
+              fontSize: 14,
+              fontFamily: "Inter_400Regular",
+              color: c.mutedForeground,
+              marginBottom: 28,
+              lineHeight: 20,
+            }}
+          >
             We sent a 6-digit OTP to{"\n"}
-            <Text style={{ fontFamily: "Inter_600SemiBold", color: c.foreground }}>{form.email}</Text>
+            <Text style={{ fontFamily: "Inter_600SemiBold", color: c.foreground }}>
+              {form.email}
+            </Text>
           </Text>
 
           <Input
             label="Enter OTP"
             placeholder="6-digit code"
             value={enteredOtp}
-            onChangeText={(v) => { setEnteredOtp(v.replace(/\D/g, "").slice(0, 6)); setOtpError(""); }}
+            onChangeText={(v) => {
+              setEnteredOtp(v.replace(/\D/g, "").slice(0, 6));
+              setOtpError("");
+            }}
             keyboardType="number-pad"
             icon="pin"
             error={otpError}
           />
+
+          {devOtp ? (
+            <View
+              style={{
+                marginTop: 12,
+                padding: 12,
+                backgroundColor: "#EEF2FF",
+                borderRadius: colors.radius,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <MaterialIcons name="info-outline" size={16} color="#4338CA" />
+              <Text
+                style={{
+                  flex: 1,
+                  fontSize: 12,
+                  fontFamily: "Inter_500Medium",
+                  color: "#4338CA",
+                }}
+              >
+                Demo OTP: <Text style={{ fontFamily: "Inter_700Bold" }}>{devOtp}</Text>
+              </Text>
+            </View>
+          ) : null}
 
           <Button
             label="Verify & Complete Registration"
@@ -196,15 +357,18 @@ export default function RegisterScreen() {
           />
 
           <Pressable
-            onPress={() => {
-              const otp = generateOtp();
-              setGeneratedOtp(otp);
-              Alert.alert("New OTP (Demo)", `Your new OTP is: ${otp}`);
-            }}
+            onPress={handleResendOtp}
+            disabled={resending}
             style={{ marginTop: 16, alignItems: "center" }}
           >
-            <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: c.primary }}>
-              Resend OTP
+            <Text
+              style={{
+                fontSize: 14,
+                fontFamily: "Inter_500Medium",
+                color: resending ? c.mutedForeground : c.primary,
+              }}
+            >
+              {resending ? "Sending..." : "Resend OTP"}
             </Text>
           </Pressable>
         </ScrollView>
@@ -298,7 +462,15 @@ export default function RegisterScreen() {
 
           {/* Speciality */}
           <View style={{ gap: 6, marginTop: 4 }}>
-            <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
+            <Text
+              style={{
+                fontSize: 12,
+                fontFamily: "Inter_600SemiBold",
+                color: c.mutedForeground,
+                textTransform: "uppercase",
+                letterSpacing: 0.5,
+              }}
+            >
               Speciality *
             </Text>
             <View style={{ flexDirection: "row", gap: 10 }}>
@@ -377,6 +549,7 @@ export default function RegisterScreen() {
           <Button
             label="Send OTP & Continue"
             onPress={handleSendOtp}
+            loading={loading}
             fullWidth
             size="lg"
             style={{ marginTop: 8 }}
@@ -394,8 +567,16 @@ export default function RegisterScreen() {
             }}
           >
             <MaterialIcons name="info" size={16} color="#92400E" style={{ marginTop: 1 }} />
-            <Text style={{ flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: "#92400E" }}>
-              An OTP will be sent to verify your email. Your account will then be reviewed by admin before activation.
+            <Text
+              style={{
+                flex: 1,
+                fontSize: 12,
+                fontFamily: "Inter_400Regular",
+                color: "#92400E",
+              }}
+            >
+              An OTP will be sent to verify your email. Your account will then be
+              reviewed by admin before activation.
             </Text>
           </View>
         </View>

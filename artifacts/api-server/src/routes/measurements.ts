@@ -29,6 +29,7 @@ const createSchema = z.object({
   customerId: z.string().min(1),
   productType: z.string().min(1),
   measurementDate: z.string().optional(),
+  deliveryDate: z.string().nullable().optional(),
   chest: decimalString,
   shoulder: decimalString,
   neck: decimalString,
@@ -43,6 +44,7 @@ const createSchema = z.object({
   wrist: decimalString,
   customMeasurements: customMeasurementSchema,
   notes: z.string().nullable().optional(),
+  photos: z.array(z.string()).optional().default([]),
 });
 
 const updateSchema = createSchema.partial();
@@ -146,6 +148,7 @@ router.post("/", async (req: Request, res: Response) => {
     customerName: cust.name,
     productType: d.productType,
     measurementDate: new Date(dateStr),
+    deliveryDate: d.deliveryDate ? new Date(d.deliveryDate) : null,
     chest: d.chest ?? null,
     shoulder: d.shoulder ?? null,
     neck: d.neck ?? null,
@@ -160,6 +163,7 @@ router.post("/", async (req: Request, res: Response) => {
     wrist: d.wrist ?? null,
     customMeasurements: d.customMeasurements ?? [],
     notes: d.notes ?? null,
+    photos: d.photos ?? [],
   });
 
   const [m] = await db
@@ -195,6 +199,9 @@ router.patch("/:id", async (req: Request, res: Response) => {
   const patch: Record<string, unknown> = { ...body.data };
   if (typeof patch.measurementDate === "string") {
     patch.measurementDate = new Date(patch.measurementDate);
+  }
+  if (typeof patch.deliveryDate === "string") {
+    patch.deliveryDate = new Date(patch.deliveryDate);
   }
   await db.update(measurements).set(patch as any).where(eq(measurements.id, id));
   const [updated] = await db

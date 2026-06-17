@@ -147,60 +147,71 @@ export default function MoreScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.primary} />}
       showsVerticalScrollIndicator={false}
     >
-      {/* Profile Card */}
-      <View
-        style={{
+      {/* ── Profile Card ── */}
+      <Pressable
+        onPress={() => router.push("/profile" as any)}
+        style={({ pressed }) => ({
           backgroundColor: c.primary,
-          borderRadius: 18,
-          padding: 18,
+          borderRadius: colors.radius + 4,
+          padding: 20,
+          marginBottom: 16,
           flexDirection: "row",
           alignItems: "center",
-          gap: 14,
-          marginBottom: 20,
-        }}
+          gap: 16,
+          opacity: pressed ? 0.92 : 1,
+        })}
       >
+        {/* Avatar */}
         <View
           style={{
-            width: 52,
-            height: 52,
-            borderRadius: 26,
-            backgroundColor: "rgba(255,255,255,0.2)",
+            width: 58,
+            height: 58,
+            borderRadius: 29,
+            backgroundColor: "rgba(255,255,255,0.22)",
+            borderWidth: 2,
+            borderColor: "rgba(255,255,255,0.35)",
             alignItems: "center",
             justifyContent: "center",
-            borderWidth: 2,
-            borderColor: "rgba(255,255,255,0.3)",
           }}
         >
-          <Text style={{ fontSize: 20, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>
-            {user?.name?.[0]?.toUpperCase()}
+          <Text style={{ fontSize: 22, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>
+            {user?.name
+              ?.split(" ")
+              .map((w: string) => w[0])
+              .slice(0, 2)
+              .join("")
+              .toUpperCase() ?? "?"}
           </Text>
         </View>
+
+        {/* Info */}
         <View style={{ flex: 1 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>
-              {user?.name}
-            </Text>
-            <Badge
-              label={user?.role === "admin" ? "Admin" : "Tailor"}
-              variant={user?.role === "admin" ? "default" : "secondary"}
-              style={{ backgroundColor: "rgba(255,255,255,0.25)" }}
-            />
-          </View>
-          <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.75)", marginTop: 2 }}>
-            {user?.email}
+          <Text style={{ fontSize: 17, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>
+            {user?.name}
           </Text>
-          {user?.shopName && (
-            <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.65)" }}>
-              {user.shopName}
-            </Text>
-          )}
+          <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.75)", marginTop: 2 }}>
+            {user?.shopName || (user?.role === "admin" ? "Administrator" : "Tailor")}
+          </Text>
           {user?.speciality && (
-            <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.6)", marginTop: 1 }}>
-              Speciality: {user.speciality.charAt(0).toUpperCase() + user.speciality.slice(1)}
-            </Text>
+            <View
+              style={{
+                alignSelf: "flex-start",
+                marginTop: 5,
+                backgroundColor: "rgba(255,255,255,0.2)",
+                borderRadius: 8,
+                paddingHorizontal: 8,
+                paddingVertical: 2,
+              }}
+            >
+              <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: "#FFFFFF", textTransform: "capitalize" }}>
+                {user.speciality}
+              </Text>
+            </View>
           )}
         </View>
-      </View>
+
+        <MaterialIcons name="chevron-right" size={22} color="rgba(255,255,255,0.7)" />
+      </Pressable>
 
       {/* Admin Panel */}
       {isAdmin && (

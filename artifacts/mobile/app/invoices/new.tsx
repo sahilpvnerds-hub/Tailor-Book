@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -15,33 +17,89 @@ import { MaterialIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useData } from "@/context/DataContext";
-import { Button, Input } from "@/components/ui";
+import { Button, Card, Input } from "@/components/ui";
+import { DatePicker } from "@/components/DatePicker";
 import { InvoiceItem } from "@/types";
-import { formatCurrency } from "@/utils/storage";
+import { formatCurrency, formatDate } from "@/utils/storage";
+import { base64ToDataUri } from "@/utils/photos";
 import colors from "@/constants/colors";
+
+const CUSTOMER_INLINE_LIMIT = 20;
 
 export default function NewInvoiceScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ customerId?: string; customerName?: string; customerMobile?: string }>();
-  const { customers, productTypes, createInvoice } = useData();
+  const params = useLocalSearchParams<{
+    customerId?: string;
+    customerName?: string;
+    customerMobile?: string;
+    measurementId?: string;
+  }>();
+  const { customers, productTypes, createInvoice, measurements, familyMembers } = useData();
+
+  const sourceMeasurement = params.measurementId
+    ? measurements.find((m) => m.id === params.measurementId)
+    : undefined;
 
   const [customerSearch, setCustomerSearch] = useState(params.customerName ?? "");
   const [selectedCustomerId, setSelectedCustomerId] = useState(params.customerId ?? "");
   const [showCustomerList, setShowCustomerList] = useState(!params.customerId);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [modalSearch, setModalSearch] = useState("");
   const [notes, setNotes] = useState("");
+  const [deliveryDate, setDeliveryDate] = useState(
+    sourceMeasurement?.deliveryDate?.split("T")[0] ?? ""
+  );
   const [loading, setLoading] = useState(false);
-  const [items, setItems] = useState<InvoiceItem[]>([
-    { productType: productTypes[0]?.name ?? "", productTypeId: productTypes[0]?.id, quantity: 1, price: productTypes[0]?.amount ?? 0 },
-  ]);
+  const [items, setItems] = useState<InvoiceItem[]>(() => {
+    // Pre-populate from the source measurement if provided.
+    if (sourceMeasurement) {
+      const pt = productTypes.find((p) => p.id === sourceMeasurement.productTypeId)
+        ?? productTypes.find((p) => p.name === sourceMeasurement.productType);
+      const m: Record<string, string> = {};
+      MEASUREMENT_KEYS.forEach((k) => {
+        const v = (sourceMeasurement as any)[k];
+        if (typeof v === "number" && v > 0) m[k] = `${v}"`;
+      });
+      sourceMeasurement.customMeasurements?.forEach((cm) => {
+        if (cm.value > 0) m[cm.label] = `${cm.value}"`;
+      });
+      return [{
+        productType: sourceMeasurement.productType,
+        productTypeId: pt?.id,
+        quantity: 1,
+        price: pt?.amount ?? 0,
+        measurementId: sourceMeasurement.id,
+        measurementValues: m,
+      }];
+    }
+    return [
+      {
+        productType: productTypes[0]?.name ?? "",
+        productTypeId: productTypes[0]?.id,
+        quantity: 1,
+        price: productTypes[0]?.amount ?? 0,
+      },
+    ];
+  });
 
   const filteredCustomers = customers.filter(
     (cu) =>
       cu.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
       cu.mobile.includes(customerSearch)
   );
+  const modalFiltered = customers.filter(
+    (cu) =>
+      cu.name.toLowerCase().includes(modalSearch.toLowerCase()) ||
+      cu.mobile.includes(modalSearch)
+  );
+  const useModalPicker = customers.length > CUSTOMER_INLINE_LIMIT;
 
   const selectedCustomer = customers.find((cu) => cu.id === selectedCustomerId);
+  // Family members belonging to the selected primary customer
+  const customerFamilyMembers = familyMembers.filter(
+    (fm) => fm.primaryCustomerId === selectedCustomerId
+  );
   const subtotal = items.reduce((s, it) => s + it.price * it.quantity, 0);
 
   function selectCustomer(id: string) {
@@ -50,7 +108,14 @@ export default function NewInvoiceScreen() {
       setSelectedCustomerId(id);
       setCustomerSearch(cu.name);
       setShowCustomerList(false);
+      setShowCustomerModal(false);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
+  }
+
+  function openModalPicker() {
+    setShowCustomerModal(true);
+    setModalSearch("");
   }
 
   function addItem() {
@@ -99,6 +164,7 @@ export default function NewInvoiceScreen() {
       customerMobile: customer.mobile,
       items,
       notes: notes.trim() || undefined,
+      deliveryDate: deliveryDate ? new Date(deliveryDate).toISOString() : undefined,
     });
     setLoading(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -123,6 +189,30 @@ export default function NewInvoiceScreen() {
 
       <ScrollView contentContainerStyle={{ padding: 20, gap: 16, paddingBottom: insets.bottom + 50 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
+        {/* Source measurement banner */}
+        {sourceMeasurement && sourceMeasurement.photos && sourceMeasurement.photos.length > 0 && (
+          <Card>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                Linked Measurement Photos
+              </Text>
+              <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
+                {formatDate(sourceMeasurement.date)}
+              </Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+              {sourceMeasurement.photos.map((p, idx) => (
+                <Image
+                  key={idx}
+                  source={{ uri: base64ToDataUri(p) }}
+                  style={{ width: 80, height: 80, borderRadius: 10, backgroundColor: c.muted }}
+                  resizeMode="cover"
+                />
+              ))}
+            </ScrollView>
+          </Card>
+        )}
+
         {/* Customer Search */}
         <View style={{ gap: 6 }}>
           <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
@@ -142,6 +232,27 @@ export default function NewInvoiceScreen() {
                 <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>{selectedCustomer.mobile}</Text>
               </View>
               <MaterialIcons name="edit" size={16} color={c.mutedForeground} />
+            </Pressable>
+          ) : useModalPicker ? (
+            <Pressable
+              onPress={openModalPicker}
+              style={({ pressed }) => ({
+                backgroundColor: c.card,
+                borderRadius: colors.radius,
+                padding: 14,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 12,
+                borderWidth: 1.5,
+                borderColor: c.border,
+                opacity: pressed ? 0.85 : 1,
+              })}
+            >
+              <MaterialIcons name="person-search" size={20} color={c.mutedForeground} />
+              <Text style={{ flex: 1, fontSize: 14, fontFamily: "Inter_500Medium", color: c.mutedForeground }}>
+                Choose a customer ({customers.length} total)
+              </Text>
+              <MaterialIcons name="arrow-forward" size={18} color={c.mutedForeground} />
             </Pressable>
           ) : (
             <View style={{ gap: 8 }}>
@@ -244,6 +355,77 @@ export default function NewInvoiceScreen() {
                 </ScrollView>
               </View>
 
+              {/* Family member association (who is this item for?) */}
+              {selectedCustomer && (
+                <View style={{ gap: 5 }}>
+                  <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.4 }}>
+                    For
+                  </Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4 }}>
+                    <View style={{ flexDirection: "row", gap: 6, paddingHorizontal: 4 }}>
+                      {/* Primary customer chip */}
+                      <Pressable
+                        onPress={() => {
+                          setItems((prev) => {
+                            const updated = [...prev];
+                            updated[idx] = { ...updated[idx], familyMemberId: undefined, familyMemberName: undefined };
+                            return updated;
+                          });
+                        }}
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingVertical: 7,
+                          borderRadius: 20,
+                          backgroundColor: !item.familyMemberId ? c.primary : c.muted,
+                          borderWidth: 1,
+                          borderColor: !item.familyMemberId ? c.primary : "transparent",
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
+                      >
+                        <MaterialIcons name="person" size={12} color={!item.familyMemberId ? "#FFFFFF" : c.mutedForeground} />
+                        <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: !item.familyMemberId ? "#FFFFFF" : c.mutedForeground }}>
+                          {selectedCustomer.name}
+                        </Text>
+                      </Pressable>
+                      {/* Family member chips */}
+                      {customerFamilyMembers.map((fm) => (
+                        <Pressable
+                          key={fm.id}
+                          onPress={() => {
+                            setItems((prev) => {
+                              const updated = [...prev];
+                              updated[idx] = { ...updated[idx], familyMemberId: fm.id, familyMemberName: fm.name };
+                              return updated;
+                            });
+                          }}
+                          style={{
+                            paddingHorizontal: 12,
+                            paddingVertical: 7,
+                            borderRadius: 20,
+                            backgroundColor: item.familyMemberId === fm.id ? "#6366F1" : c.muted,
+                            borderWidth: 1,
+                            borderColor: item.familyMemberId === fm.id ? "#6366F1" : "transparent",
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 4,
+                          }}
+                        >
+                          <MaterialIcons name="group" size={12} color={item.familyMemberId === fm.id ? "#FFFFFF" : c.mutedForeground} />
+                          <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: item.familyMemberId === fm.id ? "#FFFFFF" : c.mutedForeground }}>
+                            {fm.name}
+                          </Text>
+                          <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: item.familyMemberId === fm.id ? "rgba(255,255,255,0.7)" : c.mutedForeground }}>
+                            ({fm.relation})
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </ScrollView>
+                </View>
+              )}
+
               {/* Qty & Price */}
               <View style={{ flexDirection: "row", gap: 10 }}>
                 <View style={{ flex: 1 }}>
@@ -278,8 +460,14 @@ export default function NewInvoiceScreen() {
           ))}
         </View>
 
-        {/* Notes */}
+        {/* Notes & Delivery Date */}
         <Input label="Notes" placeholder="Special instructions..." value={notes} onChangeText={setNotes} icon="notes" multiline />
+        <DatePicker
+          label="Delivery Date"
+          value={deliveryDate}
+          onChange={setDeliveryDate}
+          placeholder="Select delivery date"
+        />
 
         {/* Total */}
         <View style={{ backgroundColor: c.primary, borderRadius: 18, padding: 18, gap: 10 }}>
@@ -299,6 +487,86 @@ export default function NewInvoiceScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {/* Customer picker modal (used when there are many customers) */}
+      <Modal visible={showCustomerModal} transparent animationType="slide" onRequestClose={() => setShowCustomerModal(false)}>
+        <KeyboardAvoidingView
+          style={{ flex: 1, justifyContent: "flex-end" }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <View
+            style={{
+              backgroundColor: c.card,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              padding: 20,
+              paddingBottom: insets.bottom + 24,
+              maxHeight: "85%",
+            }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <Text style={{ fontSize: 18, fontFamily: "Inter_700Bold", color: c.foreground }}>
+                Choose Customer
+              </Text>
+              <Pressable onPress={() => setShowCustomerModal(false)} style={{ padding: 4 }}>
+                <MaterialIcons name="close" size={22} color={c.mutedForeground} />
+              </Pressable>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: c.input, borderRadius: colors.radius, borderWidth: 1.5, borderColor: c.border, paddingHorizontal: 14, marginBottom: 12 }}>
+              <MaterialIcons name="search" size={18} color={c.mutedForeground} style={{ marginRight: 8 }} />
+              <TextInput
+                style={{ flex: 1, fontSize: 15, fontFamily: "Inter_400Regular", color: c.foreground, paddingVertical: 12 }}
+                placeholder="Search by name or mobile..."
+                placeholderTextColor={c.mutedForeground}
+                value={modalSearch}
+                onChangeText={setModalSearch}
+                autoFocus
+              />
+            </View>
+            <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 480 }}>
+              {modalFiltered.length === 0 ? (
+                <View style={{ alignItems: "center", padding: 24, gap: 6 }}>
+                  <MaterialIcons name="person-off" size={28} color={c.mutedForeground} />
+                  <Text style={{ fontSize: 13, color: c.mutedForeground, fontFamily: "Inter_400Regular" }}>
+                    No customers match "{modalSearch}"
+                  </Text>
+                </View>
+              ) : (
+                modalFiltered.map((cu) => (
+                  <Pressable
+                    key={cu.id}
+                    onPress={() => selectCustomer(cu.id)}
+                    style={({ pressed }) => ({
+                      flexDirection: "row",
+                      alignItems: "center",
+                      padding: 12,
+                      gap: 12,
+                      backgroundColor: pressed ? c.muted : "transparent",
+                      borderRadius: colors.radius,
+                    })}
+                  >
+                    <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: c.primary + "18", alignItems: "center", justifyContent: "center" }}>
+                      <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: c.primary }}>{cu.name[0]}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.foreground }}>{cu.name}</Text>
+                      <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>{cu.mobile}</Text>
+                    </View>
+                    <MaterialIcons name="arrow-forward" size={18} color={c.mutedForeground} />
+                  </Pressable>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
+
+// Source measurement values that map directly to the measurement table's typed fields.
+const MEASUREMENT_KEYS = [
+  "chest", "shoulder", "neck", "sleeve", "waist",
+  "length", "hip", "thigh", "pantLength", "bottomWidth",
+  "armhole", "wrist",
+] as const;

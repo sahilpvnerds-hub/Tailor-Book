@@ -54,7 +54,7 @@ function AddFamilyMemberModal({
     ]);
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     setLoading(true);
-    await addFamilyMember({ customerId, name: name.trim(), relation, gender });
+    await addFamilyMember({ primaryCustomerId: customerId, name: name.trim(), relation, gender });
     setLoading(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setName(""); setRelation("son"); setGender("male"); setErrors({});
@@ -158,12 +158,22 @@ export default function CustomerDetailScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { customers, familyMembers, getCustomerMeasurements, getCustomerInvoices, deleteCustomer, deleteFamilyMember } = useData();
+  const {
+    customers, familyMembers,
+    getCustomerMeasurements, getCustomerProducts,
+    getCustomerInvoices, deleteCustomer, deleteFamilyMember,
+  } = useData();
   const customer = customers.find((c) => c.id === id);
-  const measurements = customer ? getCustomerMeasurements(customer.id) : [];
+  const allMeasurements = customer ? getCustomerMeasurements(customer.id) : [];
+  const products = customer ? getCustomerProducts(customer.id) : [];
   const invoices = customer ? getCustomerInvoices(customer.id) : [];
-  const members = familyMembers.filter((m) => m.customerId === id);
+  const members = familyMembers.filter((m) => m.primaryCustomerId === id);
   const [showAddMember, setShowAddMember] = useState(false);
+  const [activeProduct, setActiveProduct] = useState<string>("all");
+
+  const measurements = activeProduct === "all"
+    ? allMeasurements
+    : allMeasurements.filter((m) => m.productType === activeProduct);
 
   const topPad = Platform.OS === "web" ? 67 : 0;
 
@@ -385,15 +395,96 @@ export default function CustomerDetailScreen() {
             title="Measurements"
             action={{ label: "Add", onPress: () => router.push({ pathname: "/measurements/new", params: { customerId: customer.id, customerName: customer.name } }) }}
           />
-          {measurements.length === 0 ? (
+
+          {/* Product-type filter chips */}
+          {products.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingVertical: 10, gap: 6 }}
+            >
+              <Pressable
+                onPress={() => setActiveProduct("all")}
+                style={{
+                  paddingHorizontal: 14,
+                  paddingVertical: 7,
+                  borderRadius: 18,
+                  backgroundColor: activeProduct === "all" ? c.primary : c.muted,
+                  borderWidth: 1,
+                  borderColor: activeProduct === "all" ? c.primary : c.border,
+                }}
+              >
+                <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: activeProduct === "all" ? "#FFFFFF" : c.mutedForeground }}>
+                  All · {allMeasurements.length}
+                </Text>
+              </Pressable>
+              {products.map((p) => (
+                <Pressable
+                  key={p.productType}
+                  onPress={() => setActiveProduct(p.productType)}
+                  style={{
+                    paddingHorizontal: 14,
+                    paddingVertical: 7,
+                    borderRadius: 18,
+                    backgroundColor: activeProduct === p.productType ? c.primary : c.muted,
+                    borderWidth: 1,
+                    borderColor: activeProduct === p.productType ? c.primary : c.border,
+                  }}
+                >
+                  <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: activeProduct === p.productType ? "#FFFFFF" : c.mutedForeground }}>
+                    {p.productType} · {p.count}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+
+          {allMeasurements.length === 0 ? (
             <View style={{ alignItems: "center", padding: 24, backgroundColor: c.muted, borderRadius: colors.radius, gap: 8 }}>
               <MaterialIcons name="straighten" size={28} color={c.mutedForeground} />
               <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>No measurements yet</Text>
             </View>
+          ) : measurements.length === 0 ? (
+            <View style={{ alignItems: "center", padding: 16, backgroundColor: c.muted, borderRadius: colors.radius, gap: 6 }}>
+              <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
+                No measurements for {activeProduct}
+              </Text>
+            </View>
           ) : (
             <View style={{ gap: 8 }}>
               {measurements.map((m) => (
-                <MeasurementItem key={m.id} measurement={m} onPress={() => router.push(`/measurements/${m.id}` as any)} />
+                <View key={m.id} style={{ gap: 6 }}>
+                  <MeasurementItem measurement={m} onPress={() => router.push(`/measurements/${m.id}` as any)} />
+                  <Pressable
+                    onPress={() =>
+                      router.push({
+                        pathname: "/invoices/new",
+                        params: {
+                          customerId: customer.id,
+                          customerName: customer.name,
+                          customerMobile: customer.mobile,
+                          measurementId: m.id,
+                        },
+                      })
+                    }
+                    style={({ pressed }) => ({
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 6,
+                      backgroundColor: "#059669" + (pressed ? "22" : "12"),
+                      borderRadius: colors.radius,
+                      paddingVertical: 8,
+                      borderWidth: 1,
+                      borderColor: "#059669" + "30",
+                    })}
+                  >
+                    <MaterialIcons name="receipt" size={14} color="#059669" />
+                    <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: "#059669" }}>
+                      Create Invoice from this Measurement
+                    </Text>
+                  </Pressable>
+                </View>
               ))}
             </View>
           )}

@@ -56,16 +56,21 @@ interface DataContextType {
   addCustomField: (fieldName: string) => Promise<CustomMeasurementField>;
   deleteCustomField: (id: string) => Promise<void>;
   addMeasurement: (data: Omit<Measurement, "id" | "tailorId" | "createdAt">) => Promise<Measurement>;
+  updateMeasurement: (id: string, data: Partial<Omit<Measurement, "id" | "tailorId" | "createdAt">>) => Promise<void>;
   deleteMeasurement: (id: string) => Promise<void>;
   getCustomerMeasurements: (customerId: string) => Measurement[];
+  getCustomerMeasurementsByProduct: (customerId: string, productType: string) => Measurement[];
+  getCustomerProducts: (customerId: string) => { productType: string; count: number; latestDate: string }[];
   createInvoice: (data: {
     customerId: string;
     customerName: string;
     customerMobile: string;
     items: InvoiceItem[];
     notes?: string;
+    deliveryDate?: string;
   }) => Promise<Invoice>;
   updateInvoiceStatus: (id: string, status: Invoice["status"]) => Promise<void>;
+  deleteInvoice: (id: string) => Promise<void>;
   getCustomerInvoices: (customerId: string) => Invoice[];
   markNotificationRead: (id: string) => Promise<void>;
   markAllRead: () => Promise<void>;
@@ -220,10 +225,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       createdAt: new Date().toISOString(),
       ...data,
       customMeasurements: data.customMeasurements ?? [],
+      photos: data.photos ?? [],
     };
     await saveAllMeasurements([...all, m]);
     setMeasurements((prev) => [m, ...prev]);
     return m;
+  }
+
+  async function updateMeasurement(
+    id: string,
+    data: Partial<Omit<Measurement, "id" | "tailorId" | "createdAt">>
+  ) {
+    const all = await rawGet<Measurement>(STORAGE_KEYS.MEASUREMENTS);
+    const updated = all.map((m) => (m.id === id ? { ...m, ...data } : m));
+    await saveAllMeasurements(updated);
+    setMeasurements((prev) => prev.map((m) => (m.id === id ? { ...m, ...data } : m)));
   }
 
   async function deleteMeasurement(id: string) {
@@ -233,7 +249,37 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }
 
   function getCustomerMeasurements(customerId: string) {
-    return measurements.filter((m) => m.customerId === customerId);
+    return measurements
+      .filter((m) => m.customerId === customerId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  function getCustomerMeasurementsByProduct(customerId: string, productType: string) {
+    return measurements
+      .filter((m) => m.customerId === customerId && m.productType === productType)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  function getCustomerProducts(customerId: string) {
+    const byProduct = new Map<string, { productType: string; count: number; latestDate: string }>();
+    for (const m of measurements) {
+      if (m.customerId !== customerId) continue;
+      const existing = byProduct.get(m.productType);
+      const latest = existing?.latestDate ?? "";
+      if (!existing) {
+        byProduct.set(m.productType, {
+          productType: m.productType,
+          count: 1,
+          latestDate: m.createdAt,
+        });
+      } else {
+        existing.count += 1;
+        if (m.createdAt > latest) existing.latestDate = m.createdAt;
+      }
+    }
+    return Array.from(byProduct.values()).sort((a, b) =>
+      b.latestDate.localeCompare(a.latestDate)
+    );
   }
 
   // ── Invoices ──────────────────────────────────────────────────────────────
@@ -243,6 +289,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     customerMobile: string;
     items: InvoiceItem[];
     notes?: string;
+    deliveryDate?: string;
   }) {
     if (!user) throw new Error("Not authenticated");
     const all = await rawGet<Invoice>(STORAGE_KEYS.INVOICES);
@@ -273,8 +320,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setInvoices((prev) => prev.map((i) => (i.id === id ? { ...i, status } : i)));
   }
 
+  async function deleteInvoice(id: string) {
+    const all = await rawGet<Invoice>(STORAGE_KEYS.INVOICES);
+    await saveAllInvoices(all.filter((i) => i.id !== id));
+    setInvoices((prev) => prev.filter((i) => i.id !== id));
+  }
+
   function getCustomerInvoices(customerId: string) {
-    return invoices.filter((i) => i.customerId === customerId);
+    return invoices
+      .filter((i) => i.customerId === customerId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   // ── Notifications ─────────────────────────────────────────────────────────
@@ -299,8 +354,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       addFamilyMember, deleteFamilyMember,
       addProductType, updateProductType, deleteProductType,
       addCustomField, deleteCustomField,
-      addMeasurement, deleteMeasurement, getCustomerMeasurements,
-      createInvoice, updateInvoiceStatus, getCustomerInvoices,
+      addMeasurement, updateMeasurement, deleteMeasurement, getCustomerMeasurements,
+      getCustomerMeasurementsByProduct, getCustomerProducts,
+      createInvoice, updateInvoiceStatus, deleteInvoice, getCustomerInvoices,
       markNotificationRead, markAllRead,
     }}>
       {children}

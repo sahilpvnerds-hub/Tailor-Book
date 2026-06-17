@@ -1,0 +1,15 @@
+users: 6
+customers: 11
+measurements: 18
+invoices: 13
+notifications: 0
+product_types: 0
+family_members: 0
+custom_measurement_fields: 0
+---
+{"name":"kaushik s","email":"kaushik@gmail.com","mobile":"8542356325","role":"tailor","status":"approved","speciality":null,"pwd_len":60,"pwd_is_bcrypt":true,"pwd_prefix":"$2a$","onboard":false,"created":"2026-06-16T11:13:25.000Z"}
+{"name":"Sahil Patel","email":"sahil24@gmail.com","mobile":"9876543211","role":"tailor","status":"approved","speciality":null,"pwd_len":60,"pwd_is_bcrypt":true,"pwd_prefix":"$2a$","onboard":false,"created":"2026-06-15T11:48:54.000Z"}
+{"name":"Test New Tailor","email":"newtest@example.com","mobile":"9876543299","role":"tailor","status":"approved","speciality":null,"pwd_len":60,"pwd_is_bcrypt":true,"pwd_prefix":"$2a$","onboard":false,"created":"2026-06-15T17:11:12.000Z"}
+{"name":"Admin Updated","email":"admin@tailorbook.com","mobile":"9999999999","role":"admin","status":"approved","speciality":null,"pwd_len":60,"pwd_is_bcrypt":true,"pwd_prefix":"$2a$","onboard":false,"created":"2026-06-15T10:20:41.000Z"}
+{"name":"kuldip pandya","email":"kuldip12@gmail.com","mobile":"8542316585","role":"tailor","status":"approved","speciality":null,"pwd_len":60,"pwd_is_bcrypt":true,"pwd_prefix":"$2a$","onboard":false,"created":"2026-06-16T14:05:39.000Z"}
+{"name":"Ramesh Kumar","email":"ramesh@tailor.com","mobile":"9876543210","role":"tailor","status":"approved","speciality":null,"pwd_len":60,"pwd_is_bcrypt":true,"pwd_prefix":"$2a$","onboard":false,"created":"2026-06-15T10:20:41.000Z"}
