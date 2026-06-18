@@ -15,6 +15,7 @@ console.log(
 );
 
 import app from "./app";
+import { bootstrapDatabase } from "./lib/bootstrap-db";
 import { logger } from "./lib/logger";
 
 const rawPort = process.env["PORT"] ?? "4000";
@@ -37,6 +38,8 @@ function listLanUrls(p: number): string[] {
   }
   return urls;
 }
+
+await bootstrapDatabase();
 
 app.listen(port, "0.0.0.0", (err?: Error) => {
   if (err) {
