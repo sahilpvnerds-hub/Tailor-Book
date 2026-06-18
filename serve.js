@@ -12,7 +12,7 @@
  * processes share the same loopback.
  */
 
-const { spawn } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 const path = require("node:path");
 const fs = require("node:fs");
 
@@ -23,6 +23,27 @@ const API_SERVER = path.join(ROOT, "artifacts", "api-server");
 const PORT_API = process.env.API_PORT || "4000";
 const PORT_WEB = process.env.PORT || "8081";
 const NODE_ENV = process.env.NODE_ENV || "production";
+
+function stripProtocol(domain) {
+  let value = domain.trim();
+  if (!/^https?:\/\//i.test(value)) {
+    value = `https://${value}`;
+  }
+  return new URL(value).host;
+}
+
+function getPublicHost() {
+  const domain =
+    process.env.REPLIT_INTERNAL_APP_DOMAIN ||
+    process.env.REPLIT_DEV_DOMAIN ||
+    process.env.EXPO_PUBLIC_DOMAIN;
+
+  return domain ? stripProtocol(domain) : "localhost";
+}
+
+function getPublicOrigin(host) {
+  return host === "localhost" ? `http://localhost:${PORT_WEB}` : `https://${host}`;
+}
 
 function spawnProcess(name, cwd, cmd, args, env) {
   console.log(`[runner] starting ${name}: ${cmd} ${args.join(" ")} (cwd=${cwd})`);
@@ -46,8 +67,36 @@ function spawnProcess(name, cwd, cmd, args, env) {
   return child;
 }
 
+function runProcess(name, cwd, cmd, args, env) {
+  console.log(`[runner] running ${name}: ${cmd} ${args.join(" ")} (cwd=${cwd})`);
+  const result = spawnSync(cmd, args, {
+    cwd,
+    env: { ...process.env, ...env, FORCE_COLOR: "1" },
+    stdio: "inherit",
+    shell: false,
+  });
+
+  if (result.error) {
+    console.error(`[runner] ${name} failed: ${result.error.message}`);
+    process.exit(1);
+  }
+
+  if (result.status !== 0) {
+    console.error(`[runner] ${name} exited with code ${result.status}`);
+    process.exit(result.status ?? 1);
+  }
+}
+
 // ---------------------------------------------------------------------------
-// 1) Start the API server (production bundle if available, else dev mode).
+// 1) Apply database migrations.
+// ---------------------------------------------------------------------------
+const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+runProcess("db:migrate", path.join(ROOT, "lib", "db"), pnpmCommand, ["run", "migrate"], {
+  NODE_ENV,
+});
+
+// ---------------------------------------------------------------------------
+// 2) Start the API server (production bundle if available, else dev mode).
 // ---------------------------------------------------------------------------
 let apiCommand;
 let apiArgs;
@@ -98,22 +147,28 @@ async function waitForApi() {
   await waitForApi();
 
   // -------------------------------------------------------------------------
-  // 2) Build + serve the mobile web app.
+  // 3) Build + serve the mobile web app.
   // -------------------------------------------------------------------------
   // The mobile package has a `serve.js` that already serves the static build
   // produced by `build.js`. We run the build first, then the server.
   // The build needs a deployment domain — we synthesize a default one if
   // we're not on Replit, so local `node serve.js` works for testing too.
-  if (!process.env.REPLIT_DEV_DOMAIN && !process.env.EXPO_PUBLIC_DOMAIN) {
-    process.env.REPLIT_DEV_DOMAIN = "localhost";
-    process.env.EXPO_PUBLIC_DOMAIN = "localhost";
+  const publicHost = getPublicHost();
+  const publicOrigin = getPublicOrigin(publicHost);
+  if (!process.env.REPLIT_INTERNAL_APP_DOMAIN && !process.env.REPLIT_DEV_DOMAIN && !process.env.EXPO_PUBLIC_DOMAIN) {
+    process.env.REPLIT_DEV_DOMAIN = publicHost;
+    process.env.EXPO_PUBLIC_DOMAIN = publicHost;
   }
   const buildScript = path.join(MOBILE, "scripts", "build.js");
   console.log("[runner] building mobile web bundle…");
   const build = spawnProcess("build", MOBILE, process.execPath, [buildScript], {
     NODE_ENV,
+    REPLIT_INTERNAL_APP_DOMAIN: process.env.REPLIT_INTERNAL_APP_DOMAIN,
     REPLIT_DEV_DOMAIN: process.env.REPLIT_DEV_DOMAIN,
-    EXPO_PUBLIC_DOMAIN: process.env.EXPO_PUBLIC_DOMAIN,
+    EXPO_PUBLIC_DOMAIN: process.env.EXPO_PUBLIC_DOMAIN || publicHost,
+    // Expo also reads artifacts/mobile/.env. Set this explicitly so published
+    // Replit builds use the same-origin /api proxy instead of a local LAN URL.
+    EXPO_PUBLIC_API_URL: publicOrigin,
   });
   build.on("exit", (code) => {
     if (code !== 0) {
@@ -127,13 +182,11 @@ async function waitForApi() {
     // bundled app can call the API at the same origin (avoids CORS, and
     // avoids "Network request failed" when the user opens the published
     // link from outside the Repl).
-    const domain = process.env.REPLIT_DEV_DOMAIN || "localhost";
     spawnProcess("web", MOBILE, process.execPath, [serveScript], {
       NODE_ENV,
       PORT: PORT_WEB,
       API_PROXY_TARGET: process.env.API_PROXY_TARGET || `http://127.0.0.1:${PORT_API}`,
-      EXPO_PUBLIC_API_URL:
-        process.env.EXPO_PUBLIC_API_URL || `https://${domain}`,
+      EXPO_PUBLIC_API_URL: publicOrigin,
     });
   });
 })();

@@ -38,11 +38,14 @@ function resolveApiBaseUrl(): string {
   }
 
   if (typeof window !== "undefined" && window.location) {
-    const { protocol, hostname } = window.location;
+    const { protocol, hostname, host, port } = window.location;
     // If the dev server is on a port other than 4000, the API is on
     // port 4000 of the same hostname. If the dev server IS on 4000
     // (production-like deployment), the API is at the same origin.
     if (hostname) {
+      if (!port || port === "80" || port === "443") {
+        return `${protocol}//${host}/api`;
+      }
       // Default: assume API is on port 4000
       return `${protocol}//${hostname}:4000/api`;
     }
