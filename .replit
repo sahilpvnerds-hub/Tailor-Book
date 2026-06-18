@@ -31,6 +31,10 @@ externalPort = 4000
 localPort = 8081
 externalPort = 80
 
+[[ports]]
+localPort = 18115
+externalPort = 3000
+
 [deployment.env]
 PORT = "8081"
 API_PORT = "4000"
