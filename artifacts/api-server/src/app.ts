@@ -51,6 +51,7 @@ app.use(
       // Allow LAN IPs (for physical devices connecting to dev server)
       if (/^https?:\/\/192\.168\.\d+\.\d+(:\d+)?$/.test(origin)) return callback(null, true);
       if (/^https?:\/\/10\.\d+\.\d+\.\d+(:\d+)?$/.test(origin)) return callback(null, true);
+      if (/^https?:\/\/172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+(:\d+)?$/.test(origin)) return callback(null, true);
 
       // Lock down everything else
       callback(new Error(`CORS: origin ${origin} not allowed`));
