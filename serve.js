@@ -94,6 +94,9 @@ const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 runProcess("db:migrate", path.join(ROOT, "lib", "db"), pnpmCommand, ["run", "migrate"], {
   NODE_ENV,
 });
+runProcess("seed-admin", API_SERVER, pnpmCommand, ["exec", "tsx", "src/seed-admin.ts"], {
+  NODE_ENV,
+});
 
 // ---------------------------------------------------------------------------
 // 2) Start the API server (production bundle if available, else dev mode).
