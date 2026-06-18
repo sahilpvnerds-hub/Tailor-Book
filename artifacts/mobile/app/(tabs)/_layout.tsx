@@ -7,8 +7,11 @@ import { Feather, MaterialIcons } from "@expo/vector-icons";
 import React from "react";
 import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 import { useColors } from "@/hooks/useColors";
+import { useAuth } from "@/context/AuthContext";
 
 function NativeTabLayout() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index">
@@ -19,10 +22,17 @@ function NativeTabLayout() {
         <Icon sf={{ default: "tag", selected: "tag.fill" }} />
         <Label>Products</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="customers">
-        <Icon sf={{ default: "person.2", selected: "person.2.fill" }} />
-        <Label>Customers</Label>
-      </NativeTabs.Trigger>
+      {isAdmin ? (
+        <NativeTabs.Trigger name="admin">
+          <Icon sf={{ default: "shield", selected: "shield.fill" }} />
+          <Label>Admin Panel</Label>
+        </NativeTabs.Trigger>
+      ) : (
+        <NativeTabs.Trigger name="customers">
+          <Icon sf={{ default: "person.2", selected: "person.2.fill" }} />
+          <Label>Customers</Label>
+        </NativeTabs.Trigger>
+      )}
       <NativeTabs.Trigger name="invoices">
         <Icon sf={{ default: "doc.text", selected: "doc.text.fill" }} />
         <Label>Invoices</Label>
@@ -38,6 +48,7 @@ function NativeTabLayout() {
 function ClassicTabLayout() {
   const colors = useColors();
   const colorScheme = useColorScheme();
+  const { user } = useAuth();
   const isDark = colorScheme === "dark";
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
@@ -82,9 +93,19 @@ function ClassicTabLayout() {
         }}
       />
       <Tabs.Screen
+        name="admin"
+        options={{
+          title: "Admin Panel",
+          href: user?.role === "admin" ? undefined : null,
+          tabBarIcon: ({ color }) =>
+            isIOS ? <SymbolView name="shield" tintColor={color} size={24} /> : <MaterialIcons name="admin-panel-settings" size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="customers"
         options={{
           title: "Customers",
+          href: user?.role === "admin" ? null : undefined,
           tabBarIcon: ({ color }) =>
             isIOS ? <SymbolView name="person.2" tintColor={color} size={24} /> : <Feather name="users" size={22} color={color} />,
         }}

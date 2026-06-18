@@ -79,35 +79,96 @@ export async function pickMeasurementPhotos(existingCount: number): Promise<Pick
     });
   }
 
-  // Native: ask for library permission and use the system picker.
-  const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!perm.granted) {
+  // Native: ask user for source (Camera vs Gallery)
+  return new Promise<PickedPhoto[]>((resolve) => {
     Alert.alert(
-      "Permission Required",
-      "Allow access to your photos to attach images to measurements."
+      "Attach Photo",
+      "Select photo source:",
+      [
+        {
+          text: "Take Photo (Camera)",
+          onPress: async () => {
+            try {
+              const perm = await ImagePicker.requestCameraPermissionsAsync();
+              if (!perm.granted) {
+                Alert.alert(
+                  "Permission Required",
+                  "Allow access to your camera to take a photo."
+                );
+                resolve([]);
+                return;
+              }
+              const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                quality: JPEG_QUALITY,
+                base64: true,
+                exif: false,
+              });
+              if (result.canceled || !result.assets) {
+                resolve([]);
+                return;
+              }
+              const picked = result.assets.map((a) => ({
+                base64: a.base64 ?? "",
+                width: a.width ?? 0,
+                height: a.height ?? 0,
+              })).filter((p) => !!p.base64);
+              resolve(picked);
+            } catch (err) {
+              console.error(err);
+              resolve([]);
+            }
+          }
+        },
+        {
+          text: "Choose from Gallery",
+          onPress: async () => {
+            try {
+              const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (!perm.granted) {
+                Alert.alert(
+                  "Permission Required",
+                  "Allow access to your photos to attach images."
+                );
+                resolve([]);
+                return;
+              }
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsMultipleSelection: true,
+                selectionLimit: remaining,
+                quality: JPEG_QUALITY,
+                base64: true,
+                exif: false,
+              });
+              if (result.canceled || !result.assets) {
+                resolve([]);
+                return;
+              }
+              const picked = result.assets
+                .slice(0, remaining)
+                .map((a) => ({
+                  base64: a.base64 ?? "",
+                  width: a.width ?? 0,
+                  height: a.height ?? 0,
+                }))
+                .filter((p) => !!p.base64);
+              resolve(picked);
+            } catch (err) {
+              console.error(err);
+              resolve([]);
+            }
+          }
+        },
+        {
+          text: "Cancel",
+          style: "cancel",
+          onPress: () => resolve([])
+        }
+      ],
+      { cancelable: true }
     );
-    return [];
-  }
-
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
-    allowsMultipleSelection: true,
-    selectionLimit: remaining,
-    quality: JPEG_QUALITY,
-    base64: true,
-    exif: false,
   });
-
-  if (result.canceled || !result.assets) return [];
-
-  return result.assets
-    .slice(0, remaining)
-    .map((a) => ({
-      base64: a.base64 ?? "",
-      width: a.width ?? 0,
-      height: a.height ?? 0,
-    }))
-    .filter((p) => !!p.base64);
 }
 
 /** Convert a base64 string to a data URI suitable for Image source on web/native. */

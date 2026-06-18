@@ -114,7 +114,7 @@ export default function DashboardScreen() {
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
             {/* Notification bell */}
             <Pressable
-              onPress={() => router.push("/notifications/index" as any)}
+              onPress={() => router.push("/notifications")}
               style={({ pressed }) => ({
                 width: 40,
                 height: 40,

@@ -69,6 +69,14 @@ export default function MeasurementDetailScreen() {
   }
 
   async function handleSaveEdit() {
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    if (editDeliveryDate && new Date(editDeliveryDate).getTime() < todayStart.getTime()) {
+      Alert.alert("Error", "Delivery Date cannot be in the past.");
+      return;
+    }
+
     setSaving(true);
     await updateMeasurement(measurement!.id, {
       photos: editPhotos,

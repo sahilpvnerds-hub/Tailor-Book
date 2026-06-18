@@ -34,13 +34,15 @@ function formatYMD(d: Date): string {
 
 function parseYMD(s: string): Date | null {
   if (!s) return null;
-  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) {
-    const d = new Date(s);
-    return isNaN(d.getTime()) ? null : d;
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    const year = parseInt(m[1], 10);
+    const month = parseInt(m[2], 10) - 1;
+    const day = parseInt(m[3], 10);
+    return new Date(year, month, day);
   }
-  const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
-  return isNaN(d.getTime()) ? null : d;
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
 function formatDisplay(s: string): string {
@@ -104,6 +106,7 @@ export function DatePicker({ value, onChange, label, placeholder = "Select date"
   }, [open, value]);
 
   const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const selected = parseYMD(value);
   const cells = useMemo(() => buildMonthGrid(view.year, view.month), [view]);
 
@@ -269,6 +272,7 @@ export function DatePicker({ value, onChange, label, placeholder = "Select date"
                 const inMonth = d.getMonth() === view.month;
                 const isToday = isSameDay(d, today);
                 const isSelected = !!selected && isSameDay(d, selected);
+                const isDisabled = d.getTime() < todayStart.getTime();
                 return (
                   <View
                     key={idx}
@@ -281,6 +285,7 @@ export function DatePicker({ value, onChange, label, placeholder = "Select date"
                     }}
                   >
                     <Pressable
+                      disabled={isDisabled}
                       onPress={() => selectDate(d)}
                       style={({ pressed }) => ({
                         width: 34,
@@ -293,7 +298,7 @@ export function DatePicker({ value, onChange, label, placeholder = "Select date"
                           : isToday
                             ? c.accent
                             : "transparent",
-                        opacity: pressed ? 0.7 : inMonth ? 1 : 0.35,
+                        opacity: isDisabled ? 0.25 : pressed ? 0.7 : inMonth ? 1 : 0.35,
                       })}
                     >
                       <Text
@@ -302,11 +307,13 @@ export function DatePicker({ value, onChange, label, placeholder = "Select date"
                           fontFamily: isSelected || isToday
                             ? "Inter_700Bold"
                             : "Inter_400Regular",
-                          color: isSelected
-                            ? c.primaryForeground
-                            : isToday
-                              ? c.primary
-                              : c.foreground,
+                          color: isDisabled
+                            ? c.mutedForeground
+                            : isSelected
+                              ? c.primaryForeground
+                              : isToday
+                                ? c.primary
+                                : c.foreground,
                         }}
                       >
                         {d.getDate()}

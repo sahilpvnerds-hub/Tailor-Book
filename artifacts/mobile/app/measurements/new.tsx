@@ -50,7 +50,7 @@ function isValidMeasurement(value: string): boolean {
 export default function NewMeasurementScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const { addMeasurement, addCustomField, customers, customFields, productTypes } = useData();
+  const { addMeasurement, addCustomField, customers, customFields, productTypes, getCustomerMeasurementsByProduct } = useData();
   const params = useLocalSearchParams<{ customerId?: string; customerName?: string }>();
 
   const [selectedCustomerId, setSelectedCustomerId] = useState(params.customerId ?? "");
@@ -83,6 +83,53 @@ export default function NewMeasurementScreen() {
   useEffect(() => {
     setFieldErrors({});
   }, [selectedProductId]);
+
+  // Auto-fill previous measurements if they exist
+  useEffect(() => {
+    if (!selectedCustomerId || !selectedProductId) return;
+    const selectedProduct = productTypes.find((p) => p.id === selectedProductId);
+    if (!selectedProduct) return;
+
+    const prevMeasurements = getCustomerMeasurementsByProduct(selectedCustomerId, selectedProduct.name);
+    if (prevMeasurements && prevMeasurements.length > 0) {
+      const latest = prevMeasurements[0];
+      const newValues: MeasurementValues = {};
+      
+      // Auto-fill active measurement fields
+      const activeFields = getFieldsForProduct(selectedProduct.name);
+      for (const fieldKey of activeFields) {
+        const val = (latest as any)[fieldKey];
+        if (val !== undefined && val !== null) {
+          newValues[fieldKey] = String(val);
+        }
+      }
+      setValues(newValues);
+
+      // Auto-fill custom fields if applicable
+      if (latest.customMeasurements && latest.customMeasurements.length > 0) {
+        const newCustomValues: Record<string, string> = {};
+        for (const cm of latest.customMeasurements) {
+          const match = customFields.find((cf) => cf.fieldName.toLowerCase() === cm.label.toLowerCase());
+          if (match) {
+            newCustomValues[match.id] = String(cm.value);
+          }
+        }
+        setCustomValues(newCustomValues);
+      } else {
+        setCustomValues({});
+      }
+
+      // Pre-fill notes if available
+      if (latest.notes) {
+        setNotes(latest.notes);
+      }
+    } else {
+      // Clear values if no previous measurement exists
+      setValues({});
+      setCustomValues({});
+      setNotes("");
+    }
+  }, [selectedCustomerId, selectedProductId, productTypes, getCustomerMeasurementsByProduct, customFields]);
 
   // ── Field change handler with sanitisation ──────────────────────────────────
   function handleFieldChange(key: string, raw: string) {
@@ -143,6 +190,19 @@ export default function NewMeasurementScreen() {
     const customer = customers.find((cu) => cu.id === selectedCustomerId);
     if (!customer) { Alert.alert("Error", "Customer not found"); return; }
     if (!selectedProductId) { Alert.alert("Error", "Please select a product type"); return; }
+
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    if (new Date(date).getTime() < todayStart.getTime()) {
+      Alert.alert("Error", "Measurement Date cannot be in the past.");
+      return;
+    }
+
+    if (deliveryDate && new Date(deliveryDate).getTime() < todayStart.getTime()) {
+      Alert.alert("Error", "Delivery Date cannot be in the past.");
+      return;
+    }
 
     if (!validate()) {
       Alert.alert(

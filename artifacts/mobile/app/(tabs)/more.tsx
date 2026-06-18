@@ -1,10 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import {
   Alert,
   Linking,
   Platform,
   Pressable,
-  RefreshControl,
   ScrollView,
   Text,
   View,
@@ -14,10 +13,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
-import { Badge, Button, Card, Divider } from "@/components/ui";
-import { formatDate } from "@/utils/storage";
+import { Card, Divider } from "@/components/ui";
 import colors from "@/constants/colors";
-import { User } from "@/types";
 
 function MenuItem({
   icon,
@@ -80,30 +77,8 @@ function MenuItem({
 export default function MoreScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const { user, logout, getPendingUsers, approveUser, rejectUser, getAllTailors } = useAuth();
-  const [pendingUsers, setPendingUsers] = useState<User[]>([]);
-  const [allTailors, setAllTailors] = useState<User[]>([]);
-  const [showAdmin, setShowAdmin] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const isAdmin = user?.role === "admin";
+  const { user, logout } = useAuth();
   const topPad = Platform.OS === "web" ? 67 : 0;
-
-  async function loadAdminData() {
-    const [pending, tailors] = await Promise.all([getPendingUsers(), getAllTailors()]);
-    setPendingUsers(pending);
-    setAllTailors(tailors);
-  }
-
-  useEffect(() => {
-    if (isAdmin) loadAdminData();
-  }, [isAdmin]);
-
-  async function onRefresh() {
-    setRefreshing(true);
-    if (isAdmin) await loadAdminData();
-    setRefreshing(false);
-  }
 
   function handleLogout() {
     Alert.alert("Sign Out", "This will clear all your data from this device.", [
@@ -119,23 +94,6 @@ export default function MoreScreen() {
     ]);
   }
 
-  async function handleApprove(u: User) {
-    await approveUser(u.id);
-    await loadAdminData();
-    Alert.alert("Approved", `${u.name} can now log in.`);
-  }
-
-  async function handleReject(u: User) {
-    Alert.alert("Reject Tailor", `Reject ${u.name}?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Reject",
-        style: "destructive",
-        onPress: async () => { await rejectUser(u.id); await loadAdminData(); },
-      },
-    ]);
-  }
-
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: c.background }}
@@ -144,7 +102,6 @@ export default function MoreScreen() {
         paddingHorizontal: 20,
         paddingBottom: insets.bottom + 110,
       }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.primary} />}
       showsVerticalScrollIndicator={false}
     >
       {/* ── Profile Card ── */}
@@ -212,80 +169,6 @@ export default function MoreScreen() {
 
         <MaterialIcons name="chevron-right" size={22} color="rgba(255,255,255,0.7)" />
       </Pressable>
-
-      {/* Admin Panel */}
-      {isAdmin && (
-        <Card style={{ marginBottom: 16 }}>
-          <Pressable
-            onPress={() => setShowAdmin(!showAdmin)}
-            style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
-          >
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-              <MaterialIcons name="admin-panel-settings" size={22} color={c.primary} />
-              <Text style={{ fontSize: 16, fontFamily: "Inter_600SemiBold", color: c.foreground }}>
-                Admin Panel
-              </Text>
-              {pendingUsers.length > 0 && (
-                <View style={{ backgroundColor: "#EF4444", borderRadius: 10, minWidth: 20, height: 20, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 }}>
-                  <Text style={{ fontSize: 11, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>{pendingUsers.length}</Text>
-                </View>
-              )}
-            </View>
-            <MaterialIcons name={showAdmin ? "expand-less" : "expand-more"} size={22} color={c.mutedForeground} />
-          </Pressable>
-
-          {showAdmin && (
-            <View style={{ marginTop: 16, gap: 16 }}>
-              <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                Pending Approvals ({pendingUsers.length})
-              </Text>
-              {pendingUsers.length === 0 ? (
-                <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
-                  No pending registrations
-                </Text>
-              ) : (
-                pendingUsers.map((u) => (
-                  <View key={u.id} style={{ backgroundColor: c.muted, borderRadius: colors.radius, padding: 14, gap: 10 }}>
-                    <View>
-                      <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: c.foreground }}>{u.name}</Text>
-                      {u.shopName && <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>{u.shopName}</Text>}
-                      <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
-                        {u.mobile} · Registered {formatDate(u.createdAt)}
-                      </Text>
-                      {u.speciality && (
-                        <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.primary }}>
-                          Speciality: {u.speciality}
-                        </Text>
-                      )}
-                    </View>
-                    <View style={{ flexDirection: "row", gap: 10 }}>
-                      <Button label="Approve" onPress={() => handleApprove(u)} variant="primary" size="sm" style={{ flex: 1 }} />
-                      <Button label="Reject" onPress={() => handleReject(u)} variant="destructive" size="sm" style={{ flex: 1 }} />
-                    </View>
-                  </View>
-                ))
-              )}
-
-              <Divider />
-              <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                All Tailors ({allTailors.length})
-              </Text>
-              {allTailors.map((u) => (
-                <View key={u.id} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: c.foreground }}>{u.name}</Text>
-                    <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>{u.mobile}</Text>
-                  </View>
-                  <Badge
-                    label={u.status.charAt(0).toUpperCase() + u.status.slice(1)}
-                    variant={u.status === "approved" ? "success" : u.status === "rejected" ? "destructive" : "warning"}
-                  />
-                </View>
-              ))}
-            </View>
-          )}
-        </Card>
-      )}
 
       {/* Help & Support */}
       <Card style={{ marginBottom: 16 }}>

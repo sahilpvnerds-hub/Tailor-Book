@@ -309,13 +309,14 @@ const updateMeSchema = z.object({
   speciality: z.enum(["male", "female", "unisex"]).nullable().optional(),
   onboardingComplete: z.boolean().optional(),
 });
-
 router.patch("/me", authMiddleware, async (req: Request, res: Response) => {
   const body = updateMeSchema.safeParse(req.body);
   if (!body.success) {
     res.status(400).json({ error: "Invalid request body" });
     return;
   }
+  console.log("PATCH /me body:", req.body);
+  console.log("PATCH /me parsed:", body.data);
   await db.update(users).set(body.data).where(eq(users.id, req.user!.id));
   const [updated] = await db
     .select()

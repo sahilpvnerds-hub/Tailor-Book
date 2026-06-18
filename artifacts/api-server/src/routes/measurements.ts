@@ -141,6 +141,21 @@ router.post("/", async (req: Request, res: Response) => {
 
   const id = crypto.randomUUID();
   const dateStr = d.measurementDate ?? new Date().toISOString().slice(0, 10);
+
+  // Timezone-safe past-date limit (24 hours grace)
+  const graceLimit = new Date();
+  graceLimit.setHours(0, 0, 0, 0);
+  graceLimit.setDate(graceLimit.getDate() - 1);
+
+  if (new Date(dateStr).getTime() < graceLimit.getTime()) {
+    res.status(400).json({ error: "Measurement Date cannot be in the past" });
+    return;
+  }
+
+  if (d.deliveryDate && new Date(d.deliveryDate).getTime() < graceLimit.getTime()) {
+    res.status(400).json({ error: "Delivery Date cannot be in the past" });
+    return;
+  }
   await db.insert(measurements).values({
     id,
     customerId: d.customerId,
@@ -202,6 +217,25 @@ router.patch("/:id", async (req: Request, res: Response) => {
   }
   if (typeof patch.deliveryDate === "string") {
     patch.deliveryDate = new Date(patch.deliveryDate);
+  }
+
+  // Timezone-safe past-date limit (24 hours grace)
+  const graceLimit = new Date();
+  graceLimit.setHours(0, 0, 0, 0);
+  graceLimit.setDate(graceLimit.getDate() - 1);
+
+  if (patch.measurementDate instanceof Date) {
+    if (patch.measurementDate.getTime() < graceLimit.getTime()) {
+      res.status(400).json({ error: "Measurement Date cannot be in the past" });
+      return;
+    }
+  }
+
+  if (patch.deliveryDate instanceof Date) {
+    if (patch.deliveryDate.getTime() < graceLimit.getTime()) {
+      res.status(400).json({ error: "Delivery Date cannot be in the past" });
+      return;
+    }
   }
   await db.update(measurements).set(patch as any).where(eq(measurements.id, id));
   const [updated] = await db
