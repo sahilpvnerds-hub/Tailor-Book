@@ -12,6 +12,16 @@ import { base64ToDataUri } from "@/utils/photos";
 import { Invoice } from "@/types";
 import colors from "@/constants/colors";
 
+function titleCase(value?: string | null) {
+  return value ? value[0].toUpperCase() + value.slice(1) : value;
+}
+
+function invoiceItemPersonLabel(item: Invoice["items"][number], customerName: string) {
+  const name = item.personName ?? item.familyMemberName ?? customerName;
+  const relation = item.relation ?? (item.familyMemberId ? "other" : "self");
+  return `${name} (${titleCase(relation)})`;
+}
+
 function buildInvoiceText(invoice: Invoice): string {
   const lines = [
     `TAILOR BOOK - INVOICE`,
@@ -25,10 +35,11 @@ function buildInvoiceText(invoice: Invoice): string {
     `Mobile: ${invoice.customerMobile}`,
     ``,
     `ORDER ITEMS`,
-    ...invoice.items.map((item) => {
-      const forLabel = item.familyMemberName ? ` (${item.familyMemberName})` : ``;
-      return `${item.productType}${forLabel} x${item.quantity} @ ${formatCurrency(item.price)} = ${formatCurrency(item.price * item.quantity)}`;
-    }),
+    ...invoice.items.flatMap((item, idx) => [
+      `${idx + 1}. Product: ${item.productType}`,
+      `   Person: ${invoiceItemPersonLabel(item, invoice.customerName)}`,
+      `   Qty/Rate: ${item.quantity} x ${formatCurrency(item.price)} = ${formatCurrency(item.price * item.quantity)}`,
+    ]),
     ``,
     `Subtotal: ${formatCurrency(invoice.subtotal)}`,
     `TOTAL: ${formatCurrency(invoice.total)}`,
@@ -276,27 +287,24 @@ export default function InvoiceDetailScreen() {
                     <Text style={{ fontSize: 15, fontFamily: "Inter_500Medium", color: c.foreground }}>
                       {item.productType}
                     </Text>
-                    {/* Family member attribution */}
-                    {item.familyMemberName && (
-                      <View
-                        style={{
-                          alignSelf: "flex-start",
-                          marginTop: 3,
-                          backgroundColor: "#EEF2FF",
-                          borderRadius: 6,
-                          paddingHorizontal: 7,
-                          paddingVertical: 2,
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 3,
-                        }}
-                      >
-                        <MaterialIcons name="group" size={11} color="#6366F1" />
-                        <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: "#6366F1" }}>
-                          {item.familyMemberName}
-                        </Text>
-                      </View>
-                    )}
+                    <View
+                      style={{
+                        alignSelf: "flex-start",
+                        marginTop: 3,
+                        backgroundColor: "#EEF2FF",
+                        borderRadius: 6,
+                        paddingHorizontal: 7,
+                        paddingVertical: 2,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 3,
+                      }}
+                    >
+                      <MaterialIcons name={item.familyMemberId ? "group" : "person"} size={11} color="#6366F1" />
+                      <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: "#6366F1" }}>
+                        {invoiceItemPersonLabel(item, invoice.customerName)}
+                      </Text>
+                    </View>
                     <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground, marginTop: 2 }}>
                       {item.quantity} x {formatCurrency(item.price)}
                     </Text>
@@ -527,27 +535,35 @@ export default function InvoiceDetailScreen() {
               </Text>
               <View style={{ width: "100%", marginTop: 6, gap: 4 }}>
                 {invoice.items.map((item, idx) => (
-                  <View
-                    key={idx}
-                    style={{ flexDirection: "row", justifyContent: "space-between" }}
-                  >
+                  <View key={idx} style={{ gap: 2 }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontFamily: "Inter_500Medium",
+                          color: c.foreground,
+                        }}
+                      >
+                        {item.productType} x{item.quantity}
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontFamily: "Inter_500Medium",
+                          color: c.mutedForeground,
+                        }}
+                      >
+                        {formatDate(invoice.createdAt)}
+                      </Text>
+                    </View>
                     <Text
                       style={{
-                        fontSize: 12,
-                        fontFamily: "Inter_500Medium",
-                        color: c.foreground,
-                      }}
-                    >
-                      {item.productType} x{item.quantity}
-                    </Text>
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        fontFamily: "Inter_500Medium",
+                        fontSize: 11,
+                        fontFamily: "Inter_400Regular",
                         color: c.mutedForeground,
                       }}
                     >
-                      {formatDate(invoice.createdAt)}
+                      {invoiceItemPersonLabel(item, invoice.customerName)}
                     </Text>
                   </View>
                 ))}
@@ -570,7 +586,7 @@ export default function InvoiceDetailScreen() {
                   invoice.items
                     .map(
                       (i) =>
-                        `• ${i.productType} x${i.quantity} — ${formatCurrency(
+                        `- ${i.productType} x${i.quantity} - ${invoiceItemPersonLabel(i, invoice.customerName)} - ${formatCurrency(
                           i.price * i.quantity,
                         )}`,
                     )

@@ -99,9 +99,13 @@ export interface CustomMeasurementField {
 export interface Measurement {
   id: string;
   customerId: string;
+  familyMemberId?: string | null;
+  familyMemberName?: string;
+  measurementSessionId?: string;
   tailorId: string;
   customerName: string;
   date: string;
+  measurementDate?: string;
   deliveryDate?: string;
   productType: string;
   productTypeId?: string;
@@ -131,9 +135,13 @@ export interface InvoiceItem {
   measurementId?: string;
   measurementValues?: Record<string, string>;
   /** ID of the family member this item belongs to (undefined = primary customer) */
-  familyMemberId?: string;
+  familyMemberId?: string | null;
   /** Display name of the family member (or primary customer name) */
   familyMemberName?: string;
+  /** Persisted display name for invoices/PDFs/API responses */
+  personName?: string | null;
+  /** Persisted relation label, "self" for the primary customer */
+  relation?: Relation | "self" | string | null;
 }
 
 export interface Invoice {

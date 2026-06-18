@@ -145,6 +145,7 @@ export interface ApiCustomer {
 export interface ApiMeasurement {
   id: string;
   customerId: string;
+  familyMemberId?: string | null;
   tailorId: string;
   customerName: string;
   productType: string;
@@ -174,6 +175,9 @@ export interface ApiInvoiceItem {
   quantity: number;
   price: string;
   measurementId?: string | null;
+  familyMemberId?: string | null;
+  personName?: string | null;
+  relation?: string | null;
   measurementValues?: Record<string, string> | null;
   position: number;
   createdAt: string;
@@ -273,6 +277,9 @@ export function bindApiMethods(client: ApiClient) {
         quantity: number;
         price: number;
         measurementId?: string | null;
+        familyMemberId?: string | null;
+        personName?: string | null;
+        relation?: string | null;
         measurementValues?: Record<string, string> | null;
       }>;
     }) => client.post<ApiInvoice>("/api/invoices", data),

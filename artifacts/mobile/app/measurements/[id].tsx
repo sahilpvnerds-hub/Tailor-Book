@@ -23,11 +23,15 @@ import { formatDate } from "@/utils/storage";
 import { base64ToDataUri, pickMeasurementPhotos } from "@/utils/photos";
 import colors from "@/constants/colors";
 
+function titleCase(value: string) {
+  return value ? value[0].toUpperCase() + value.slice(1) : value;
+}
+
 export default function MeasurementDetailScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { measurements, deleteMeasurement, updateMeasurement, customers } = useData();
+  const { measurements, deleteMeasurement, updateMeasurement, customers, familyMembers } = useData();
   const measurement = measurements.find((m) => m.id === id);
 
   const [editing, setEditing] = useState(false);
@@ -102,6 +106,13 @@ export default function MeasurementDetailScreen() {
   const filledFields = MEASUREMENT_FIELDS.filter(
     (f) => (measurement as any)[f.key] !== undefined
   );
+  const customer = customers.find((cu) => cu.id === measurement.customerId);
+  const familyMember = measurement.familyMemberId
+    ? familyMembers.find((fm) => fm.id === measurement.familyMemberId)
+    : undefined;
+  const personName = familyMember?.name ?? measurement.familyMemberName ?? customer?.name ?? measurement.customerName;
+  const relation = familyMember?.relation ?? "self";
+  const personLabel = `${personName} (${titleCase(relation)})`;
 
   return (
     <ScrollView
@@ -135,18 +146,56 @@ export default function MeasurementDetailScreen() {
         </View>
         <View style={{ gap: 4 }}>
           <Text style={{ fontSize: 22, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>
-            {measurement.customerName}
+            {personLabel}
           </Text>
           <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
             <Badge label={measurement.productType} variant="secondary" />
             <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.8)" }}>
-              {formatDate(measurement.date)}
+              {formatDate(measurement.date ?? measurement.measurementDate ?? measurement.createdAt)}
             </Text>
           </View>
         </View>
       </View>
 
       <View style={{ padding: 20, gap: 16 }}>
+        <Card>
+          <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 12 }}>
+            Measurement Details
+          </Text>
+          <View style={{ gap: 10 }}>
+            <View>
+              <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>Customer</Text>
+              <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>{customer?.name ?? measurement.customerName}</Text>
+            </View>
+            <View>
+              <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>Measurement For</Text>
+              <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>{personLabel}</Text>
+            </View>
+            <View>
+              <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>Product</Text>
+              <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>{measurement.productType}</Text>
+            </View>
+          </View>
+        </Card>
+
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <Button label="Edit Measurement" onPress={openEdit} variant="outline" style={{ flex: 1 }} icon="edit" />
+          <Button
+            label="Create Invoice"
+            onPress={() => {
+              const cust = customer ?? customers.find((cu) => cu.id === measurement.customerId);
+              if (cust) {
+                router.push({
+                  pathname: "/invoices/new",
+                  params: { customerId: cust.id, customerName: cust.name, customerMobile: cust.mobile, measurementId: measurement.id, productType: measurement.productType },
+                });
+              }
+            }}
+            style={{ flex: 1 }}
+            icon="receipt"
+          />
+        </View>
+
         {/* Delivery Date */}
         {measurement.deliveryDate && (
           <View
@@ -268,33 +317,6 @@ export default function MeasurementDetailScreen() {
           </Card>
         )}
 
-        {/* Create invoice from this measurement */}
-        <Pressable
-          onPress={() => {
-            const cust = customers.find((cu) => cu.id === measurement.customerId);
-            if (cust) {
-              router.push({
-                pathname: "/invoices/new",
-                params: { customerId: cust.id, customerName: cust.name, customerMobile: cust.mobile, measurementId: measurement.id, productType: measurement.productType },
-              });
-            }
-          }}
-          style={({ pressed }) => ({
-            backgroundColor: c.primary,
-            borderRadius: colors.radius,
-            padding: 16,
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            opacity: pressed ? 0.85 : 1,
-          })}
-        >
-          <MaterialIcons name="receipt" size={20} color={c.primaryForeground} />
-          <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: c.primaryForeground }}>
-            Create Invoice for this Measurement
-          </Text>
-        </Pressable>
       </View>
 
       {/* Photo viewer modal */}

@@ -26,6 +26,10 @@ import colors from "@/constants/colors";
 
 const CUSTOMER_INLINE_LIMIT = 20;
 
+function titleCase(value: string) {
+  return value ? value[0].toUpperCase() + value.slice(1) : value;
+}
+
 export default function NewInvoiceScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
@@ -39,6 +43,9 @@ export default function NewInvoiceScreen() {
 
   const sourceMeasurement = params.measurementId
     ? measurements.find((m) => m.id === params.measurementId)
+    : undefined;
+  const sourceFamilyMember = sourceMeasurement?.familyMemberId
+    ? familyMembers.find((fm) => fm.id === sourceMeasurement.familyMemberId)
     : undefined;
 
   const [customerSearch, setCustomerSearch] = useState(params.customerName ?? "");
@@ -71,6 +78,10 @@ export default function NewInvoiceScreen() {
         price: pt?.amount ?? 0,
         measurementId: sourceMeasurement.id,
         measurementValues: m,
+        familyMemberId: sourceMeasurement.familyMemberId ?? null,
+        familyMemberName: sourceFamilyMember?.name ?? sourceMeasurement.familyMemberName,
+        personName: sourceFamilyMember?.name ?? sourceMeasurement.familyMemberName ?? sourceMeasurement.customerName,
+        relation: sourceFamilyMember?.relation ?? "self",
       }];
     }
     return [
@@ -190,26 +201,39 @@ export default function NewInvoiceScreen() {
       <ScrollView contentContainerStyle={{ padding: 20, gap: 16, paddingBottom: insets.bottom + 50 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
         {/* Source measurement banner */}
-        {sourceMeasurement && sourceMeasurement.photos && sourceMeasurement.photos.length > 0 && (
+        {sourceMeasurement && (
           <Card>
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
               <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                Linked Measurement Photos
+                Linked Measurement
               </Text>
               <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
-                {formatDate(sourceMeasurement.date)}
+                {formatDate(sourceMeasurement.date ?? sourceMeasurement.measurementDate ?? sourceMeasurement.createdAt)}
               </Text>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-              {sourceMeasurement.photos.map((p, idx) => (
-                <Image
-                  key={idx}
-                  source={{ uri: base64ToDataUri(p) }}
-                  style={{ width: 80, height: 80, borderRadius: 10, backgroundColor: c.muted }}
-                  resizeMode="cover"
-                />
-              ))}
-            </ScrollView>
+            <View style={{ gap: 8, marginBottom: sourceMeasurement.photos?.length ? 12 : 0 }}>
+              <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.foreground }}>
+                Customer: {sourceMeasurement.customerName}
+              </Text>
+              <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.foreground }}>
+                Measurement For: {sourceFamilyMember?.name ?? sourceMeasurement.familyMemberName ?? sourceMeasurement.customerName} ({titleCase(sourceFamilyMember?.relation ?? "self")})
+              </Text>
+              <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.foreground }}>
+                Product: {sourceMeasurement.productType}
+              </Text>
+            </View>
+            {!!sourceMeasurement.photos?.length && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                {sourceMeasurement.photos.map((p, idx) => (
+                  <Image
+                    key={idx}
+                    source={{ uri: base64ToDataUri(p) }}
+                    style={{ width: 80, height: 80, borderRadius: 10, backgroundColor: c.muted }}
+                    resizeMode="cover"
+                  />
+                ))}
+              </ScrollView>
+            )}
           </Card>
         )}
 
@@ -368,7 +392,13 @@ export default function NewInvoiceScreen() {
                         onPress={() => {
                           setItems((prev) => {
                             const updated = [...prev];
-                            updated[idx] = { ...updated[idx], familyMemberId: undefined, familyMemberName: undefined };
+                            updated[idx] = {
+                              ...updated[idx],
+                              familyMemberId: null,
+                              familyMemberName: undefined,
+                              personName: selectedCustomer.name,
+                              relation: "self",
+                            };
                             return updated;
                           });
                         }}
@@ -396,7 +426,13 @@ export default function NewInvoiceScreen() {
                           onPress={() => {
                             setItems((prev) => {
                               const updated = [...prev];
-                              updated[idx] = { ...updated[idx], familyMemberId: fm.id, familyMemberName: fm.name };
+                              updated[idx] = {
+                                ...updated[idx],
+                                familyMemberId: fm.id,
+                                familyMemberName: fm.name,
+                                personName: fm.name,
+                                relation: fm.relation,
+                              };
                               return updated;
                             });
                           }}

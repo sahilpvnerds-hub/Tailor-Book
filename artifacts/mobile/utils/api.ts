@@ -318,6 +318,41 @@ export async function addMeasurement(token: string, measurement: Omit<Measuremen
   return data;
 }
 
+export async function addMeasurementSession(
+  token: string,
+  session: {
+    customerId: string;
+    familyMemberId?: string | null;
+    measurementDate?: string;
+    date?: string;
+    deliveryDate?: string;
+    notes?: string;
+    photos?: string[];
+    items: Array<{
+      productTypeId?: string;
+      productType: string;
+      values: Record<string, string | number | null | undefined>;
+      customMeasurements?: { label: string; value: number }[];
+      notes?: string;
+      photos?: string[];
+    }>;
+  }
+): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/measurements`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(session),
+  });
+  const data = await parseJson<any>(response, "Failed to add measurement session");
+  if (!response.ok) {
+    throw new Error(data.error ?? "Failed to add measurement session");
+  }
+  return data;
+}
+
 export async function updateMeasurement(token: string, measurementId: string, data: Partial<Omit<Measurement, "id" | "createdAt">>): Promise<Measurement> {
   const response = await fetch(`${API_BASE_URL}/measurements/${measurementId}`, {
     method: "PATCH",
@@ -558,6 +593,14 @@ export async function markAllNotificationsRead(token: string): Promise<{ ok: boo
   return { ok: response.ok };
 }
 
+export async function clearAllNotifications(token: string): Promise<{ ok: boolean }> {
+  const response = await fetch(`${API_BASE_URL}/notifications/clear-all`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return { ok: response.ok };
+}
+
 // ── Token & User Storage ───────────────────────────────────────────────────
 
 const TOKEN_KEY = "@tailorbook/token";
@@ -646,6 +689,7 @@ export const api = {
   measurements: {
     get: getMeasurements,
     add: addMeasurement,
+    addSession: addMeasurementSession,
     update: updateMeasurement,
     delete: deleteMeasurement,
   },
@@ -675,5 +719,6 @@ export const api = {
     get: getNotifications,
     markRead: markNotificationRead,
     markAllRead: markAllNotificationsRead,
+    clearAll: clearAllNotifications,
   },
 };

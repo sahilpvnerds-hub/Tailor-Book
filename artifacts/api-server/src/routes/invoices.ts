@@ -2,7 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@workspace/db";
-import { invoices, invoiceItems, customers, counters } from "@workspace/db/schema";
+import { invoices, invoiceItems, customers, counters, familyMembers, measurements } from "@workspace/db/schema";
 import { authMiddleware } from "../middlewares/auth";
 import { getParam } from "../lib/params";
 
@@ -95,8 +95,17 @@ const itemSchema = z.object({
   quantity: z.number().int().positive().default(1),
   price: z.number().nonnegative().default(0),
   measurementId: z.string().nullable().optional(),
+  familyMemberId: z.string().nullable().optional(),
+  personName: z.string().nullable().optional(),
+  relation: z.string().nullable().optional(),
   measurementValues: z.record(z.string(), z.string()).nullable().optional(),
 });
+type InvoiceInputItem = z.infer<typeof itemSchema>;
+type EnrichedInvoiceItem = InvoiceInputItem & {
+  familyMemberId: string | null;
+  personName: string;
+  relation: string;
+};
 
 const createSchema = z.object({
   customerId: z.string().min(1),
@@ -129,7 +138,46 @@ router.post("/", async (req: Request, res: Response) => {
     return;
   }
 
-  const subtotal = d.items.reduce((s, i) => s + i.price * i.quantity, 0);
+  const enrichedItems: EnrichedInvoiceItem[] = [];
+  for (const item of d.items) {
+    let familyMemberId = item.familyMemberId ?? null;
+    let personName = item.personName ?? null;
+    let relation = item.relation ?? null;
+
+    if (item.measurementId && (!personName || !relation)) {
+      const [measurement] = await db
+        .select()
+        .from(measurements)
+        .where(eq(measurements.id, item.measurementId))
+        .limit(1);
+      if (!measurement || measurement.customerId !== d.customerId || !ensureOwnership(req, measurement.tailorId)) {
+        res.status(400).json({ error: `Invalid measurement for ${item.productType}` });
+        return;
+      }
+      familyMemberId = familyMemberId ?? measurement.familyMemberId ?? null;
+    }
+
+    if (familyMemberId) {
+      const [member] = await db
+        .select()
+        .from(familyMembers)
+        .where(eq(familyMembers.id, familyMemberId))
+        .limit(1);
+      if (!member || member.primaryCustomerId !== d.customerId || !ensureOwnership(req, member.tailorId)) {
+        res.status(400).json({ error: `Invalid family member for ${item.productType}` });
+        return;
+      }
+      personName = member.name;
+      relation = member.relation;
+    } else {
+      personName = personName ?? cust.name;
+      relation = relation ?? "self";
+    }
+
+    enrichedItems.push({ ...item, familyMemberId, personName, relation });
+  }
+
+  const subtotal = enrichedItems.reduce((s, i) => s + i.price * i.quantity, 0);
   const total = subtotal;
 
   const invoiceSeq = await nextCounterValue("invoice");
@@ -154,8 +202,8 @@ router.post("/", async (req: Request, res: Response) => {
       notes: d.notes ?? null,
     });
 
-    for (let i = 0; i < d.items.length; i++) {
-      const it = d.items[i];
+    for (let i = 0; i < enrichedItems.length; i++) {
+      const it = enrichedItems[i];
       await tx.insert(invoiceItems).values({
         id: crypto.randomUUID(),
         invoiceId: id,
@@ -163,6 +211,9 @@ router.post("/", async (req: Request, res: Response) => {
         quantity: it.quantity,
         price: String(it.price),
         measurementId: it.measurementId ?? null,
+        familyMemberId: it.familyMemberId ?? null,
+        personName: it.personName ?? null,
+        relation: it.relation ?? null,
         measurementValues: it.measurementValues ?? null,
         position: i,
       });

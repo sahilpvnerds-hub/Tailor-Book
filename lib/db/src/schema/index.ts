@@ -89,6 +89,8 @@ export const customMeasurementFields = mysqlTable("custom_measurement_fields", {
 export const measurements = mysqlTable("measurements", {
   id: varchar("id", { length: 36 }).notNull().primaryKey(),
   customerId: varchar("customer_id", { length: 36 }).notNull(),
+  familyMemberId: varchar("family_member_id", { length: 36 }),
+  measurementSessionId: varchar("measurement_session_id", { length: 36 }),
   tailorId: varchar("tailor_id", { length: 36 }).notNull(),
   customerName: varchar("customer_name", { length: 100 }).notNull(),
   productType: varchar("product_type", { length: 50 }).notNull(),
@@ -119,6 +121,35 @@ export const measurements = mysqlTable("measurements", {
   updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
 });
 
+export const measurementSessions = mysqlTable("measurement_sessions", {
+  id: varchar("id", { length: 36 }).notNull().primaryKey(),
+  customerId: varchar("customer_id", { length: 36 }).notNull(),
+  familyMemberId: varchar("family_member_id", { length: 36 }),
+  tailorId: varchar("tailor_id", { length: 36 }).notNull(),
+  measurementDate: date("measurement_date").notNull(),
+  deliveryDate: date("delivery_date"),
+  notes: text("notes"),
+  photos: json("photos").$type<string[]>().default([]),
+  createdBy: varchar("created_by", { length: 36 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+
+export const measurementItems = mysqlTable("measurement_items", {
+  id: varchar("id", { length: 36 }).notNull().primaryKey(),
+  measurementSessionId: varchar("measurement_session_id", { length: 36 }).notNull(),
+  productTypeId: varchar("product_type_id", { length: 36 }),
+  productType: varchar("product_type", { length: 100 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const measurementValues = mysqlTable("measurement_values", {
+  id: varchar("id", { length: 36 }).notNull().primaryKey(),
+  measurementItemId: varchar("measurement_item_id", { length: 36 }).notNull(),
+  fieldName: varchar("field_name", { length: 100 }).notNull(),
+  fieldValue: decimal("field_value", { precision: 8, scale: 2 }).notNull(),
+});
+
 export const invoices = mysqlTable("invoices", {
   id: varchar("id", { length: 36 }).notNull().primaryKey(),
   invoiceNumber: varchar("invoice_number", { length: 20 }).notNull().unique(),
@@ -143,6 +174,9 @@ export const invoiceItems = mysqlTable("invoice_items", {
   quantity: int("quantity").notNull().default(1),
   price: decimal("price", { precision: 12, scale: 2 }).notNull().default("0"),
   measurementId: varchar("measurement_id", { length: 36 }),
+  familyMemberId: varchar("family_member_id", { length: 36 }),
+  personName: varchar("person_name", { length: 100 }),
+  relation: varchar("relation", { length: 50 }),
   measurementValues: json("measurement_values").$type<Record<string, string>>(),
   position: int("position").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -228,6 +262,22 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   updatedAt: true,
 });
 
+export const insertMeasurementSessionSchema = createInsertSchema(measurementSessions).omit({
+  id: true,
+  tailorId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertMeasurementItemSchema = createInsertSchema(measurementItems).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertMeasurementValueSchema = createInsertSchema(measurementValues).omit({
+  id: true,
+});
+
 export const insertInvoiceSchema = createInsertSchema(invoices).omit({
   id: true,
   createdAt: true,
@@ -256,6 +306,9 @@ export type FamilyMember = typeof familyMembers.$inferSelect;
 export type ProductType = typeof productTypes.$inferSelect;
 export type CustomMeasurementField = typeof customMeasurementFields.$inferSelect;
 export type Measurement = typeof measurements.$inferSelect;
+export type MeasurementSession = typeof measurementSessions.$inferSelect;
+export type MeasurementItem = typeof measurementItems.$inferSelect;
+export type MeasurementValue = typeof measurementValues.$inferSelect;
 export type Invoice = typeof invoices.$inferSelect;
 export type InvoiceItem = typeof invoiceItems.$inferSelect;
 export type Counter = typeof counters.$inferSelect;

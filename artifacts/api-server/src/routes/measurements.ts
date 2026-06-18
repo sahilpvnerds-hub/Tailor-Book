@@ -2,7 +2,15 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@workspace/db";
-import { measurements, customers } from "@workspace/db/schema";
+import {
+  customers,
+  familyMembers,
+  measurementItems,
+  measurementSessions,
+  measurementValues,
+  measurements,
+  productTypes,
+} from "@workspace/db/schema";
 import { authMiddleware } from "../middlewares/auth";
 import { getParam } from "../lib/params";
 
@@ -25,10 +33,42 @@ const customMeasurementSchema = z
   .optional()
   .default([]);
 
+const standardMeasurementFields = [
+  "chest",
+  "shoulder",
+  "neck",
+  "sleeve",
+  "waist",
+  "length",
+  "hip",
+  "thigh",
+  "pantLength",
+  "bottomWidth",
+  "armhole",
+  "wrist",
+] as const;
+
+const measurementValuesSchema = z
+  .record(z.string(), decimalString)
+  .optional()
+  .default({});
+
+const measurementItemSchema = z.object({
+  productTypeId: z.string().nullable().optional(),
+  productType: z.string().min(1),
+  values: measurementValuesSchema,
+  customMeasurements: customMeasurementSchema,
+  notes: z.string().nullable().optional(),
+  photos: z.array(z.string()).optional().default([]),
+});
+
 const createSchema = z.object({
   customerId: z.string().min(1),
-  productType: z.string().min(1),
+  familyMemberId: z.string().nullable().optional(),
+  productType: z.string().min(1).optional(),
+  productTypeId: z.string().nullable().optional(),
   measurementDate: z.string().optional(),
+  date: z.string().optional(),
   deliveryDate: z.string().nullable().optional(),
   chest: decimalString,
   shoulder: decimalString,
@@ -45,19 +85,81 @@ const createSchema = z.object({
   customMeasurements: customMeasurementSchema,
   notes: z.string().nullable().optional(),
   photos: z.array(z.string()).optional().default([]),
+  items: z.array(measurementItemSchema).optional(),
 });
 
 const updateSchema = createSchema.partial();
 
+type ParsedCreate = z.infer<typeof createSchema>;
+type NormalizedItem = z.infer<typeof measurementItemSchema>;
+
+function toDateOnly(raw?: string | null) {
+  if (!raw) return undefined;
+  return raw.slice(0, 10);
+}
+
+function getPositiveNumber(value: unknown): string | null {
+  if (value === undefined || value === null || value === "") return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return String(value);
+}
+
+function normalizeItems(d: ParsedCreate): NormalizedItem[] {
+  if (d.items?.length) return d.items;
+  const values: Record<string, string | null | undefined> = {};
+  for (const key of standardMeasurementFields) {
+    values[key] = d[key];
+  }
+  return [
+    {
+      productTypeId: d.productTypeId,
+      productType: d.productType ?? "",
+      values,
+      customMeasurements: d.customMeasurements ?? [],
+      notes: d.notes,
+      photos: d.photos ?? [],
+    },
+  ];
+}
+
+async function loadSessionDetail(sessionId: string) {
+  const [session] = await db
+    .select()
+    .from(measurementSessions)
+    .where(eq(measurementSessions.id, sessionId))
+    .limit(1);
+  if (!session) return null;
+
+  const items = await db
+    .select()
+    .from(measurementItems)
+    .where(eq(measurementItems.measurementSessionId, sessionId));
+
+  const itemsWithValues = [];
+  for (const item of items) {
+    const values = await db
+      .select()
+      .from(measurementValues)
+      .where(eq(measurementValues.measurementItemId, item.id));
+    itemsWithValues.push({ ...item, values });
+  }
+
+  return { ...session, items: itemsWithValues };
+}
+
 // ---- GET /api/measurements -------------------------------------------------
 router.get("/", async (req: Request, res: Response) => {
-  const { customerId } = req.query as { customerId?: string };
+  const { customerId, familyMemberId } = req.query as { customerId?: string; familyMemberId?: string };
   const conditions = [];
   if (req.user!.role !== "admin") {
     conditions.push(eq(measurements.tailorId, req.user!.id));
   }
   if (customerId) {
     conditions.push(eq(measurements.customerId, customerId));
+  }
+  if (familyMemberId) {
+    conditions.push(eq(measurements.familyMemberId, familyMemberId));
   }
   const rows = await db
     .select()
@@ -69,8 +171,9 @@ router.get("/", async (req: Request, res: Response) => {
 
 // ---- GET /api/measurements/latest ----------------------------------------
 router.get("/latest", async (req: Request, res: Response) => {
-  const { customerId, productType } = req.query as {
+  const { customerId, familyMemberId, productType } = req.query as {
     customerId?: string;
+    familyMemberId?: string;
     productType?: string;
   };
   if (!customerId || !productType) {
@@ -84,6 +187,9 @@ router.get("/latest", async (req: Request, res: Response) => {
   if (req.user!.role !== "admin") {
     conditions.push(eq(measurements.tailorId, req.user!.id));
   }
+  if (familyMemberId) {
+    conditions.push(eq(measurements.familyMemberId, familyMemberId));
+  }
   const [latest] = await db
     .select()
     .from(measurements)
@@ -95,6 +201,42 @@ router.get("/latest", async (req: Request, res: Response) => {
     return;
   }
   res.json(latest);
+});
+
+// ---- GET /api/measurements/sessions --------------------------------------
+router.get("/sessions", async (req: Request, res: Response) => {
+  const { customerId, familyMemberId } = req.query as { customerId?: string; familyMemberId?: string };
+  const conditions = [];
+  if (req.user!.role !== "admin") {
+    conditions.push(eq(measurementSessions.tailorId, req.user!.id));
+  }
+  if (customerId) {
+    conditions.push(eq(measurementSessions.customerId, customerId));
+  }
+  if (familyMemberId) {
+    conditions.push(eq(measurementSessions.familyMemberId, familyMemberId));
+  }
+  const rows = await db
+    .select()
+    .from(measurementSessions)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(measurementSessions.measurementDate), desc(measurementSessions.createdAt));
+  res.json(rows);
+});
+
+// ---- GET /api/measurements/sessions/:id ----------------------------------
+router.get("/sessions/:id", async (req: Request, res: Response) => {
+  const id = getParam(req, "id");
+  const detail = await loadSessionDetail(id);
+  if (!detail) {
+    res.status(404).json({ error: "Measurement session not found" });
+    return;
+  }
+  if (!ensureOwnership(req, detail.tailorId)) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  res.json(detail);
 });
 
 // ---- GET /api/measurements/:id --------------------------------------------
@@ -124,6 +266,29 @@ router.post("/", async (req: Request, res: Response) => {
     return;
   }
   const d = body.data;
+  const items = normalizeItems(d);
+  if (items.length === 0) {
+    res.status(400).json({ error: "At least one product is required" });
+    return;
+  }
+
+  const invalidProduct = items.find((item) => !item.productType.trim());
+  if (invalidProduct) {
+    res.status(400).json({ error: "Every product must have a product type" });
+    return;
+  }
+
+  for (const [idx, item] of items.entries()) {
+    const hasValue =
+      Object.values(item.values).some((value) => getPositiveNumber(value) !== null) ||
+      item.customMeasurements.some((m) => m.value > 0);
+    if (!hasValue) {
+      res.status(400).json({
+        error: `Product ${idx + 1} (${item.productType}) must include at least one valid measurement`,
+      });
+      return;
+    }
+  }
 
   const [cust] = await db
     .select()
@@ -139,8 +304,37 @@ router.post("/", async (req: Request, res: Response) => {
     return;
   }
 
-  const id = crypto.randomUUID();
-  const dateStr = d.measurementDate ?? new Date().toISOString().slice(0, 10);
+  if (d.familyMemberId) {
+    const [member] = await db
+      .select()
+      .from(familyMembers)
+      .where(eq(familyMembers.id, d.familyMemberId))
+      .limit(1);
+    if (!member || member.primaryCustomerId !== d.customerId) {
+      res.status(400).json({ error: "Family member does not belong to this customer" });
+      return;
+    }
+    if (!ensureOwnership(req, member.tailorId)) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+  }
+
+  for (const item of items) {
+    if (!item.productTypeId) continue;
+    const [pt] = await db
+      .select()
+      .from(productTypes)
+      .where(eq(productTypes.id, item.productTypeId))
+      .limit(1);
+    if (!pt || !ensureOwnership(req, pt.tailorId)) {
+      res.status(400).json({ error: `Invalid product type: ${item.productType}` });
+      return;
+    }
+  }
+
+  const sessionId = crypto.randomUUID();
+  const dateStr = toDateOnly(d.measurementDate ?? d.date) ?? new Date().toISOString().slice(0, 10);
 
   // Timezone-safe past-date limit (24 hours grace)
   const graceLimit = new Date();
@@ -156,37 +350,93 @@ router.post("/", async (req: Request, res: Response) => {
     res.status(400).json({ error: "Delivery Date cannot be in the past" });
     return;
   }
-  await db.insert(measurements).values({
-    id,
-    customerId: d.customerId,
-    tailorId: req.user!.id,
-    customerName: cust.name,
-    productType: d.productType,
-    measurementDate: new Date(dateStr),
-    deliveryDate: d.deliveryDate ? new Date(d.deliveryDate) : null,
-    chest: d.chest ?? null,
-    shoulder: d.shoulder ?? null,
-    neck: d.neck ?? null,
-    sleeve: d.sleeve ?? null,
-    waist: d.waist ?? null,
-    length: d.length ?? null,
-    hip: d.hip ?? null,
-    thigh: d.thigh ?? null,
-    pantLength: d.pantLength ?? null,
-    bottomWidth: d.bottomWidth ?? null,
-    armhole: d.armhole ?? null,
-    wrist: d.wrist ?? null,
-    customMeasurements: d.customMeasurements ?? [],
-    notes: d.notes ?? null,
-    photos: d.photos ?? [],
+  const createdMeasurementIds = await db.transaction(async (tx) => {
+    await tx.insert(measurementSessions).values({
+      id: sessionId,
+      customerId: d.customerId,
+      familyMemberId: d.familyMemberId ?? null,
+      tailorId: req.user!.id,
+      measurementDate: new Date(dateStr),
+      deliveryDate: d.deliveryDate ? new Date(toDateOnly(d.deliveryDate)!) : null,
+      notes: d.notes ?? null,
+      photos: d.photos ?? [],
+      createdBy: req.user!.id,
+    });
+
+    const legacyIds: string[] = [];
+    for (const item of items) {
+      const itemId = crypto.randomUUID();
+      await tx.insert(measurementItems).values({
+        id: itemId,
+        measurementSessionId: sessionId,
+        productTypeId: item.productTypeId ?? null,
+        productType: item.productType,
+      });
+
+      const normalizedValues = Object.entries(item.values)
+        .map(([fieldName, fieldValue]) => ({ fieldName, fieldValue: getPositiveNumber(fieldValue) }))
+        .filter((value): value is { fieldName: string; fieldValue: string } => value.fieldValue !== null);
+
+      const customValues = item.customMeasurements
+        .filter((m) => m.value > 0)
+        .map((m) => ({ fieldName: m.label, fieldValue: String(m.value) }));
+
+      const allValues = [...normalizedValues, ...customValues];
+      if (allValues.length > 0) {
+        await tx.insert(measurementValues).values(
+          allValues.map((value) => ({
+            id: crypto.randomUUID(),
+            measurementItemId: itemId,
+            fieldName: value.fieldName,
+            fieldValue: value.fieldValue,
+          }))
+        );
+      }
+
+      const legacyId = crypto.randomUUID();
+      legacyIds.push(legacyId);
+      await tx.insert(measurements).values({
+        id: legacyId,
+        customerId: d.customerId,
+        familyMemberId: d.familyMemberId ?? null,
+        measurementSessionId: sessionId,
+        tailorId: req.user!.id,
+        customerName: cust.name,
+        productType: item.productType,
+        measurementDate: new Date(dateStr),
+        deliveryDate: d.deliveryDate ? new Date(toDateOnly(d.deliveryDate)!) : null,
+        chest: getPositiveNumber(item.values.chest),
+        shoulder: getPositiveNumber(item.values.shoulder),
+        neck: getPositiveNumber(item.values.neck),
+        sleeve: getPositiveNumber(item.values.sleeve),
+        waist: getPositiveNumber(item.values.waist),
+        length: getPositiveNumber(item.values.length),
+        hip: getPositiveNumber(item.values.hip),
+        thigh: getPositiveNumber(item.values.thigh),
+        pantLength: getPositiveNumber(item.values.pantLength),
+        bottomWidth: getPositiveNumber(item.values.bottomWidth),
+        armhole: getPositiveNumber(item.values.armhole),
+        wrist: getPositiveNumber(item.values.wrist),
+        customMeasurements: item.customMeasurements ?? [],
+        notes: item.notes ?? d.notes ?? null,
+        photos: item.photos?.length ? item.photos : d.photos ?? [],
+      });
+    }
+    return legacyIds;
   });
 
-  const [m] = await db
+  const created = await db
     .select()
     .from(measurements)
-    .where(eq(measurements.id, id))
-    .limit(1);
-  res.status(201).json(m);
+    .where(eq(measurements.measurementSessionId, sessionId));
+
+  if (!d.items || createdMeasurementIds.length === 1) {
+    res.status(201).json(created[0]);
+    return;
+  }
+
+  const session = await loadSessionDetail(sessionId);
+  res.status(201).json({ ...session, measurements: created });
 });
 
 // ---- PATCH /api/measurements/:id -----------------------------------------

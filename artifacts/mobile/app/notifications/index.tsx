@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -78,7 +79,7 @@ function EmptyState() {
 export default function NotificationsScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const { notifications, markNotificationRead, markAllRead } = useData();
+  const { notifications, markNotificationRead, markAllRead, clearAllNotifications } = useData();
   const topPad = Platform.OS === "web" ? 67 : 0;
 
   const unread = notifications.filter((n) => !n.isRead).length;
@@ -95,6 +96,13 @@ export default function NotificationsScreen() {
     if (notif.invoiceId) {
       router.push(`/invoices/${notif.invoiceId}` as any);
     }
+  }
+
+  function confirmClearAll() {
+    Alert.alert("Clear All Notifications", "Are you sure you want to clear all notifications?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Clear", style: "destructive", onPress: clearAllNotifications },
+    ]);
   }
 
   return (
@@ -121,9 +129,16 @@ export default function NotificationsScreen() {
               <Text style={{ fontSize: 12, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>{unread}</Text>
             </View>
           )}
-          {unread > 0 && (
-            <Pressable onPress={markAllRead} hitSlop={8} style={{ backgroundColor: c.muted, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
-              <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.primary }}>Mark all read</Text>
+          {notifications.length > 0 && (
+            <Pressable onPress={markAllRead} hitSlop={8} style={{ backgroundColor: c.muted, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <MaterialIcons name="done-all" size={14} color={c.primary} />
+              <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.primary }}>Mark All Read</Text>
+            </Pressable>
+          )}
+          {notifications.length > 0 && (
+            <Pressable onPress={confirmClearAll} hitSlop={8} style={{ backgroundColor: c.muted, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <MaterialIcons name="delete-outline" size={14} color={c.destructive} />
+              <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.destructive }}>Clear All</Text>
             </Pressable>
           )}
         </View>

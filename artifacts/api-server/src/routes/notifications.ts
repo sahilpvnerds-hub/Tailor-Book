@@ -102,6 +102,18 @@ router.patch("/read-all", async (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
+// ---- DELETE /api/notifications/clear-all --------------------------------
+router.delete("/clear-all", async (req: Request, res: Response) => {
+  await db
+    .delete(notifications)
+    .where(
+      req.user!.role === "admin"
+        ? undefined
+        : eq(notifications.tailorId, req.user!.id),
+    );
+  res.json({ ok: true });
+});
+
 // ---- DELETE /api/notifications/:id --------------------------------------
 router.delete("/:id", async (req: Request, res: Response) => {
   const id = getParam(req, "id");

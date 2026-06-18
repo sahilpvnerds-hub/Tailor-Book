@@ -56,6 +56,7 @@ interface DataContextType {
   addCustomField: (fieldName: string) => Promise<CustomMeasurementField>;
   deleteCustomField: (id: string) => Promise<void>;
   addMeasurement: (data: Omit<Measurement, "id" | "tailorId" | "createdAt">) => Promise<Measurement>;
+  addMeasurementSession: (items: Omit<Measurement, "id" | "tailorId" | "createdAt">[]) => Promise<Measurement[]>;
   updateMeasurement: (id: string, data: Partial<Omit<Measurement, "id" | "tailorId" | "createdAt">>) => Promise<void>;
   deleteMeasurement: (id: string) => Promise<void>;
   getCustomerMeasurements: (customerId: string) => Measurement[];
@@ -74,6 +75,7 @@ interface DataContextType {
   getCustomerInvoices: (customerId: string) => Invoice[];
   markNotificationRead: (id: string) => Promise<void>;
   markAllRead: () => Promise<void>;
+  clearAllNotifications: () => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType>({} as DataContextType);
@@ -232,6 +234,26 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return m;
   }
 
+  async function addMeasurementSession(items: Omit<Measurement, "id" | "tailorId" | "createdAt">[]) {
+    if (!user) throw new Error("Not authenticated");
+    if (items.length === 0) throw new Error("At least one product is required");
+    const all = await rawGet<Measurement>(STORAGE_KEYS.MEASUREMENTS);
+    const now = new Date().toISOString();
+    const measurementSessionId = generateId();
+    const created: Measurement[] = items.map((data) => ({
+      id: generateId(),
+      tailorId: user.id,
+      createdAt: now,
+      measurementSessionId,
+      ...data,
+      customMeasurements: data.customMeasurements ?? [],
+      photos: data.photos ?? [],
+    }));
+    await saveAllMeasurements([...all, ...created]);
+    setMeasurements((prev) => [...created, ...prev]);
+    return created;
+  }
+
   async function updateMeasurement(
     id: string,
     data: Partial<Omit<Measurement, "id" | "tailorId" | "createdAt">>
@@ -298,6 +320,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       getNextOrderLabel(),
     ]);
     const subtotal = data.items.reduce((s, it) => s + it.price * it.quantity, 0);
+    const customer = customers.find((c) => c.id === data.customerId);
+    const items = data.items.map((item) => {
+      const member = item.familyMemberId
+        ? familyMembers.find((fm) => fm.id === item.familyMemberId)
+        : undefined;
+      return {
+        ...item,
+        personName: member?.name ?? item.personName ?? item.familyMemberName ?? customer?.name ?? data.customerName,
+        relation: member?.relation ?? item.relation ?? "self",
+        familyMemberName: member?.name ?? item.familyMemberName,
+      };
+    });
     const inv: Invoice = {
       id: generateId(),
       invoiceNumber,
@@ -308,6 +342,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       status: "pending",
       createdAt: new Date().toISOString(),
       ...data,
+      items,
     };
     await saveAllInvoices([...all, inv]);
     setInvoices((prev) => [inv, ...prev]);
@@ -345,6 +380,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
   }
 
+  async function clearAllNotifications() {
+    if (!user) return;
+    const all = await rawGet<Notification>(STORAGE_KEYS.NOTIFICATIONS);
+    await saveAllNotifications(all.filter((n) => n.tailorId !== user.id));
+    setNotifications([]);
+  }
+
   return (
     <DataContext.Provider value={{
       customers, familyMembers, measurements, invoices,
@@ -354,10 +396,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       addFamilyMember, deleteFamilyMember,
       addProductType, updateProductType, deleteProductType,
       addCustomField, deleteCustomField,
-      addMeasurement, updateMeasurement, deleteMeasurement, getCustomerMeasurements,
+      addMeasurement, addMeasurementSession, updateMeasurement, deleteMeasurement, getCustomerMeasurements,
       getCustomerMeasurementsByProduct, getCustomerProducts,
       createInvoice, updateInvoiceStatus, deleteInvoice, getCustomerInvoices,
-      markNotificationRead, markAllRead,
+      markNotificationRead, markAllRead, clearAllNotifications,
     }}>
       {children}
     </DataContext.Provider>

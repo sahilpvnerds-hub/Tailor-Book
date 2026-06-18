@@ -29,6 +29,20 @@
       "when": 1781685000000,
       "tag": "0003_pending_otps",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": 7,
+      "when": 1781740800000,
+      "tag": "0004_measurement_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": 7,
+      "when": 1781742600000,
+      "tag": "0005_invoice_item_people",
+      "breakpoints": true
     }
   ]
 }

@@ -135,6 +135,8 @@ CREATE TABLE IF NOT EXISTS custom_measurement_fields (
 CREATE TABLE IF NOT EXISTS measurements (
   id              VARCHAR(36)  NOT NULL PRIMARY KEY,
   customer_id     VARCHAR(36)  NOT NULL,
+  family_member_id VARCHAR(36) NULL,
+  measurement_session_id VARCHAR(36) NULL,
   tailor_id       VARCHAR(36)  NOT NULL,
   customer_name   VARCHAR(100) NOT NULL,
   product_type    VARCHAR(50)  NOT NULL,
@@ -171,9 +173,78 @@ CREATE TABLE IF NOT EXISTS measurements (
     ON DELETE CASCADE,
 
   INDEX idx_measurements_customer (customer_id),
+  INDEX idx_measurements_family_member (family_member_id),
+  INDEX idx_measurements_session  (measurement_session_id),
   INDEX idx_measurements_tailor   (tailor_id),
   INDEX idx_measurements_product  (customer_id, product_type),
   INDEX idx_measurements_date     (measurement_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- =============================================================================
+-- Tables: measurement_sessions, measurement_items, measurement_values
+-- Normalized multi-product measurement sessions. Legacy measurements rows remain
+-- for backward compatibility with existing screens and invoices.
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS measurement_sessions (
+  id                  VARCHAR(36) NOT NULL PRIMARY KEY,
+  customer_id          VARCHAR(36) NOT NULL,
+  family_member_id     VARCHAR(36) NULL,
+  tailor_id            VARCHAR(36) NOT NULL,
+  measurement_date     DATE NOT NULL,
+  delivery_date        DATE NULL,
+  notes                TEXT NULL,
+  photos               JSON NULL DEFAULT ('[]'),
+  created_by           VARCHAR(36) NOT NULL,
+  created_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  CONSTRAINT fk_measurement_sessions_customer
+    FOREIGN KEY (customer_id) REFERENCES customers(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_measurement_sessions_family_member
+    FOREIGN KEY (family_member_id) REFERENCES family_members(id)
+    ON DELETE SET NULL,
+  CONSTRAINT fk_measurement_sessions_tailor
+    FOREIGN KEY (tailor_id) REFERENCES users(id)
+    ON DELETE CASCADE,
+
+  INDEX idx_measurement_sessions_customer (customer_id),
+  INDEX idx_measurement_sessions_family_member (family_member_id),
+  INDEX idx_measurement_sessions_tailor (tailor_id),
+  INDEX idx_measurement_sessions_date (measurement_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS measurement_items (
+  id                      VARCHAR(36) NOT NULL PRIMARY KEY,
+  measurement_session_id  VARCHAR(36) NOT NULL,
+  product_type_id         VARCHAR(36) NULL,
+  product_type            VARCHAR(100) NOT NULL,
+  created_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT fk_measurement_items_session
+    FOREIGN KEY (measurement_session_id) REFERENCES measurement_sessions(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_measurement_items_product_type
+    FOREIGN KEY (product_type_id) REFERENCES product_types(id)
+    ON DELETE SET NULL,
+
+  INDEX idx_measurement_items_session (measurement_session_id),
+  INDEX idx_measurement_items_product_type (product_type_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS measurement_values (
+  id                   VARCHAR(36) NOT NULL PRIMARY KEY,
+  measurement_item_id  VARCHAR(36) NOT NULL,
+  field_name           VARCHAR(100) NOT NULL,
+  field_value          DECIMAL(8,2) NOT NULL,
+
+  CONSTRAINT fk_measurement_values_item
+    FOREIGN KEY (measurement_item_id) REFERENCES measurement_items(id)
+    ON DELETE CASCADE,
+
+  INDEX idx_measurement_values_item (measurement_item_id),
+  INDEX idx_measurement_values_field (field_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
@@ -222,6 +293,9 @@ CREATE TABLE IF NOT EXISTS invoice_items (
   quantity           INT           NOT NULL DEFAULT 1,
   price              DECIMAL(12,2) NOT NULL DEFAULT 0,
   measurement_id     VARCHAR(36)   NULL,
+  family_member_id   VARCHAR(36)   NULL,
+  person_name        VARCHAR(100)  NULL,
+  relation           VARCHAR(50)   NULL,
   measurement_values JSON          NULL,
   position           INT           NOT NULL DEFAULT 0,
   created_at         TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -231,6 +305,7 @@ CREATE TABLE IF NOT EXISTS invoice_items (
     ON DELETE CASCADE,
 
   INDEX idx_invoice_items_invoice     (invoice_id),
+  INDEX idx_invoice_items_family_member (family_member_id),
   INDEX idx_invoice_items_measurement (measurement_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
