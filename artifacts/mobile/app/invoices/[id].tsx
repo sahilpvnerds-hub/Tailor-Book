@@ -325,6 +325,29 @@ export default function InvoiceDetailScreen() {
               <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>Total</Text>
               <Text style={{ fontSize: 18, fontFamily: "Inter_700Bold", color: "#059669" }}>{formatCurrency(invoice.total)}</Text>
             </View>
+            {(invoice.paidAmount ?? 0) > 0 && (
+              <>
+                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                  <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: "#059669" }}>Advance Paid</Text>
+                  <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: "#059669" }}>-{formatCurrency(invoice.paidAmount ?? 0)}</Text>
+                </View>
+                <View style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  backgroundColor: (invoice.total - (invoice.paidAmount ?? 0)) <= 0 ? "#D1FAE5" : "#FEF3C7",
+                  borderRadius: 8, padding: 10,
+                }}>
+                  <Text style={{ fontSize: 15, fontFamily: "Inter_700Bold", color: (invoice.total - (invoice.paidAmount ?? 0)) <= 0 ? "#059669" : "#D97706" }}>
+                    {(invoice.total - (invoice.paidAmount ?? 0)) <= 0 ? "✓ Fully Paid" : "Balance Due"}
+                  </Text>
+                  {(invoice.total - (invoice.paidAmount ?? 0)) > 0 && (
+                    <Text style={{ fontSize: 16, fontFamily: "Inter_800ExtraBold", color: "#D97706" }}>
+                      {formatCurrency(invoice.total - (invoice.paidAmount ?? 0))}
+                    </Text>
+                  )}
+                </View>
+              </>
+            )}
           </View>
         </Card>
 

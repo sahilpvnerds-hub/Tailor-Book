@@ -181,18 +181,18 @@ export default function MeasurementDetailScreen() {
         <View style={{ flexDirection: "row", gap: 10 }}>
           <Button label="Edit Measurement" onPress={openEdit} variant="outline" style={{ flex: 1 }} icon="edit" />
           <Button
-            label="Create Invoice"
+            label="Create Order"
             onPress={() => {
               const cust = customer ?? customers.find((cu) => cu.id === measurement.customerId);
               if (cust) {
                 router.push({
-                  pathname: "/invoices/new",
-                  params: { customerId: cust.id, customerName: cust.name, customerMobile: cust.mobile, measurementId: measurement.id, productType: measurement.productType },
+                  pathname: "/orders/new",
+                  params: { customerId: cust.id, measurementId: measurement.id },
                 });
               }
             }}
             style={{ flex: 1 }}
-            icon="receipt"
+            icon="shopping-bag"
           />
         </View>
 

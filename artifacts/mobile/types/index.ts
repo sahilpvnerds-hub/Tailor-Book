@@ -1,11 +1,22 @@
 export type UserRole = "admin" | "tailor";
 export type UserStatus = "pending" | "approved" | "rejected";
 export type InvoiceStatus = "pending" | "completed" | "cancelled";
+// Customer gender is now only male / female (per the 0006 enhancements).
+// Tailor `speciality` keeps `unisex` for cross-gender tailors.
 export type Gender = "male" | "female" | "unisex";
 export type Speciality = "male" | "female" | "unisex";
 export type Relation =
   | "father" | "mother" | "son" | "daughter"
   | "wife" | "husband" | "brother" | "sister" | "other";
+export type MeasurementUnit = "inches" | "cm";
+export type PreferredLanguage = "en" | "hi" | "gu";
+
+/** Sub-type / feature option for a product (e.g. "Half Boy Shirt", "V-Type Kurta") */
+export interface ProductFeature {
+  label: string;
+  /** Which gender this feature applies to; undefined means all genders. */
+  gender?: "male" | "female" | "both";
+}
 
 export interface User {
   id: string;
@@ -22,6 +33,11 @@ export interface User {
   status: UserStatus;
   emailVerifiedAt?: string | null;
   onboardingComplete?: boolean;
+  /** ISO-639-1 language code — drives the i18n locale on app load. */
+  preferredLanguage?: PreferredLanguage;
+  /** Tailor shop GPS coordinates captured during registration / profile. */
+  latitude?: number | null;
+  longitude?: number | null;
   createdAt: string;
 }
 
@@ -36,6 +52,10 @@ export interface RegisterData {
   city?: string;
   state?: string;
   emailVerifiedAt?: string;
+  /** New in 0006 — language / GPS captured during registration. */
+  preferredLanguage?: PreferredLanguage;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface UpdateProfileData {
@@ -49,6 +69,10 @@ export interface UpdateProfileData {
   avatarUri?: string;
   speciality?: Speciality;
   onboardingComplete?: boolean;
+  /** New in 0006 — language / GPS for the shop. */
+  preferredLanguage?: PreferredLanguage;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface Customer {
@@ -62,6 +86,9 @@ export interface Customer {
   address?: string;
   notes?: string;
   profilePicture?: string;
+  /** New in 0006 — optional GPS for the customer's location. */
+  latitude?: number | null;
+  longitude?: number | null;
   createdAt: string;
 }
 
@@ -80,6 +107,10 @@ export interface ProductType {
   tailorId: string;
   name: string;
   amount: number;
+  /** New in 0006 — body-measurement unit for this product. */
+  unit?: MeasurementUnit;
+  /** Sub-type feature options (e.g. "Half Boy Shirt", "V-Type Kurta") */
+  features?: ProductFeature[];
   createdAt: string;
   updatedAt: string;
 }
@@ -109,6 +140,8 @@ export interface Measurement {
   deliveryDate?: string;
   productType: string;
   productTypeId?: string;
+  /** Optional sub-type/feature selected at measurement time */
+  featureLabel?: string | null;
   chest?: number;
   shoulder?: number;
   neck?: number;
@@ -148,6 +181,7 @@ export interface Invoice {
   id: string;
   invoiceNumber: string;
   orderLabel: string;
+  orderId?: string | null;
   tailorId: string;
   customerId: string;
   customerName: string;
@@ -155,6 +189,8 @@ export interface Invoice {
   items: InvoiceItem[];
   subtotal: number;
   total: number;
+  /** Amount already paid (advance) carried over from the order */
+  paidAmount?: number;
   status: InvoiceStatus;
   deliveryDate?: string;
   notes?: string;
@@ -187,4 +223,43 @@ export interface PendingOtp {
   otp: string;
   expiresAt: number; // epoch ms
   formData: Record<string, string>;
+}
+
+// ── Orders ─────────────────────────────────────────────────────────────
+export type OrderStatus = "pending" | "completed" | "cancelled";
+
+export interface OrderItem {
+  id: string;
+  orderId: string;
+  productType: string;
+  featureLabel?: string | null;
+  quantity: number;
+  price: number;
+  measurementId?: string | null;
+  familyMemberId?: string | null;
+  personName?: string | null;
+  relation?: string | null;
+  measurementValues?: Record<string, string> | null;
+  invoiceId?: string | null;
+  createdAt: string;
+}
+
+export interface Order {
+  id: string;
+  orderNumber: string;
+  tailorId: string;
+  customerId: string;
+  customerName: string;
+  customerMobile: string;
+  status: OrderStatus;
+  deliveryDate?: string | null;
+  notes?: string | null;
+  totalAmount: number;
+  /** Advance / deposit paid at the time of order creation */
+  advanceAmount?: number;
+  /** Remaining balance = totalAmount - advanceAmount */
+  balanceDue?: number;
+  createdAt: string;
+  updatedAt: string;
+  items?: OrderItem[];
 }

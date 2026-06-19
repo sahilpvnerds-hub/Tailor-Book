@@ -8,6 +8,7 @@ import { useData } from "@/context/DataContext";
 import { EmptyState } from "@/components/ui";
 import { formatDate } from "@/utils/storage";
 import colors from "@/constants/colors";
+import { useTranslation } from "@/utils/i18n";
 
 const RELATION_FILTERS = ["all", "self", "wife", "son", "daughter"] as const;
 const DEFAULT_PRODUCT_FILTERS = ["Shirt", "Pant", "Blazer", "Kurta", "Lehenga"];
@@ -20,6 +21,7 @@ export default function MeasurementsScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { measurements, familyMembers, customers, productTypes } = useData();
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [relationFilter, setRelationFilter] = useState<(typeof RELATION_FILTERS)[number]>("all");
   const [productFilter, setProductFilter] = useState("all");
@@ -93,7 +95,7 @@ export default function MeasurementsScreen() {
       >
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
           <Text style={{ fontSize: 22, fontFamily: "Inter_700Bold", color: c.foreground }}>
-            Measurements
+            {t("measurements.title")}
           </Text>
           <Pressable
             onPress={() => router.push("/measurements/new")}
@@ -117,7 +119,7 @@ export default function MeasurementsScreen() {
           <MaterialIcons name="search" size={18} color={c.mutedForeground} />
           <TextInput
             style={{ flex: 1, fontSize: 15, fontFamily: "Inter_400Regular", color: c.foreground, paddingVertical: 10 }}
-            placeholder="Search by customer or product..."
+            placeholder={t("measurements.searchPlaceholder") + "..."}
             placeholderTextColor={c.mutedForeground}
             value={search}
             onChangeText={setSearch}
@@ -138,7 +140,7 @@ export default function MeasurementsScreen() {
                 style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 18, backgroundColor: selected ? c.primary : c.muted, borderWidth: 1, borderColor: selected ? c.primary : c.border }}
               >
                 <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: selected ? c.primaryForeground : c.mutedForeground }}>
-                  {filter === "all" ? "All" : titleCase(filter)}
+                  {filter === "all" ? t("filters.all") : t(`customers.relations.${filter}`)}
                 </Text>
               </Pressable>
             );
@@ -154,7 +156,7 @@ export default function MeasurementsScreen() {
                 style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 18, backgroundColor: selected ? c.primary : c.card, borderWidth: 1, borderColor: selected ? c.primary : c.border }}
               >
                 <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: selected ? c.primaryForeground : c.mutedForeground }}>
-                  {filter === "all" ? "All Products" : filter}
+                  {filter === "all" ? t("filters.allProducts") : filter}
                 </Text>
               </Pressable>
             );
@@ -169,9 +171,9 @@ export default function MeasurementsScreen() {
         {grouped.length === 0 ? (
           <EmptyState
             icon="straighten"
-            title={search || relationFilter !== "all" || productFilter !== "all" ? "No results found" : "No measurements yet"}
-            subtitle={search ? "Try a different search" : "Record measurements for your customers"}
-            action={!search && relationFilter === "all" && productFilter === "all" ? { label: "Add Measurement", onPress: () => router.push("/measurements/new") } : undefined}
+            title={search || relationFilter !== "all" || productFilter !== "all" ? t("customers.noResults") : t("notFound.noMeasurementsYet")}
+            subtitle={search ? t("customers.emptySearch") : t("notFound.recordMeasurementsHint")}
+            action={!search && relationFilter === "all" && productFilter === "all" ? { label: t("notFound.addMeasurement"), onPress: () => router.push("/measurements/new") } : undefined}
           />
         ) : (
           grouped.map((group) => (
@@ -180,10 +182,10 @@ export default function MeasurementsScreen() {
                 <MaterialIcons name="person" size={18} color={c.primary} />
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: 15, fontFamily: "Inter_700Bold", color: c.foreground }}>
-                    {group.personName} ({titleCase(group.relation)})
+                    {group.personName} ({t(`customers.relations.${group.relation}`, { defaultValue: titleCase(group.relation) })})
                   </Text>
                   <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
-                    Customer: {group.customerName}
+                    {t("labels.customer")}: {group.customerName}
                   </Text>
                 </View>
               </View>
@@ -203,12 +205,37 @@ export default function MeasurementsScreen() {
                   })}
                 >
                   <MaterialIcons name="straighten" size={18} color={c.mutedForeground} />
-                  <Text style={{ flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.foreground }}>
-                    {item.productType}
-                  </Text>
-                  <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
-                    {formatDate(item.date ?? item.measurementDate ?? item.createdAt)}
-                  </Text>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.foreground }}>
+                        {item.productType}
+                      </Text>
+                      {item.featureLabel ? (
+                        <View style={{ backgroundColor: c.primary + "18", borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                          <Text style={{ fontSize: 10, fontFamily: "Inter_600SemiBold", color: c.primary }}>
+                            {item.featureLabel}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                        <MaterialIcons name="event" size={11} color={c.mutedForeground} />
+                        <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
+                          {formatDate(item.date ?? item.measurementDate ?? item.createdAt)}
+                        </Text>
+                      </View>
+                      {item.deliveryDate ? (
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                          <MaterialIcons name="local-shipping" size={11} color="#059669" />
+                          <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: "#059669" }}>
+                            {formatDate(item.deliveryDate)}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
+                  <MaterialIcons name="chevron-right" size={18} color={c.mutedForeground} />
                 </Pressable>
               ))}
             </View>

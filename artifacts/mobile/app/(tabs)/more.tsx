@@ -14,6 +14,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 import { Card, Divider } from "@/components/ui";
+import { useTranslation } from "@/utils/i18n";
 import colors from "@/constants/colors";
 
 function MenuItem({
@@ -77,14 +78,15 @@ function MenuItem({
 export default function MoreScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const { user, logout } = useAuth();
   const topPad = Platform.OS === "web" ? 67 : 0;
 
   function handleLogout() {
-    Alert.alert("Sign Out", "This will clear all your data from this device.", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("more.signOut"), t("more.signOutConfirmDialog"), [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text: "Sign Out",
+        text: t("more.signOut"),
         style: "destructive",
         onPress: async () => {
           await logout();
@@ -118,7 +120,6 @@ export default function MoreScreen() {
           opacity: pressed ? 0.92 : 1,
         })}
       >
-        {/* Avatar */}
         <View
           style={{
             width: 58,
@@ -141,30 +142,13 @@ export default function MoreScreen() {
           </Text>
         </View>
 
-        {/* Info */}
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 17, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>
             {user?.name}
           </Text>
           <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.75)", marginTop: 2 }}>
-            {user?.shopName || (user?.role === "admin" ? "Administrator" : "Tailor")}
+            {user?.shopName || t("profile.title")}
           </Text>
-          {user?.speciality && (
-            <View
-              style={{
-                alignSelf: "flex-start",
-                marginTop: 5,
-                backgroundColor: "rgba(255,255,255,0.2)",
-                borderRadius: 8,
-                paddingHorizontal: 8,
-                paddingVertical: 2,
-              }}
-            >
-              <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: "#FFFFFF", textTransform: "capitalize" }}>
-                {user.speciality}
-              </Text>
-            </View>
-          )}
         </View>
 
         <MaterialIcons name="chevron-right" size={22} color="rgba(255,255,255,0.7)" />
@@ -173,7 +157,7 @@ export default function MoreScreen() {
       {/* Help & Support */}
       <Card style={{ marginBottom: 16 }}>
         <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground, marginBottom: 14 }}>
-          Help & Support
+          {t("more.helpSupport")}
         </Text>
         <Pressable
           onPress={() => Linking.openURL("mailto:support@tailorbook.com")}
@@ -208,7 +192,13 @@ export default function MoreScreen() {
 
       {/* Sign Out */}
       <Card style={{ marginBottom: 16 }}>
-        <MenuItem icon="logout" label="Sign Out" subtitle="Clears all local data" onPress={handleLogout} danger />
+        <MenuItem
+          icon="logout"
+          label={t("more.signOut")}
+          subtitle={t("more.signOutSubtitle")}
+          onPress={handleLogout}
+          danger
+        />
       </Card>
 
       <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground, textAlign: "center" }}>

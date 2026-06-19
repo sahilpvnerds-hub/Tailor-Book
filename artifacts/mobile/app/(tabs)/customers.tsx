@@ -15,11 +15,13 @@ import { useData } from "@/context/DataContext";
 import { CustomerItem } from "@/components/ListItems";
 import { EmptyState } from "@/components/ui";
 import colors from "@/constants/colors";
+import { useTranslation } from "@/utils/i18n";
 
 export default function CustomersScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { customers, measurements } = useData();
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
 
   const filtered = useMemo(
@@ -50,7 +52,7 @@ export default function CustomersScreen() {
       >
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
           <Text style={{ fontSize: 22, fontFamily: "Inter_700Bold", color: c.foreground }}>
-            Customers
+            {t("customers.title")}
           </Text>
           <Pressable
             onPress={() => router.push("/customers/new")}
@@ -75,7 +77,7 @@ export default function CustomersScreen() {
           <MaterialIcons name="search" size={18} color={c.mutedForeground} />
           <TextInput
             style={{ flex: 1, fontSize: 15, fontFamily: "Inter_400Regular", color: c.foreground, paddingVertical: 10 }}
-            placeholder="Search by name or mobile..."
+            placeholder={t("customers.searchPlaceholder") + "..."}
             placeholderTextColor={c.mutedForeground}
             value={search}
             onChangeText={setSearch}
@@ -109,9 +111,9 @@ export default function CustomersScreen() {
         ListEmptyComponent={
           <EmptyState
             icon="people"
-            title={search ? "No results found" : "No customers yet"}
-            subtitle={search ? "Try a different search term" : "Add your first customer to get started"}
-            action={!search ? { label: "Add Customer", onPress: () => router.push("/customers/new") } : undefined}
+            title={search ? t("customers.noResults") : t("customers.empty")}
+            subtitle={search ? t("customers.emptySearch") : t("customers.emptyHint")}
+            action={!search ? { label: t("customers.add"), onPress: () => router.push("/customers/new") } : undefined}
           />
         }
         showsVerticalScrollIndicator={false}

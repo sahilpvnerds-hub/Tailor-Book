@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Platform, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import React, { useMemo, useState } from "react";
+import { Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -9,6 +9,7 @@ import { useData } from "@/context/DataContext";
 import { CustomerItem, InvoiceItem } from "@/components/ListItems";
 import { formatCurrency, formatDate } from "@/utils/storage";
 import colors from "@/constants/colors";
+import { useTranslation } from "@/utils/i18n";
 
 function QuickAction({
   icon,
@@ -58,7 +59,9 @@ export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { customers, measurements, invoices, unreadCount, refresh } = useData();
+  const { t } = useTranslation();
   const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const totalRevenue = invoices.filter((i) => i.status === "completed").reduce((s, i) => s + i.total, 0);
   const pendingRevenue = invoices.filter((i) => i.status === "pending").reduce((s, i) => s + i.total, 0);
@@ -74,6 +77,33 @@ export default function DashboardScreen() {
     setRefreshing(false);
   }
 
+  /**
+   * Live search across customers. We match on name OR mobile (digits
+   * only, so "9898" still hits "989-898-1234"). Returns up to 5
+   * results, sorted by recency.
+   */
+  const trimmedQuery = searchQuery.trim();
+  const searchResults = useMemo(() => {
+    if (!trimmedQuery) return [];
+    const q = trimmedQuery.toLowerCase();
+    const qDigits = trimmedQuery.replace(/\D/g, "");
+    return customers
+      .filter((cust) => {
+        if (cust.name.toLowerCase().includes(q)) return true;
+        if (qDigits.length > 0 && cust.mobile.replace(/\D/g, "").includes(qDigits)) return true;
+        return false;
+      })
+      .slice(0, 5);
+  }, [trimmedQuery, customers]);
+  const showSearchDropdown = trimmedQuery.length > 0;
+
+  function addNewCustomer() {
+    // Send the typed query to the new-customer screen so it can prefill
+    // the name or mobile field.
+    const q = encodeURIComponent(trimmedQuery);
+    router.push(`/customers/new?q=${q}` as any);
+  }
+
   const topPad = Platform.OS === "web" ? 67 : 0;
   const today = new Date().toLocaleDateString("en-IN", {
     weekday: "short", day: "2-digit", month: "short", year: "numeric",
@@ -85,6 +115,7 @@ export default function DashboardScreen() {
       contentContainerStyle={{ paddingBottom: insets.bottom + 110 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.primary} />}
       showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
     >
       {/* Hero Header */}
       <View
@@ -95,13 +126,13 @@ export default function DashboardScreen() {
           paddingBottom: 32,
         }}
       >
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.65)", marginBottom: 2 }}>
               {today}
             </Text>
             <Text style={{ fontSize: 20, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>
-              Hi, {user?.name?.split(" ")[0]}
+              {t("dashboard.welcome", { name: user?.name?.split(" ")[0] ?? "" })}
             </Text>
             {user?.shopName ? (
               <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.6)", marginTop: 1 }}>
@@ -110,62 +141,248 @@ export default function DashboardScreen() {
             ) : null}
           </View>
 
-          {/* Header action buttons: Notification → Search */}
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-            {/* Notification bell */}
-            <Pressable
-              onPress={() => router.push("/notifications")}
-              style={({ pressed }) => ({
-                width: 40,
-                height: 40,
-                borderRadius: 12,
-                backgroundColor: "rgba(255,255,255,0.18)",
-                alignItems: "center",
-                justifyContent: "center",
-                opacity: pressed ? 0.8 : 1,
-              })}
-            >
-              <MaterialIcons name="notifications" size={20} color="#FFFFFF" />
-              {unreadCount > 0 && (
-                <View
-                  style={{
-                    position: "absolute",
-                    top: 5,
-                    right: 5,
-                    width: 16,
-                    height: 16,
-                    borderRadius: 8,
-                    backgroundColor: "#EF4444",
+          {/* Notification bell */}
+          <Pressable
+            onPress={() => router.push("/notifications")}
+            style={({ pressed }) => ({
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              backgroundColor: "rgba(255,255,255,0.18)",
+              alignItems: "center",
+              justifyContent: "center",
+              opacity: pressed ? 0.8 : 1,
+            })}
+          >
+            <MaterialIcons name="notifications" size={20} color="#FFFFFF" />
+            {unreadCount > 0 && (
+              <View
+                style={{
+                  position: "absolute",
+                  top: 5,
+                  right: 5,
+                  width: 16,
+                  height: 16,
+                  borderRadius: 8,
+                  backgroundColor: "#EF4444",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderWidth: 1.5,
+                  borderColor: c.primary,
+                }}
+              >
+                <Text style={{ fontSize: 9, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </Text>
+              </View>
+            )}
+          </Pressable>
+        </View>
+
+        {/* ── Global search bar ── */}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            backgroundColor: "#FFFFFF",
+            borderRadius: 14,
+            paddingHorizontal: 14,
+            height: 48,
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.12,
+            shadowRadius: 10,
+            elevation: 4,
+            marginBottom: 20,
+          }}
+        >
+          <MaterialIcons name="search" size={20} color={c.mutedForeground} />
+          <TextInput
+            style={{
+              flex: 1,
+              fontSize: 15,
+              fontFamily: "Inter_400Regular",
+              color: c.foreground,
+              paddingVertical: 0,
+              marginLeft: 10,
+            }}
+            placeholder={t("dashboard.searchPlaceholder")}
+            placeholderTextColor={c.mutedForeground}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+            autoCorrect={false}
+            autoCapitalize="none"
+          />
+          {searchQuery.length > 0 && (
+            <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
+              <MaterialIcons name="close" size={18} color={c.mutedForeground} />
+            </Pressable>
+          )}
+        </View>
+
+        {/* Live search dropdown — overlayed on the hero, sits above the
+            revenue card. Only shows while the user is actively typing.
+            Behavior:
+            - matching customers → list + "Add New Customer" button
+            - no matches       → "No customer found" message + button */}
+        {showSearchDropdown && (
+          <View
+            style={{
+              position: "absolute",
+              left: 22,
+              right: 22,
+              top: insets.top + topPad + 20 + 18 + 22 + 48 + 8, // below the search bar
+              backgroundColor: c.card,
+              borderRadius: 14,
+              borderWidth: 1,
+              borderColor: c.border,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 6 },
+              shadowOpacity: 0.15,
+              shadowRadius: 14,
+              elevation: 8,
+              zIndex: 50,
+              overflow: "hidden",
+            }}
+          >
+            {searchResults.length > 0 ? (
+              <>
+                {/* Result list */}
+                {searchResults.map((cust, idx) => (
+                  <Pressable
+                    key={cust.id}
+                    onPress={() => {
+                      setSearchQuery("");
+                      router.push(`/customers/${cust.id}` as any);
+                    }}
+                    style={({ pressed }) => ({
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 12,
+                      padding: 12,
+                      backgroundColor: pressed ? c.muted : "transparent",
+                      borderTopWidth: idx === 0 ? 0 : 1,
+                      borderTopColor: c.border,
+                    })}
+                  >
+                    <View
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 18,
+                        backgroundColor: c.primary + "18",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: c.primary }}>
+                        {cust.name?.charAt(0)?.toUpperCase() ?? "?"}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.foreground }} numberOfLines={1}>
+                        {cust.name}
+                      </Text>
+                      <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground }} numberOfLines={1}>
+                        {cust.mobile}
+                      </Text>
+                    </View>
+                    <MaterialIcons name="north-west" size={16} color={c.mutedForeground} />
+                  </Pressable>
+                ))}
+
+                {/* "Add New Customer" button — always shown in the
+                    results state so the user can add a new one without
+                    clearing the search first. */}
+                <Pressable
+                  onPress={addNewCustomer}
+                  style={({ pressed }) => ({
+                    flexDirection: "row",
                     alignItems: "center",
                     justifyContent: "center",
-                    borderWidth: 1.5,
-                    borderColor: c.primary,
+                    gap: 8,
+                    paddingVertical: 12,
+                    backgroundColor: pressed ? c.primary : c.primary,
+                    borderTopWidth: 1,
+                    borderTopColor: c.border,
+                    opacity: pressed ? 0.9 : 1,
+                  })}
+                >
+                  <MaterialIcons name="person-add" size={18} color="#FFFFFF" />
+                  <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#FFFFFF" }}>
+                    {t("dashboard.searchAddNew")}
+                  </Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                {/* No-match state — explicit "No customer found" message */}
+                <View
+                  style={{
+                    paddingVertical: 20,
+                    paddingHorizontal: 16,
+                    alignItems: "center",
+                    gap: 8,
                   }}
                 >
-                  <Text style={{ fontSize: 9, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>
-                    {unreadCount > 9 ? "9+" : unreadCount}
+                  <View
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 22,
+                      backgroundColor: c.muted,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <MaterialIcons name="search-off" size={22} color={c.mutedForeground} />
+                  </View>
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      fontFamily: "Inter_700Bold",
+                      color: c.foreground,
+                      textAlign: "center",
+                    }}
+                  >
+                    {t("dashboard.searchNoResults")}
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontFamily: "Inter_400Regular",
+                      color: c.mutedForeground,
+                      textAlign: "center",
+                    }}
+                  >
+                    {t("dashboard.searchNoResultsHint", { query: trimmedQuery })}
                   </Text>
                 </View>
-              )}
-            </Pressable>
 
-            {/* Search icon */}
-            <Pressable
-              onPress={() => router.push("/search" as any)}
-              style={({ pressed }) => ({
-                width: 40,
-                height: 40,
-                borderRadius: 12,
-                backgroundColor: "rgba(255,255,255,0.18)",
-                alignItems: "center",
-                justifyContent: "center",
-                opacity: pressed ? 0.8 : 1,
-              })}
-            >
-              <MaterialIcons name="search" size={20} color="#FFFFFF" />
-            </Pressable>
+                {/* "Add New Customer" CTA — pre-fills the new-customer
+                    form with the typed query (mobile or name) */}
+                <Pressable
+                  onPress={addNewCustomer}
+                  style={({ pressed }) => ({
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    paddingVertical: 12,
+                    backgroundColor: c.primary,
+                    opacity: pressed ? 0.9 : 1,
+                  })}
+                >
+                  <MaterialIcons name="person-add" size={18} color="#FFFFFF" />
+                  <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#FFFFFF" }}>
+                    {t("dashboard.searchAddNew")}
+                  </Text>
+                </Pressable>
+              </>
+            )}
           </View>
-        </View>
+        )}
 
         {/* Revenue card */}
         <View
@@ -178,28 +395,28 @@ export default function DashboardScreen() {
           }}
         >
           <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.7)", marginBottom: 4 }}>
-            Total Revenue
+            {t("dashboard.totalRevenue")}
           </Text>
           <Text style={{ fontSize: 34, fontFamily: "Inter_700Bold", color: "#FFFFFF", marginBottom: 14 }}>
             {formatCurrency(totalRevenue)}
           </Text>
           <View style={{ flexDirection: "row", gap: 20 }}>
             <View>
-              <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.6)" }}>Pending</Text>
+              <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.6)" }}>{t("dashboard.pending")}</Text>
               <Text style={{ fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#FCD34D" }}>
                 {formatCurrency(pendingRevenue)}
               </Text>
             </View>
             <View style={{ width: 1, backgroundColor: "rgba(255,255,255,0.2)" }} />
             <View>
-              <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.6)" }}>Completed</Text>
+              <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.6)" }}>{t("dashboard.completed")}</Text>
               <Text style={{ fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#6EE7E7" }}>
-                {completedCount} paid
+                {t("dashboard.paidCount", { count: completedCount })}
               </Text>
             </View>
             <View style={{ width: 1, backgroundColor: "rgba(255,255,255,0.2)" }} />
             <View>
-              <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.6)" }}>Customers</Text>
+              <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.6)" }}>{t("dashboard.customers")}</Text>
               <Text style={{ fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#FFFFFF" }}>
                 {customers.length}
               </Text>
@@ -211,9 +428,9 @@ export default function DashboardScreen() {
       {/* Stats pills */}
       <View style={{ flexDirection: "row", marginHorizontal: 22, marginTop: -20, gap: 10 }}>
         {[
-          { icon: "people" as const, label: "Customers", value: customers.length, color: "#6366F1" },
-          { icon: "straighten" as const, label: "Measurements", value: measurements.length, color: "#F59E0B" },
-          { icon: "receipt" as const, label: "Pending", value: pendingCount, color: "#EF4444" },
+          { icon: "people" as const, label: t("dashboard.stats.customers"), value: customers.length, color: "#6366F1" },
+          { icon: "straighten" as const, label: t("dashboard.stats.measurements"), value: measurements.length, color: "#F59E0B" },
+          { icon: "receipt" as const, label: t("dashboard.stats.pending"), value: pendingCount, color: "#EF4444" },
         ].map((s) => (
           <View
             key={s.label}
@@ -247,7 +464,7 @@ export default function DashboardScreen() {
       {/* Quick Actions — Customer + Invoice only */}
       <View style={{ marginHorizontal: 22, marginTop: 24 }}>
         <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground, marginBottom: 14 }}>
-          Quick Actions
+          {t("dashboard.quickActions")}
         </Text>
         <View
           style={{
@@ -266,13 +483,13 @@ export default function DashboardScreen() {
         >
           <QuickAction
             icon="person-add"
-            label="Add Customer"
+            label={t("dashboard.addCustomer")}
             color="#6366F1"
             onPress={() => router.push("/customers/new")}
           />
           <QuickAction
             icon="receipt"
-            label="New Invoice"
+            label={t("dashboard.newInvoice")}
             color="#059669"
             onPress={() => router.push("/invoices/new")}
           />
@@ -302,10 +519,12 @@ export default function DashboardScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#92400E" }}>
-              {pendingCount} pending invoice{pendingCount > 1 ? "s" : ""}
+              {pendingCount > 1
+                ? t("dashboard.pendingInvoicePlural", { count: pendingCount })
+                : t("dashboard.pendingInvoice", { count: pendingCount })}
             </Text>
             <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: "#B45309" }}>
-              {formatCurrency(pendingRevenue)} awaiting collection
+              {t("dashboard.awaitingCollection", { amount: formatCurrency(pendingRevenue) })}
             </Text>
           </View>
           <MaterialIcons name="chevron-right" size={18} color="#92400E" />
@@ -317,10 +536,10 @@ export default function DashboardScreen() {
         <View style={{ marginTop: 24 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginHorizontal: 22, marginBottom: 12 }}>
             <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>
-              Recent Customers
+              {t("dashboard.recentCustomers")}
             </Text>
             <Pressable onPress={() => router.push("/(tabs)/customers")}>
-              <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: c.primary }}>See all</Text>
+              <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: c.primary }}>{t("dashboard.seeAll")}</Text>
             </Pressable>
           </View>
           <View style={{ marginHorizontal: 22, gap: 8 }}>
@@ -340,9 +559,9 @@ export default function DashboardScreen() {
       {recentInvoices.length > 0 && (
         <View style={{ marginTop: 24 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginHorizontal: 22, marginBottom: 12 }}>
-            <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>Recent Invoices</Text>
+            <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>{t("dashboard.recentInvoices")}</Text>
             <Pressable onPress={() => router.push("/(tabs)/invoices")}>
-              <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: c.primary }}>See all</Text>
+              <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: c.primary }}>{t("dashboard.seeAll")}</Text>
             </Pressable>
           </View>
           <View style={{ marginHorizontal: 22, gap: 8 }}>
@@ -372,10 +591,10 @@ export default function DashboardScreen() {
             <MaterialIcons name="people" size={32} color={c.primary} />
           </View>
           <Text style={{ fontSize: 17, fontFamily: "Inter_700Bold", color: c.foreground, textAlign: "center" }}>
-            Start your first order
+            {t("dashboard.startFirstOrder")}
           </Text>
           <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: c.mutedForeground, textAlign: "center", lineHeight: 20 }}>
-            Add a customer, record their measurements, and create an invoice.
+            {t("dashboard.startFirstOrderHint")}
           </Text>
           <Pressable
             onPress={() => router.push("/customers/new")}
@@ -389,7 +608,7 @@ export default function DashboardScreen() {
             })}
           >
             <Text style={{ color: "#FFFFFF", fontSize: 14, fontFamily: "Inter_600SemiBold" }}>
-              Add First Customer
+              {t("dashboard.addFirstCustomer")}
             </Text>
           </Pressable>
         </View>

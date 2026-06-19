@@ -15,20 +15,15 @@ import { MaterialIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useData } from "@/context/DataContext";
-import { Card, Divider, EmptyState, SectionHeader } from "@/components/ui";
-import { InvoiceItem, MeasurementItem } from "@/components/ListItems";
-import { formatDate } from "@/utils/storage";
+import { Card, Divider, EmptyState, SectionHeader, Badge } from "@/components/ui";
+import { InvoiceItem } from "@/components/ListItems";
+import { formatDate, formatCurrency } from "@/utils/storage";
 import colors from "@/constants/colors";
-import { FamilyMember, Gender, Relation } from "@/types";
+import { FamilyMember, Relation } from "@/types";
 import { Button, Input } from "@/components/ui";
-import { validateMobile, validateRequired, runValidation } from "@/utils/validation";
+import { validateRequired, runValidation } from "@/utils/validation";
 
 const RELATION_OPTIONS: Relation[] = ["father", "mother", "son", "daughter", "wife", "husband", "other"];
-const GENDER_OPTIONS: { value: Gender; label: string }[] = [
-  { value: "male", label: "Male" },
-  { value: "female", label: "Female" },
-  { value: "unisex", label: "Unisex" },
-];
 
 function AddFamilyMemberModal({
   visible,
@@ -44,7 +39,6 @@ function AddFamilyMemberModal({
   const { addFamilyMember } = useData();
   const [name, setName] = useState("");
   const [relation, setRelation] = useState<Relation>("son");
-  const [gender, setGender] = useState<Gender>("male");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
 
@@ -54,10 +48,10 @@ function AddFamilyMemberModal({
     ]);
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     setLoading(true);
-    await addFamilyMember({ primaryCustomerId: customerId, name: name.trim(), relation, gender });
+    await addFamilyMember({ primaryCustomerId: customerId, name: name.trim(), relation, gender: "unisex" });
     setLoading(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setName(""); setRelation("son"); setGender("male"); setErrors({});
+    setName(""); setRelation("son"); setErrors({});
     onClose();
   }
 
@@ -117,33 +111,6 @@ function AddFamilyMemberModal({
               </View>
             </ScrollView>
           </View>
-          {/* Gender */}
-          <View style={{ gap: 6 }}>
-            <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
-              Gender
-            </Text>
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              {GENDER_OPTIONS.map((opt) => (
-                <Pressable
-                  key={opt.value}
-                  onPress={() => setGender(opt.value)}
-                  style={{
-                    flex: 1,
-                    paddingVertical: 10,
-                    borderRadius: colors.radius,
-                    borderWidth: 1.5,
-                    borderColor: gender === opt.value ? c.primary : c.border,
-                    backgroundColor: gender === opt.value ? c.primary + "12" : c.card,
-                    alignItems: "center",
-                  }}
-                >
-                  <Text style={{ fontSize: 13, fontFamily: gender === opt.value ? "Inter_600SemiBold" : "Inter_400Regular", color: gender === opt.value ? c.primary : c.mutedForeground }}>
-                    {opt.label}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
           <View style={{ flexDirection: "row", gap: 10 }}>
             <Button label="Cancel" onPress={onClose} variant="outline" style={{ flex: 1 }} />
             <Button label="Add" onPress={handleSave} loading={loading} style={{ flex: 1 }} />
@@ -154,26 +121,185 @@ function AddFamilyMemberModal({
   );
 }
 
+// ─── Person Measurement Section ─────────────────────────────────────────────
+function PersonMeasurementSection({
+  personName,
+  relation,
+  personIcon,
+  measurements,
+  onAddMeasurement,
+  customer,
+  c,
+}: {
+  personName: string;
+  relation: string;
+  personIcon: string;
+  measurements: any[];
+  onAddMeasurement: () => void;
+  customer: any;
+  c: any;
+}) {
+  const [expanded, setExpanded] = useState(true);
+
+  return (
+    <View
+      style={{
+        backgroundColor: c.card,
+        borderRadius: colors.radius,
+        borderWidth: 1,
+        borderColor: c.border,
+        overflow: "hidden",
+        marginBottom: 10,
+      }}
+    >
+      {/* Section header — person name + relation */}
+      <Pressable
+        onPress={() => setExpanded((v) => !v)}
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          padding: 14,
+          backgroundColor: c.primary + "12",
+          gap: 10,
+        }}
+      >
+        <View
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: c.primary + "22",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <MaterialIcons name={personIcon as any} size={18} color={c.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 15, fontFamily: "Inter_700Bold", color: c.foreground }}>
+            {personName}
+          </Text>
+          <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
+            {relation} · {measurements.length} measurement{measurements.length !== 1 ? "s" : ""}
+          </Text>
+        </View>
+        <Pressable
+          onPress={onAddMeasurement}
+          style={{
+            backgroundColor: c.primary,
+            borderRadius: 8,
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 4,
+          }}
+        >
+          <MaterialIcons name="add" size={14} color="#FFFFFF" />
+          <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: "#FFFFFF" }}>Add</Text>
+        </Pressable>
+        <MaterialIcons
+          name={expanded ? "expand-less" : "expand-more"}
+          size={20}
+          color={c.mutedForeground}
+        />
+      </Pressable>
+
+      {/* Measurement rows */}
+      {expanded && (
+        measurements.length === 0 ? (
+          <View style={{ padding: 16, alignItems: "center", gap: 6 }}>
+            <MaterialIcons name="straighten" size={22} color={c.mutedForeground} />
+            <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
+              No measurements yet
+            </Text>
+          </View>
+        ) : (
+          measurements.map((m: any, idx: number) => (
+            <Pressable
+              key={m.id}
+              onPress={() => router.push(`/measurements/${m.id}` as any)}
+              style={({ pressed }) => ({
+                flexDirection: "row",
+                alignItems: "center",
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+                backgroundColor: pressed ? c.muted : c.card,
+                borderTopWidth: 1,
+                borderTopColor: c.border,
+                gap: 12,
+              })}
+            >
+              {/* Product color dot */}
+              <View
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor: c.primary,
+                  marginTop: 2,
+                }}
+              />
+              <View style={{ flex: 1, gap: 2 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.foreground }}>
+                    {m.productType}
+                  </Text>
+                  {m.featureLabel ? (
+                    <View
+                      style={{
+                        backgroundColor: c.primary + "18",
+                        borderRadius: 6,
+                        paddingHorizontal: 6,
+                        paddingVertical: 2,
+                      }}
+                    >
+                      <Text style={{ fontSize: 10, fontFamily: "Inter_600SemiBold", color: c.primary }}>
+                        {m.featureLabel}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                    <MaterialIcons name="event" size={11} color={c.mutedForeground} />
+                    <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
+                      {formatDate(m.date ?? m.measurementDate ?? m.createdAt)}
+                    </Text>
+                  </View>
+                  {(m.deliveryDate) ? (
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                      <MaterialIcons name="local-shipping" size={11} color="#059669" />
+                      <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: "#059669" }}>
+                        Delivery: {formatDate(m.deliveryDate)}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+              <MaterialIcons name="chevron-right" size={18} color={c.mutedForeground} />
+            </Pressable>
+          ))
+        )
+      )}
+    </View>
+  );
+}
+
 export default function CustomerDetailScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const {
-    customers, familyMembers,
-    getCustomerMeasurements, getCustomerProducts,
+    customers, familyMembers, measurements: allMeasurementsCtx,
     getCustomerInvoices, deleteCustomer, deleteFamilyMember,
+    orders,
   } = useData();
   const customer = customers.find((c) => c.id === id);
-  const allMeasurements = customer ? getCustomerMeasurements(customer.id) : [];
-  const products = customer ? getCustomerProducts(customer.id) : [];
   const invoices = customer ? getCustomerInvoices(customer.id) : [];
+  const customerOrders = customer ? orders.filter((o) => o.customerId === customer.id) : [];
   const members = familyMembers.filter((m) => m.primaryCustomerId === id);
   const [showAddMember, setShowAddMember] = useState(false);
-  const [activeProduct, setActiveProduct] = useState<string>("all");
-
-  const measurements = activeProduct === "all"
-    ? allMeasurements
-    : allMeasurements.filter((m) => m.productType === activeProduct);
 
   const topPad = Platform.OS === "web" ? 67 : 0;
 
@@ -182,6 +308,21 @@ export default function CustomerDetailScreen() {
       <EmptyState icon="person" title="Customer not found" subtitle="This customer may have been deleted" />
     );
   }
+
+  // Measurements for primary customer (no family member)
+  const selfMeasurements = allMeasurementsCtx.filter(
+    (m) => m.customerId === customer.id && !m.familyMemberId
+  ).sort((a, b) => (b.date ?? b.measurementDate ?? b.createdAt).localeCompare(a.date ?? a.measurementDate ?? a.createdAt));
+
+  // Measurements for each family member
+  const memberMeasurementsMap = members.reduce<Record<string, typeof allMeasurementsCtx>>((acc, member) => {
+    acc[member.id] = allMeasurementsCtx
+      .filter((m) => m.customerId === customer.id && m.familyMemberId === member.id)
+      .sort((a, b) => (b.date ?? b.measurementDate ?? b.createdAt).localeCompare(a.date ?? a.measurementDate ?? a.createdAt));
+    return acc;
+  }, {});
+
+  const totalMeasurements = selfMeasurements.length + members.reduce((sum, m) => sum + (memberMeasurementsMap[m.id]?.length ?? 0), 0);
 
   function handleDelete() {
     Alert.alert("Delete Customer", `Delete ${customer!.name} and all their data?`, [
@@ -211,10 +352,16 @@ export default function CustomerDetailScreen() {
     .join("")
     .toUpperCase();
 
-  const genderIcon: Record<string, keyof typeof MaterialIcons.glyphMap> = {
-    male: "man",
-    female: "woman",
-    unisex: "people",
+  const relationIcon: Record<string, string> = {
+    father: "man",
+    mother: "woman",
+    son: "boy",
+    daughter: "girl",
+    wife: "woman",
+    husband: "man",
+    brother: "man",
+    sister: "woman",
+    other: "person",
   };
 
   return (
@@ -263,11 +410,7 @@ export default function CustomerDetailScreen() {
             {customer.name}
           </Text>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <MaterialIcons name={genderIcon[customer.gender]} size={14} color="rgba(255,255,255,0.8)" />
-            <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.8)" }}>
-              {customer.gender.charAt(0).toUpperCase() + customer.gender.slice(1)}
-            </Text>
-            <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>·</Text>
+            <MaterialIcons name="phone" size={13} color="rgba(255,255,255,0.8)" />
             <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.8)" }}>
               {customer.mobile}
             </Text>
@@ -277,9 +420,9 @@ export default function CustomerDetailScreen() {
         {/* Quick stats */}
         <View style={{ flexDirection: "row", gap: 10, marginTop: 20 }}>
           {[
-            { label: "Measurements", value: measurements.length, icon: "straighten" as const },
+            { label: "Measurements", value: totalMeasurements, icon: "straighten" as const },
             { label: "Family Members", value: members.length, icon: "people" as const },
-            { label: "Invoices", value: invoices.length, icon: "receipt" as const },
+            { label: "Orders", value: customerOrders.length, icon: "shopping-bag" as const },
           ].map((s) => (
             <View
               key={s.label}
@@ -317,14 +460,14 @@ export default function CustomerDetailScreen() {
             <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: c.foreground, textAlign: "center" }}>Add Measurement</Text>
           </Pressable>
           <Pressable
-            onPress={() => router.push({ pathname: "/invoices/new", params: { customerId: customer.id, customerName: customer.name, customerMobile: customer.mobile } })}
+            onPress={() => router.push({ pathname: "/orders/new", params: { customerId: customer.id, customerName: customer.name, customerMobile: customer.mobile } })}
             style={({ pressed }) => ({
               flex: 1, backgroundColor: c.card, borderRadius: colors.radius, padding: 14,
               alignItems: "center", gap: 8, borderWidth: 1, borderColor: c.border, opacity: pressed ? 0.8 : 1,
             })}
           >
-            <MaterialIcons name="receipt" size={22} color="#059669" />
-            <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: c.foreground, textAlign: "center" }}>Create Invoice</Text>
+            <MaterialIcons name="shopping-bag" size={22} color={c.primary} />
+            <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: c.foreground, textAlign: "center" }}>Create Order</Text>
           </Pressable>
         </View>
 
@@ -371,11 +514,11 @@ export default function CustomerDetailScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.foreground }}>{m.name}</Text>
                     <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
-                      {m.relation.charAt(0).toUpperCase() + m.relation.slice(1)} · {m.gender}
+                      {m.relation.charAt(0).toUpperCase() + m.relation.slice(1)}
                     </Text>
                   </View>
                   <Pressable
-                    onPress={() => router.push({ pathname: "/measurements/new", params: { customerId: customer.id, customerName: m.name } })}
+                    onPress={() => router.push({ pathname: "/measurements/new", params: { customerId: customer.id, customerName: m.name, familyMemberId: m.id } })}
                     style={{ backgroundColor: c.primary + "18", padding: 8, borderRadius: 8 }}
                   >
                     <MaterialIcons name="straighten" size={16} color={c.primary} />
@@ -389,102 +532,150 @@ export default function CustomerDetailScreen() {
           )}
         </View>
 
-        {/* Measurements */}
+        {/* ── Measurements grouped by person ── */}
         <View>
           <SectionHeader
             title="Measurements"
             action={{ label: "Add", onPress: () => router.push({ pathname: "/measurements/new", params: { customerId: customer.id, customerName: customer.name } }) }}
           />
 
-          {/* Product-type filter chips */}
-          {products.length > 0 && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingVertical: 10, gap: 6 }}
-            >
-              <Pressable
-                onPress={() => setActiveProduct("all")}
-                style={{
-                  paddingHorizontal: 14,
-                  paddingVertical: 7,
-                  borderRadius: 18,
-                  backgroundColor: activeProduct === "all" ? c.primary : c.muted,
-                  borderWidth: 1,
-                  borderColor: activeProduct === "all" ? c.primary : c.border,
-                }}
-              >
-                <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: activeProduct === "all" ? "#FFFFFF" : c.mutedForeground }}>
-                  All · {allMeasurements.length}
-                </Text>
-              </Pressable>
-              {products.map((p) => (
-                <Pressable
-                  key={p.productType}
-                  onPress={() => setActiveProduct(p.productType)}
-                  style={{
-                    paddingHorizontal: 14,
-                    paddingVertical: 7,
-                    borderRadius: 18,
-                    backgroundColor: activeProduct === p.productType ? c.primary : c.muted,
-                    borderWidth: 1,
-                    borderColor: activeProduct === p.productType ? c.primary : c.border,
-                  }}
-                >
-                  <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: activeProduct === p.productType ? "#FFFFFF" : c.mutedForeground }}>
-                    {p.productType} · {p.count}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          )}
+          {/* Primary customer section */}
+          <PersonMeasurementSection
+            personName={customer.name}
+            relation="Self"
+            personIcon="person"
+            measurements={selfMeasurements}
+            onAddMeasurement={() =>
+              router.push({ pathname: "/measurements/new", params: { customerId: customer.id, customerName: customer.name } })
+            }
+            customer={customer}
+            c={c}
+          />
 
-          {allMeasurements.length === 0 ? (
-            <View style={{ alignItems: "center", padding: 24, backgroundColor: c.muted, borderRadius: colors.radius, gap: 8 }}>
-              <MaterialIcons name="straighten" size={28} color={c.mutedForeground} />
-              <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>No measurements yet</Text>
-            </View>
-          ) : measurements.length === 0 ? (
-            <View style={{ alignItems: "center", padding: 16, backgroundColor: c.muted, borderRadius: colors.radius, gap: 6 }}>
-              <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
-                No measurements for {activeProduct}
+          {/* Family member sections */}
+          {members.map((m) => (
+            <PersonMeasurementSection
+              key={m.id}
+              personName={m.name}
+              relation={m.relation.charAt(0).toUpperCase() + m.relation.slice(1)}
+              personIcon={relationIcon[m.relation] ?? "person"}
+              measurements={memberMeasurementsMap[m.id] ?? []}
+              onAddMeasurement={() =>
+                router.push({ pathname: "/measurements/new", params: { customerId: customer.id, customerName: m.name, familyMemberId: m.id } })
+              }
+              customer={customer}
+              c={c}
+            />
+          ))}
+        </View>
+
+        {/* Orders */}
+        <View>
+          <SectionHeader
+            title="Orders"
+            action={{
+              label: "Create",
+              onPress: () =>
+                router.push({
+                  pathname: "/orders/new",
+                  params: {
+                    customerId: customer.id,
+                    customerName: customer.name,
+                    customerMobile: customer.mobile,
+                  },
+                }),
+            }}
+          />
+          {customerOrders.length === 0 ? (
+            <View
+              style={{
+                alignItems: "center",
+                padding: 24,
+                backgroundColor: c.muted,
+                borderRadius: colors.radius,
+                gap: 8,
+              }}
+            >
+              <MaterialIcons name="shopping-bag" size={28} color={c.mutedForeground} />
+              <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
+                No orders yet
               </Text>
             </View>
           ) : (
             <View style={{ gap: 8 }}>
-              {measurements.map((m) => (
-                <View key={m.id} style={{ gap: 6 }}>
-                  <MeasurementItem measurement={m} onPress={() => router.push(`/measurements/${m.id}` as any)} />
-                  <Pressable
-                    onPress={() =>
-                      router.push({
-                        pathname: "/invoices/new",
-                        params: {
-                          customerId: customer.id,
-                          customerName: customer.name,
-                          customerMobile: customer.mobile,
-                          measurementId: m.id,
-                        },
-                      })
-                    }
-                    style={({ pressed }) => ({
-                      flexDirection: "row",
+              {customerOrders.map((o) => (
+                <Pressable
+                  key={o.id}
+                  onPress={() => router.push(`/orders/${o.id}` as any)}
+                  style={({ pressed }) => ({
+                    flexDirection: "row",
+                    alignItems: "center",
+                    backgroundColor: c.card,
+                    borderRadius: colors.radius,
+                    padding: 14,
+                    gap: 12,
+                    borderWidth: 1,
+                    borderColor: c.border,
+                    opacity: pressed ? 0.88 : 1,
+                  })}
+                >
+                  <View
+                    style={{
+                      width: 46,
+                      height: 46,
+                      borderRadius: 14,
+                      backgroundColor:
+                        o.status === "completed"
+                          ? "#D1FAE5"
+                          : o.status === "cancelled"
+                            ? "#FEE2E2"
+                            : "#FEF3C7",
                       alignItems: "center",
                       justifyContent: "center",
-                      gap: 6,
-                      backgroundColor: "#059669" + (pressed ? "22" : "12"),
-                      borderRadius: colors.radius,
-                      paddingVertical: 8,
-                      borderWidth: 1,
-                      borderColor: "#059669" + "30",
-                    })}
+                    }}
                   >
-                    <MaterialIcons name="receipt" size={14} color="#059669" />
-                    <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: "#059669" }}>
-                      Create Invoice from this Measurement
+                    <MaterialIcons
+                      name="shopping-bag"
+                      size={22}
+                      color={
+                        o.status === "completed"
+                          ? "#059669"
+                          : o.status === "cancelled"
+                            ? "#DC2626"
+                            : "#D97706"
+                      }
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: c.foreground }}>
+                      {o.orderNumber}
                     </Text>
-                  </Pressable>
-                </View>
+                    <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground, marginTop: 1 }}>
+                      Items: {o.items?.length ?? 0} · {formatDate(o.createdAt)}
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: "flex-end", gap: 5 }}>
+                    <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>
+                      {formatCurrency(Number(o.totalAmount))}
+                    </Text>
+                    <Badge
+                      label={
+                        o.status === "completed"
+                          ? "Completed"
+                          : o.status === "cancelled"
+                            ? "Cancelled"
+                            : "Pending"
+                      }
+                      variant={
+                        o.status === "completed"
+                          ? "success"
+                          : o.status === "cancelled"
+                            ? "destructive"
+                            : "warning"
+                      }
+                    />
+                  </View>
+                </Pressable>
               ))}
             </View>
           )}
@@ -494,7 +685,6 @@ export default function CustomerDetailScreen() {
         <View>
           <SectionHeader
             title="Invoices"
-            action={{ label: "Create", onPress: () => router.push({ pathname: "/invoices/new", params: { customerId: customer.id, customerName: customer.name, customerMobile: customer.mobile } }) }}
           />
           {invoices.length === 0 ? (
             <View style={{ alignItems: "center", padding: 24, backgroundColor: c.muted, borderRadius: colors.radius, gap: 8 }}>

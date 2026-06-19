@@ -11,6 +11,8 @@ import type {
   PendingOtp,
   RegisterData,
   UpdateProfileData,
+  Order,
+  OrderItem,
 } from "@/types";
 
 // ── API Client Configuration ────────────────────────────────────────────────
@@ -85,7 +87,7 @@ interface ApiError {
 
 // ── Auth API ───────────────────────────────────────────────────────────────
 
-export async function sendOtp(email: string): Promise<{ ok: boolean; devOtp?: string; message: string }> {
+export async function sendOtp(email: string): Promise<{ ok: boolean; message: string }> {
   const response = await fetch(`${API_BASE_URL}/auth/send-otp`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -97,7 +99,6 @@ export async function sendOtp(email: string): Promise<{ ok: boolean; devOtp?: st
   }
   return {
     ok: true,
-    devOtp: data.devOtp,
     message: data.message,
   };
 }
@@ -435,6 +436,77 @@ export async function deleteInvoice(token: string, invoiceId: string): Promise<{
   return { ok: response.ok };
 }
 
+// ── Orders API ──────────────────────────────────────────────────────────────
+
+export async function getOrders(token: string, customerId?: string): Promise<Order[]> {
+  const url = customerId ? `${API_BASE_URL}/orders?customerId=${customerId}` : `${API_BASE_URL}/orders`;
+  const response = await fetch(url, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await parseJson<any>(response, "Failed to fetch orders");
+  if (!response.ok) {
+    throw new Error(data.error ?? "Failed to fetch orders");
+  }
+  return data;
+}
+
+export async function createOrder(
+  token: string,
+  order: Omit<Order, "id" | "orderNumber" | "createdAt" | "updatedAt" | "tailorId"> & { items: Omit<OrderItem, "id" | "orderId" | "createdAt">[] }
+): Promise<Order> {
+  const response = await fetch(`${API_BASE_URL}/orders`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(order),
+  });
+  const data = await parseJson<any>(response, "Failed to create order");
+  if (!response.ok) {
+    throw new Error(data.error ?? "Failed to create order");
+  }
+  return data;
+}
+
+export async function updateOrderStatus(token: string, orderId: string, status: Order["status"]): Promise<Order> {
+  const response = await fetch(`${API_BASE_URL}/orders/${orderId}/status`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ status }),
+  });
+  const data = await parseJson<any>(response, "Failed to update order status");
+  if (!response.ok) {
+    throw new Error(data.error ?? "Failed to update order status");
+  }
+  return data;
+}
+
+export async function deleteOrder(token: string, orderId: string): Promise<{ ok: boolean }> {
+  const response = await fetch(`${API_BASE_URL}/orders/${orderId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return { ok: response.ok };
+}
+
+export async function generateInvoiceFromOrder(token: string, orderId: string, familyMemberId?: string): Promise<Invoice> {
+  const url = familyMemberId ? `${API_BASE_URL}/orders/${orderId}/invoice?familyMemberId=${familyMemberId}` : `${API_BASE_URL}/orders/${orderId}/invoice`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await parseJson<any>(response, "Failed to generate invoice");
+  if (!response.ok) {
+    throw new Error(data.error ?? "Failed to generate invoice");
+  }
+  return data;
+}
+
 // ── Family Members API ──────────────────────────────────────────────────────
 
 export async function getFamilyMembers(token: string, primaryCustomerId?: string): Promise<FamilyMember[]> {
@@ -488,7 +560,7 @@ export async function getProductTypes(token: string): Promise<ProductType[]> {
   return data;
 }
 
-export async function addProductType(token: string, productType: { name: string; amount: number }): Promise<ProductType> {
+export async function addProductType(token: string, productType: { name: string; amount: number; unit?: "inches" | "cm" }): Promise<ProductType> {
   const response = await fetch(`${API_BASE_URL}/product-types`, {
     method: "POST",
     headers: {
@@ -504,7 +576,7 @@ export async function addProductType(token: string, productType: { name: string;
   return data;
 }
 
-export async function updateProductType(token: string, productTypeId: string, data: { name?: string; amount?: number }): Promise<ProductType> {
+export async function updateProductType(token: string, productTypeId: string, data: { name?: string; amount?: number; unit?: "inches" | "cm" }): Promise<ProductType> {
   const response = await fetch(`${API_BASE_URL}/product-types/${productTypeId}`, {
     method: "PATCH",
     headers: {
@@ -602,6 +674,46 @@ export async function clearAllNotifications(token: string): Promise<{ ok: boolea
     headers: { Authorization: `Bearer ${token}` },
   });
   return { ok: response.ok };
+}
+
+// ── Delivery Dispatch ──────────────────────────────────────────────────────
+// Returns the list of due/overdue invoices with pre-built WhatsApp deep
+// links and mailto URLs. The mobile app pops the appropriate URL via
+// `Linking.openURL`. We never auto-send — the tailor confirms the send
+// inside WhatsApp or their email client.
+export interface DeliveryDispatchItem {
+  invoiceId: string;
+  invoiceNumber: string;
+  orderLabel: string;
+  customerName: string;
+  customerMobile: string;
+  customerEmail: string | null;
+  deliveryDate: string;
+  whatsappUrl: string;
+  emailSubject: string;
+  emailBody: string;
+  mailtoUrl: string | null;
+}
+
+export async function getDeliveryDispatch(
+  token: string,
+): Promise<DeliveryDispatchItem[]> {
+  const response = await fetch(`${API_BASE_URL}/notifications/dispatch-delivery`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({}),
+  });
+  const data = await parseJson<{ items: DeliveryDispatchItem[]; count: number }>(
+    response,
+    "Failed to load delivery dispatch list",
+  );
+  if (!response.ok) {
+    throw new Error((data as any).error ?? "Failed to load delivery dispatch list");
+  }
+  return data.items;
 }
 
 // ── Token & User Storage ───────────────────────────────────────────────────
@@ -702,6 +814,13 @@ export const api = {
     updateStatus: updateInvoiceStatus,
     delete: deleteInvoice,
   },
+  orders: {
+    get: getOrders,
+    create: createOrder,
+    updateStatus: updateOrderStatus,
+    delete: deleteOrder,
+    generateInvoice: generateInvoiceFromOrder,
+  },
   familyMembers: {
     get: getFamilyMembers,
     add: addFamilyMember,
@@ -723,5 +842,6 @@ export const api = {
     markRead: markNotificationRead,
     markAllRead: markAllNotificationsRead,
     clearAll: clearAllNotifications,
+    getDeliveryDispatch,
   },
 };

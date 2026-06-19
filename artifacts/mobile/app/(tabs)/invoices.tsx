@@ -3,36 +3,65 @@ import { FlatList, Platform, Pressable, Text, TextInput, View } from "react-nati
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useData } from "@/context/DataContext";
-import { InvoiceItem } from "@/components/ListItems";
-import { EmptyState } from "@/components/ui";
+import { EmptyState, Badge } from "@/components/ui";
 import colors from "@/constants/colors";
+import { formatCurrency, formatDate } from "@/utils/storage";
 
-export default function InvoicesScreen() {
+const statusConfig = {
+  pending: {
+    label: "Pending",
+    color: "#D97706",
+    bg: "#FEF3C7",
+    variant: "warning" as const,
+  },
+  completed: {
+    label: "Completed",
+    color: "#059669",
+    bg: "#D1FAE5",
+    variant: "success" as const,
+  },
+  cancelled: {
+    label: "Cancelled",
+    color: "#DC2626",
+    bg: "#FEE2E2",
+    variant: "destructive" as const,
+  },
+};
+
+export default function OrdersScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const { invoices } = useData();
+  const { orders } = useData();
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | "pending" | "completed">("all");
+  const [filter, setFilter] = useState<"all" | "pending" | "completed" | "cancelled">("all");
 
   const filtered = useMemo(
     () =>
-      invoices
+      orders
         .filter(
-          (i) =>
-            (filter === "all" || i.status === filter) &&
-            (i.customerName.toLowerCase().includes(search.toLowerCase()) ||
-              i.invoiceNumber.toLowerCase().includes(search.toLowerCase()))
+          (o) =>
+            (filter === "all" || o.status === filter) &&
+            (o.customerName.toLowerCase().includes(search.toLowerCase()) ||
+              o.orderNumber.toLowerCase().includes(search.toLowerCase()))
         )
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-    [invoices, search, filter]
+    [orders, search, filter]
   );
+
+  function deliveryDaysLeft(dateStr?: string | null): number | null {
+    if (!dateStr) return null;
+    const diff = new Date(dateStr).getTime() - Date.now();
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  }
 
   const topPad = Platform.OS === "web" ? 67 : 0;
 
   return (
     <View style={{ flex: 1, backgroundColor: c.background }}>
+      {/* Search and Header panel */}
       <View
         style={{
           paddingTop: insets.top + topPad + 16,
@@ -45,9 +74,12 @@ export default function InvoicesScreen() {
         }}
       >
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-          <Text style={{ fontSize: 22, fontFamily: "Inter_700Bold", color: c.foreground }}>Invoices</Text>
+          <Text style={{ fontSize: 22, fontFamily: "Inter_700Bold", color: c.foreground }}>Orders</Text>
           <Pressable
-            onPress={() => router.push("/invoices/new")}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push("/orders/new");
+            }}
             style={{ backgroundColor: c.primary, borderRadius: 10, padding: 8 }}
           >
             <MaterialIcons name="add" size={20} color={c.primaryForeground} />
@@ -69,7 +101,7 @@ export default function InvoicesScreen() {
           <MaterialIcons name="search" size={18} color={c.mutedForeground} />
           <TextInput
             style={{ flex: 1, fontSize: 15, fontFamily: "Inter_400Regular", color: c.foreground, paddingVertical: 10 }}
-            placeholder="Search by name or invoice..."
+            placeholder="Search orders..."
             placeholderTextColor={c.mutedForeground}
             value={search}
             onChangeText={setSearch}
@@ -83,7 +115,7 @@ export default function InvoicesScreen() {
 
         {/* Filter pills */}
         <View style={{ flexDirection: "row", gap: 8 }}>
-          {(["all", "pending", "completed"] as const).map((f) => (
+          {(["all", "pending", "completed", "cancelled"] as const).map((f) => (
             <Pressable
               key={f}
               onPress={() => setFilter(f)}
@@ -99,10 +131,9 @@ export default function InvoicesScreen() {
                   fontSize: 13,
                   fontFamily: "Inter_500Medium",
                   color: filter === f ? c.primaryForeground : c.mutedForeground,
-                  textTransform: "capitalize",
                 }}
               >
-                {f}
+                {f === "all" ? "All" : statusConfig[f].label}
               </Text>
             </Pressable>
           ))}
@@ -112,9 +143,92 @@ export default function InvoicesScreen() {
       <FlatList
         data={filtered}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <InvoiceItem invoice={item} onPress={() => router.push(`/invoices/${item.id}` as any)} />
-        )}
+        renderItem={({ item }) => {
+          const sc = statusConfig[item.status];
+          return (
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push(`/orders/${item.id}` as any);
+              }}
+              style={({ pressed }) => ({
+                flexDirection: "row",
+                alignItems: "center",
+                backgroundColor: c.card,
+                borderRadius: colors.radius,
+                padding: 14,
+                gap: 12,
+                borderWidth: 1,
+                borderColor: c.border,
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.04,
+                shadowRadius: 4,
+                elevation: 1,
+                opacity: pressed ? 0.88 : 1,
+              })}
+            >
+              <View
+                style={{
+                  width: 46,
+                  height: 46,
+                  borderRadius: 14,
+                  backgroundColor: sc.bg,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <MaterialIcons name="shopping-bag" size={22} color={sc.color} />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: c.foreground }}>
+                  {item.customerName}
+                </Text>
+                <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground, marginTop: 1 }}>
+                  {item.orderNumber} · {formatDate(item.createdAt)}
+                </Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3, flexWrap: "wrap" }}>
+                  <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: c.primary }}>
+                    {item.items?.length ?? 0} item{(item.items?.length ?? 0) !== 1 ? "s" : ""}
+                  </Text>
+                  {/* Delivery countdown */}
+                  {item.deliveryDate && (() => {
+                    const days = deliveryDaysLeft(item.deliveryDate);
+                    if (days === null) return null;
+                    const col = days < 0 ? "#DC2626" : days <= 2 ? "#D97706" : "#059669";
+                    const lbl = days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? "Due today" : `${days}d left`;
+                    return (
+                      <View style={{ backgroundColor: col + "18", borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1 }}>
+                        <Text style={{ fontSize: 10, fontFamily: "Inter_700Bold", color: col }}>{lbl}</Text>
+                      </View>
+                    );
+                  })()}
+                  {/* Balance due */}
+                  {(item.balanceDue ?? 0) > 0 && (
+                    <View style={{ backgroundColor: "#FEF3C7", borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1 }}>
+                      <Text style={{ fontSize: 10, fontFamily: "Inter_700Bold", color: "#D97706" }}>
+                        Bal: {formatCurrency(item.balanceDue ?? 0)}
+                      </Text>
+                    </View>
+                  )}
+                  {(item.advanceAmount ?? 0) > 0 && (item.balanceDue ?? 0) === 0 && (
+                    <View style={{ backgroundColor: "#D1FAE5", borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1 }}>
+                      <Text style={{ fontSize: 10, fontFamily: "Inter_700Bold", color: "#059669" }}>✓ Paid</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              <View style={{ alignItems: "flex-end", gap: 5 }}>
+                <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>
+                  {formatCurrency(Number(item.totalAmount))}
+                </Text>
+                <Badge label={sc.label} variant={sc.variant} />
+              </View>
+            </Pressable>
+          );
+        }}
         contentContainerStyle={{
           padding: 16,
           gap: 8,
@@ -125,10 +239,10 @@ export default function InvoicesScreen() {
         scrollEnabled={!!filtered.length}
         ListEmptyComponent={
           <EmptyState
-            icon="receipt"
-            title={search || filter !== "all" ? "No invoices found" : "No invoices yet"}
-            subtitle="Create an invoice for a customer order"
-            action={!search && filter === "all" ? { label: "Create Invoice", onPress: () => router.push("/invoices/new") } : undefined}
+            icon="shopping-bag"
+            title={search || filter !== "all" ? "No orders found" : "No orders"}
+            subtitle="Create an order from a customer profile or tap + above"
+            action={!search && filter === "all" ? { label: "Create Order", onPress: () => router.push("/orders/new") } : undefined}
           />
         }
         showsVerticalScrollIndicator={false}

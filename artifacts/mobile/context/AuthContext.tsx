@@ -6,20 +6,23 @@ import {
   setCurrentUser,
   setToken,
 } from "@/utils/api";
+import { i18n, initI18n, type SupportedLanguage } from "@/utils/i18n";
 import type { RegisterData, UpdateProfileData, User } from "@/types";
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (emailOrMobile: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (emailOrMobile: string, password: string) => Promise<{ success: boolean; error?: string; user?: User }>;
   register: (data: RegisterData) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   updateOnboardingComplete: () => Promise<void>;
   updateProfile: (data: UpdateProfileData) => Promise<void>;
-  approveUser: (userId: string) => Promise<void>;
-  rejectUser: (userId: string) => Promise<void>;
-  getPendingUsers: () => Promise<User[]>;
-  getAllTailors: () => Promise<User[]>;
+  /**
+   * Update the user's preferred language both locally (i18next) and on the
+   * server (users.preferredLanguage). The next app launch will load in
+   * this language.
+   */
+  setLanguage: (lang: SupportedLanguage) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -35,7 +38,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // On app launch, try to rehydrate the session from the stored token.
   // If the token is invalid or the server is unreachable, fall back to a
   // stored user (offline cache) and let API calls surface the auth error.
+  // We also hydrate i18n from the cached user's preferred language so the
+  // app starts in the right language on the very first render.
   async function init() {
+    // Always boot i18n first so the first frame is localised.
+    const cached = await getCurrentUser();
+    const initialLang: SupportedLanguage = (cached?.preferredLanguage as SupportedLanguage) ?? "en";
+    initI18n(initialLang);
+
     try {
       const token = await getToken();
       if (token) {
@@ -43,13 +53,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const fresh = await api.auth.me(token);
           await setCurrentUser(fresh);
           setUser(fresh);
+          if (fresh.preferredLanguage && fresh.preferredLanguage !== i18n.language) {
+            await i18n.changeLanguage(fresh.preferredLanguage);
+          }
           setIsLoading(false);
           return;
         } catch {
-          // Token invalid or server down — try cached user
+          // Token invalid or server down — fall back to cached user
         }
       }
-      const cached = await getCurrentUser();
       setUser(cached);
     } finally {
       setIsLoading(false);
@@ -64,7 +76,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await setToken(result.token);
     await setCurrentUser(result.user);
     setUser(result.user);
-    return { success: true };
+    if (result.user.preferredLanguage) {
+      await i18n.changeLanguage(result.user.preferredLanguage);
+    }
+    return { success: true, user: result.user };
   }
 
   async function register(data: RegisterData) {
@@ -121,30 +136,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const updated = await api.auth.updateProfile(token, data);
     await setCurrentUser(updated);
     setUser(updated);
+    if (updated.preferredLanguage && updated.preferredLanguage !== i18n.language) {
+      await i18n.changeLanguage(updated.preferredLanguage);
+    }
   }
 
-  async function approveUser(userId: string) {
+  async function setLanguage(lang: SupportedLanguage) {
+    // 1. Update i18n immediately so the UI switches instantly.
+    await i18n.changeLanguage(lang);
+    // 2. Persist the choice in the cached user object so the next launch
+    //    boots in this language even when offline.
+    if (user) {
+      const updated: User = { ...user, preferredLanguage: lang };
+      await setCurrentUser(updated);
+      setUser(updated);
+    }
+    // 3. Try to push the change to the server (best-effort).
     const token = await getToken();
-    if (!token) throw new Error("Not authenticated");
-    await api.auth.approveUser(token, userId);
-  }
-
-  async function rejectUser(userId: string) {
-    const token = await getToken();
-    if (!token) throw new Error("Not authenticated");
-    await api.auth.rejectUser(token, userId);
-  }
-
-  async function getPendingUsers() {
-    const token = await getToken();
-    if (!token) return [];
-    return api.auth.pendingUsers(token);
-  }
-
-  async function getAllTailors() {
-    const token = await getToken();
-    if (!token) return [];
-    return api.auth.allTailors(token);
+    if (token) {
+      try {
+        const updated = await api.auth.updateProfile(token, { preferredLanguage: lang });
+        await setCurrentUser(updated);
+        setUser(updated);
+      } catch (err) {
+        console.warn("[auth] Failed to persist language to server:", err);
+      }
+    }
   }
 
   return (
@@ -157,10 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         updateOnboardingComplete,
         updateProfile,
-        approveUser,
-        rejectUser,
-        getPendingUsers,
-        getAllTailors,
+        setLanguage,
       }}
     >
       {children}

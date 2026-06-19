@@ -18,6 +18,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Button, Card, Input } from "@/components/ui";
 import colors from "@/constants/colors";
 import { Speciality } from "@/types";
+import { useTranslation, SUPPORTED_LANGUAGES, SupportedLanguage } from "@/utils/i18n";
 
 type Field = "name" | "email" | "mobile" | "shopName" | "shopAddress" | "city" | "state";
 
@@ -33,7 +34,8 @@ function isValidMobile(mobile: string): boolean {
 export default function ProfileScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const { user, updateProfile } = useAuth();
+  const { user, updateProfile, setLanguage } = useAuth();
+  const { t, i18n } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -71,7 +73,7 @@ export default function ProfileScreen() {
   if (!user) {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.background }}>
-        <Text style={{ color: c.mutedForeground, fontFamily: "Inter_400Regular" }}>Not signed in</Text>
+        <Text style={{ color: c.mutedForeground, fontFamily: "Inter_400Regular" }}>{t("notSignedIn")}</Text>
       </View>
     );
   }
@@ -108,15 +110,15 @@ export default function ProfileScreen() {
   async function saveEdit() {
     // ── Validation ─────────────────────────────────────────────────────
     if (!form.name.trim()) {
-      Alert.alert("Validation Error", "Name is required.");
+      Alert.alert(t("errors.updateFailed"), t("errors.nameRequired"));
       return;
     }
     if (!form.email.trim() || !isValidEmail(form.email)) {
-      Alert.alert("Validation Error", "Please enter a valid email address.");
+      Alert.alert(t("errors.updateFailed"), t("errors.emailInvalid"));
       return;
     }
     if (!form.mobile.trim() || !isValidMobile(form.mobile)) {
-      Alert.alert("Validation Error", "Please enter a valid mobile number.");
+      Alert.alert(t("errors.updateFailed"), t("errors.mobileInvalid"));
       return;
     }
 
@@ -143,8 +145,8 @@ export default function ProfileScreen() {
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err: any) {
       Alert.alert(
-        "Update Failed",
-        err?.message ?? "Could not save your profile. Please try again.",
+        t("errors.updateFailed"),
+        err?.message ?? t("errors.updateFailedHint"),
       );
     } finally {
       setSaving(false);
@@ -161,20 +163,20 @@ export default function ProfileScreen() {
   };
 
   const rows: Row[] = [
-    { icon: "person", label: "Full Name *", field: "name", value: form.name },
-    { icon: "email", label: "Email *", field: "email", value: form.email, keyboardType: "email-address", autoCapitalize: "none" },
-    { icon: "phone", label: "Mobile *", field: "mobile", value: form.mobile, keyboardType: "phone-pad" },
-    { icon: "badge", label: "Role", value: user.role === "admin" ? "Admin" : "Tailor" },
-    { icon: "storefront", label: "Shop Name", field: "shopName", value: form.shopName },
-    { icon: "location-on", label: "Address", field: "shopAddress", value: form.shopAddress },
-    { icon: "location-city", label: "City", field: "city", value: form.city },
-    { icon: "map", label: "State", field: "state", value: form.state },
+    { icon: "person", label: `${t("form.fullName")} *`, field: "name", value: form.name },
+    { icon: "email", label: `${t("form.email")} *`, field: "email", value: form.email, keyboardType: "email-address", autoCapitalize: "none" },
+    { icon: "phone", label: `${t("form.mobile")} *`, field: "mobile", value: form.mobile, keyboardType: "phone-pad" },
+    { icon: "badge", label: t("labels.role"), value: user.role === "admin" ? t("labels.admin") : t("labels.tailor") },
+    { icon: "storefront", label: t("form.shopName"), field: "shopName", value: form.shopName },
+    { icon: "location-on", label: t("form.address"), field: "shopAddress", value: form.shopAddress },
+    { icon: "location-city", label: t("form.city"), field: "city", value: form.city },
+    { icon: "map", label: t("form.state"), field: "state", value: form.state },
   ];
 
   const SPECIALITIES: { label: string; value: Speciality }[] = [
-    { label: "Male", value: "male" },
-    { label: "Female", value: "female" },
-    { label: "Unisex", value: "unisex" },
+    { label: t("specialities.male"), value: "male" },
+    { label: t("specialities.female"), value: "female" },
+    { label: t("specialities.unisex"), value: "unisex" },
   ];
 
   return (
@@ -199,7 +201,7 @@ export default function ProfileScreen() {
             <MaterialIcons name="arrow-back" size={20} color="#FFFFFF" />
           </Pressable>
           <Text style={{ flex: 1, fontSize: 18, fontFamily: "Inter_600SemiBold", color: "#FFFFFF" }}>
-            Profile
+            {t("profile.title")}
           </Text>
           {!editing ? (
             <Pressable
@@ -259,7 +261,7 @@ export default function ProfileScreen() {
             {user.name}
           </Text>
           <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.8)" }}>
-            {user.role === "admin" ? "Administrator" : user.shopName ?? "Tailor"}
+            {user.role === "admin" ? t("labels.administrator") : user.shopName ?? t("labels.tailor")}
           </Text>
         </View>
       </View>
@@ -285,7 +287,7 @@ export default function ProfileScreen() {
           >
             <MaterialIcons name="check-circle" size={18} color="#059669" />
             <Text style={{ flex: 1, fontSize: 13, fontFamily: "Inter_500Medium", color: "#059669" }}>
-              Profile updated successfully!
+              {t("success.profileUpdated")}
             </Text>
           </View>
         )}
@@ -302,7 +304,7 @@ export default function ProfileScreen() {
               marginBottom: 8,
             }}
           >
-            General Details
+            {t("profile.generalDetails")}
           </Text>
           {rows.map((row, idx) => (
             <React.Fragment key={row.label}>
@@ -375,11 +377,11 @@ export default function ProfileScreen() {
                   letterSpacing: 0.5,
                 }}
               >
-                Speciality
+                {t("profile.speciality")}
               </Text>
               {!editing && displaySpeciality && (
                 <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
-                  Tap ✏️ Edit to change
+                  {t("success.tapToChange")}
                 </Text>
               )}
             </View>
@@ -465,7 +467,7 @@ export default function ProfileScreen() {
                   >
                     <MaterialIcons name="info-outline" size={16} color={c.mutedForeground} />
                     <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
-                      No speciality set. Tap Edit to add one.
+                      {t("success.noSpeciality")}
                     </Text>
                   </View>
                 )}
@@ -525,10 +527,84 @@ export default function ProfileScreen() {
         )}
 
 
+        {/* ── Preferred Language (view mode only) ── */}
+        {!editing && (
+          <Card style={{ gap: 10 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontFamily: "Inter_600SemiBold",
+                  color: c.mutedForeground,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.5,
+                }}
+              >
+                {t("profile.language")}
+              </Text>
+              <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
+                {(i18n.language || "en").toUpperCase()}
+              </Text>
+            </View>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              {SUPPORTED_LANGUAGES.map((lang) => {
+                const active = (i18n.language || "en").startsWith(lang);
+                return (
+                  <Pressable
+                    key={lang}
+                    onPress={async () => {
+                      try {
+                        await setLanguage(lang as SupportedLanguage);
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                      } catch (err: any) {
+                        Alert.alert(t("errors.updateFailed"), err?.message ?? String(err));
+                      }
+                    }}
+                    style={({ pressed }) => ({
+                      flex: 1,
+                      paddingVertical: 12,
+                      borderRadius: colors.radius,
+                      backgroundColor: active ? c.primary + "15" : c.muted,
+                      alignItems: "center",
+                      borderWidth: active ? 2 : 1,
+                      borderColor: active ? c.primary : c.border,
+                      gap: 4,
+                      opacity: pressed ? 0.85 : 1,
+                    })}
+                  >
+                    {active && (
+                      <MaterialIcons
+                        name="check-circle"
+                        size={14}
+                        color={c.primary}
+                        style={{ position: "absolute", top: 6, right: 6 } as any}
+                      />
+                    )}
+                    <MaterialIcons
+                      name="language"
+                      size={22}
+                      color={active ? c.primary : c.mutedForeground}
+                    />
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontFamily: active ? "Inter_700Bold" : "Inter_500Medium",
+                        color: active ? c.primary : c.mutedForeground,
+                      }}
+                    >
+                      {t(`languages.${lang}`)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </Card>
+        )}
+
         {/* ── Save button ── */}
         {editing && (
           <Button
-            label="Save Changes"
+            label={t("saveChanges")}
             onPress={saveEdit}
             loading={saving}
             fullWidth

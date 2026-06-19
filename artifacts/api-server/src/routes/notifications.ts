@@ -1,8 +1,8 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, ne } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@workspace/db";
-import { notifications } from "@workspace/db/schema";
+import { customers, invoices, notifications } from "@workspace/db/schema";
 import { authMiddleware } from "../middlewares/auth";
 import { getParam } from "../lib/params";
 
@@ -33,7 +33,12 @@ const createSchema = z.object({
   title: z.string().min(1).max(200),
   message: z.string().min(1),
   type: z.enum([
-    "delivery_due_today", "delivery_due_tomorrow", "pending_invoice", "general",
+    "delivery_due_today",
+    "delivery_due_tomorrow",
+    "delivery_overdue",
+    "pending_invoice",
+    "general",
+    "whatsapp_due",
   ]).default("general"),
   relatedId: z.string().nullable().optional(),
 });
@@ -59,6 +64,96 @@ router.post("/", async (req: Request, res: Response) => {
     .where(eq(notifications.id, id))
     .limit(1);
   res.status(201).json(row);
+});
+
+// ---- POST /api/notifications/dispatch-delivery --------------------------
+// Returns a list of "delivery" items (overdue + due today) for the calling
+// tailor with the WhatsApp deep-link and email body pre-built. The mobile
+// app opens the WhatsApp / mailto URLs on tap. We do NOT auto-send — the
+// tailor confirms the send inside WhatsApp / their email client.
+router.post("/dispatch-delivery", async (req: Request, res: Response) => {
+  const tailorId = req.user!.id;
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date(todayStart);
+  todayEnd.setDate(todayEnd.getDate() + 1);
+
+  // Pull every pending invoice for this tailor with a deliveryDate in the
+  // past 1 day or in the future (covers "due today" and "overdue" — the
+  // mobile app filters out anything in the future).
+  const dueInvoices = await db
+    .select({
+      id: invoices.id,
+      invoiceNumber: invoices.invoiceNumber,
+      orderLabel: invoices.orderLabel,
+      customerId: invoices.customerId,
+      customerName: invoices.customerName,
+      customerMobile: invoices.customerMobile,
+      deliveryDate: invoices.deliveryDate,
+      total: invoices.total,
+    })
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.tailorId, tailorId),
+        eq(invoices.status, "pending"),
+        ne(invoices.deliveryDate, null as any),
+        gte(invoices.deliveryDate, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)),
+        lte(invoices.deliveryDate, todayEnd),
+      ),
+    )
+    .orderBy(desc(invoices.deliveryDate));
+
+  // Resolve customer emails (we have customer name + mobile on the invoice,
+  // but email lives on the customer record).
+  const customerIds = Array.from(new Set(dueInvoices.map((i) => i.customerId)));
+  const customerRows =
+    customerIds.length === 0
+      ? []
+      : await db
+          .select({ id: customers.id, email: customers.email })
+          .from(customers)
+          .where(inArray(customers.id, customerIds));
+  const emailById = new Map(customerRows.map((c) => [c.id, c.email ?? null]));
+
+  const fmtDate = (d: Date | null) => {
+    if (!d) return "";
+    return d.toISOString().slice(0, 10).split("-").reverse().join("-");
+  };
+
+  const items = dueInvoices
+    .filter((inv) => inv.deliveryDate)
+    .map((inv) => {
+      const d = inv.deliveryDate as unknown as Date;
+      const dateStr = fmtDate(d);
+      const message =
+        `Hello ${inv.customerName},\n\n` +
+        `Your order is ready for delivery.\n\n` +
+        `Delivery Date:\n${dateStr}\n\n` +
+        `Thank you,\nTailor Book`;
+      const phoneDigits = (inv.customerMobile ?? "").replace(/\D/g, "");
+      const whatsappUrl = `whatsapp://send?phone=${phoneDigits ? `91${phoneDigits}` : ""}&text=${encodeURIComponent(message)}`;
+      const subject = `Your order is ready — ${inv.orderLabel ?? inv.invoiceNumber}`;
+      const customerEmail = emailById.get(inv.customerId) ?? null;
+      const mailtoUrl = customerEmail
+        ? `mailto:${customerEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`
+        : null;
+      return {
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        orderLabel: inv.orderLabel,
+        customerName: inv.customerName,
+        customerMobile: inv.customerMobile,
+        customerEmail,
+        deliveryDate: dateStr,
+        whatsappUrl,
+        emailSubject: subject,
+        emailBody: message,
+        mailtoUrl,
+      };
+    });
+
+  res.json({ items, count: items.length });
 });
 
 // ---- PATCH /api/notifications/:id/read ----------------------------------

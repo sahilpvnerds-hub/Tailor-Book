@@ -56,6 +56,7 @@ const measurementValuesSchema = z
 const measurementItemSchema = z.object({
   productTypeId: z.string().nullable().optional(),
   productType: z.string().min(1),
+  featureLabel: z.string().nullable().optional(),
   values: measurementValuesSchema,
   customMeasurements: customMeasurementSchema,
   notes: z.string().nullable().optional(),
@@ -67,6 +68,7 @@ const createSchema = z.object({
   familyMemberId: z.string().nullable().optional(),
   productType: z.string().min(1).optional(),
   productTypeId: z.string().nullable().optional(),
+  featureLabel: z.string().nullable().optional(),
   measurementDate: z.string().optional(),
   date: z.string().optional(),
   deliveryDate: z.string().nullable().optional(),
@@ -115,6 +117,7 @@ function normalizeItems(d: ParsedCreate): NormalizedItem[] {
     {
       productTypeId: d.productTypeId,
       productType: d.productType ?? "",
+      featureLabel: d.featureLabel,
       values,
       customMeasurements: d.customMeasurements ?? [],
       notes: d.notes,
@@ -371,6 +374,7 @@ router.post("/", async (req: Request, res: Response) => {
         measurementSessionId: sessionId,
         productTypeId: item.productTypeId ?? null,
         productType: item.productType,
+        featureLabel: item.featureLabel ?? null,
       });
 
       const normalizedValues = Object.entries(item.values)
@@ -403,6 +407,7 @@ router.post("/", async (req: Request, res: Response) => {
         tailorId: req.user!.id,
         customerName: cust.name,
         productType: item.productType,
+        featureLabel: item.featureLabel ?? null,
         measurementDate: new Date(dateStr),
         deliveryDate: d.deliveryDate ? new Date(toDateOnly(d.deliveryDate)!) : null,
         chest: getPositiveNumber(item.values.chest),

@@ -20,6 +20,12 @@ function visibleFilter(req: Request) {
     : eq(productTypes.tailorId, req.user!.id);
 }
 
+// Feature sub-type schema
+const featureSchema = z.object({
+  label: z.string().min(1).max(100),
+  gender: z.enum(["male", "female", "both"]).optional(),
+});
+
 // ---- GET /api/product-types ---------------------------------------------
 router.get("/", async (req: Request, res: Response) => {
   const rows = await db
@@ -34,12 +40,14 @@ router.get("/", async (req: Request, res: Response) => {
 const createSchema = z.object({
   name: z.string().min(1).max(100),
   amount: z.number().nonnegative().default(0),
+  unit: z.enum(["inches", "cm"]).optional(),
+  features: z.array(featureSchema).optional().default([]),
 });
 
 router.post("/", async (req: Request, res: Response) => {
   const body = createSchema.safeParse(req.body);
   if (!body.success) {
-    res.status(400).json({ error: "Invalid request body" });
+    res.status(400).json({ error: "Invalid request body", issues: body.error.issues });
     return;
   }
   const id = crypto.randomUUID();
@@ -48,6 +56,8 @@ router.post("/", async (req: Request, res: Response) => {
     tailorId: req.user!.id,
     name: body.data.name,
     amount: String(body.data.amount),
+    unit: body.data.unit ?? "inches",
+    features: body.data.features ?? [],
   });
   const [row] = await db
     .select()
@@ -76,7 +86,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
   }
   const body = updateSchema.safeParse(req.body);
   if (!body.success) {
-    res.status(400).json({ error: "Invalid request body" });
+    res.status(400).json({ error: "Invalid request body", issues: body.error.issues });
     return;
   }
   const patch: Record<string, unknown> = { ...body.data };

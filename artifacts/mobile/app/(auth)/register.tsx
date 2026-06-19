@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { router } from "expo-router";
@@ -14,7 +16,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 import { Button, Input } from "@/components/ui";
-import { Speciality } from "@/types";
+import { Speciality, PreferredLanguage } from "@/types";
 import {
   runValidation,
   validateConfirmPassword,
@@ -30,41 +32,67 @@ import {
   getOtpPending,
   setOtpPending,
 } from "@/utils/api";
+import {
+  i18n,
+  SUPPORTED_LANGUAGES,
+  useTranslation,
+} from "@/utils/i18n";
+import { requestAndGetCoords } from "@/utils/location";
+import { reverseGeocode } from "@/utils/geocode";
 import colors from "@/constants/colors";
 
-type Step = "form" | "otp";
+type Step = "form" | "otp" | "success";
 
-const SPECIALITY_OPTIONS: { value: Speciality; label: string; icon: string }[] = [
-  { value: "male", label: "Male", icon: "man" },
-  { value: "female", label: "Female", icon: "woman" },
-  { value: "unisex", label: "Unisex", icon: "people" },
+const SPECIALITY_OPTIONS: { value: Speciality; icon: string; key: "male" | "female" | "unisex" }[] = [
+  { value: "male", icon: "man", key: "male" },
+  { value: "female", icon: "woman", key: "female" },
+  { value: "unisex", icon: "people", key: "unisex" },
 ];
 
 export default function RegisterScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const { register } = useAuth();
   const [step, setStep] = useState<Step>("form");
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
-  // The server-issued devOtp is shown in the demo alert so the user can
-  // copy it. In production it would be emailed.
-  const [devOtp, setDevOtp] = useState<string | null>(null);
+  const [fetchingAddress, setFetchingAddress] = useState(false);
+  const [addressDetected, setAddressDetected] = useState(false);
   const [otpExpiresAt, setOtpExpiresAt] = useState(0);
   const [enteredOtp, setEnteredOtp] = useState("");
   const [otpError, setOtpError] = useState("");
+  const shopAddressRef = useRef<TextInput>(null);
+  const addressFetchedRef = useRef(false);
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{
+    name: string;
+    email: string;
+    mobile: string;
+    password: string;
+    confirmPassword: string;
+    speciality: Speciality;
+    shopName: string;
+    shopAddress: string;
+    city: string;
+    state: string;
+    preferredLanguage: PreferredLanguage;
+    latitude: number | null;
+    longitude: number | null;
+  }>({
     name: "",
     email: "",
     mobile: "",
     password: "",
     confirmPassword: "",
-    speciality: "unisex" as Speciality,
+    speciality: "unisex",
     shopName: "",
     shopAddress: "",
     city: "",
     state: "",
+    preferredLanguage: "en",
+    latitude: null,
+    longitude: null,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -88,8 +116,8 @@ export default function RegisterScreen() {
         shopAddress: pending.formData.shopAddress ?? f.shopAddress,
         city: pending.formData.city ?? f.city,
         state: pending.formData.state ?? f.state,
+        preferredLanguage: (pending.formData.preferredLanguage as PreferredLanguage) ?? f.preferredLanguage,
       }));
-      setDevOtp(null); // devOtp is not cached — only the expiry
       setOtpExpiresAt(pending.expiresAt);
       setStep("otp");
     })();
@@ -123,7 +151,52 @@ export default function RegisterScreen() {
       shopAddress: form.shopAddress.trim(),
       city: form.city.trim(),
       state: form.state.trim(),
+      preferredLanguage: form.preferredLanguage,
     };
+  }
+
+  /**
+   * Fired when the user taps the Shop Address field. We ask for GPS
+   * permission, read the coordinates, then reverse-geocode via
+   * OpenStreetMap Nominatim (no API key, no IP-based guess) to fill
+   * the address, city, and state automatically. We only do this once
+   * per visit so we don't spam the API when the user re-focuses the
+   * field to edit the text.
+   */
+  async function handleShopAddressFocus() {
+    if (addressFetchedRef.current) return;
+    addressFetchedRef.current = true;
+    setFetchingAddress(true);
+    try {
+      const coords = await requestAndGetCoords();
+      if (!coords) return;
+      const result = await reverseGeocode(coords.latitude, coords.longitude);
+      if (result) {
+        setForm((f) => ({
+          ...f,
+          shopAddress:
+            [result.houseNumber, result.road, result.neighbourhood]
+              .filter(Boolean)
+              .join(", ") || f.shopAddress,
+          city: result.city || f.city,
+          state: result.state || f.state,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        }));
+        setAddressDetected(true);
+      } else {
+        // Permission was granted but the network lookup failed — still
+        // remember we tried so we don't keep re-asking. Save the raw
+        // coords so the user can refine the address manually.
+        setForm((f) => ({
+          ...f,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        }));
+      }
+    } finally {
+      setFetchingAddress(false);
+    }
   }
 
   async function handleSendOtp() {
@@ -135,29 +208,18 @@ export default function RegisterScreen() {
     setLoading(true);
     try {
       const email = form.email.trim().toLowerCase();
-      const result = await api.auth.sendOtp(email);
+      await api.auth.sendOtp(email);
       const expiresAt = Date.now() + 10 * 60 * 1000; // 10 min — matches server
-      setDevOtp(result.devOtp ?? null);
       setOtpExpiresAt(expiresAt);
       await setOtpPending({
         email,
         otp: "", // server holds the OTP; we only cache expiry + form
         expiresAt,
-        formData: snapshotFormData(),
+        formData: snapshotFormData() as any,
       });
       setStep("otp");
-      // In production: result.message is "OTP sent to ..." and the server
-      // dispatches the email. In demo mode we get the OTP back so the user
-      // can copy it.
-      if (result.devOtp) {
-        setTimeout(() => {
-          Alert.alert(
-            "OTP Sent (Demo)",
-            `Your OTP is: ${result.devOtp}\n\nIn production this would be emailed to ${email}.`,
-            [{ text: "OK" }]
-          );
-        }, 300);
-      }
+      // Email is sent by the server via SMTP. The user must check their
+      // inbox for the 6-digit code.
     } catch (err) {
       Alert.alert("Could Not Send OTP", (err as Error).message);
     } finally {
@@ -169,21 +231,16 @@ export default function RegisterScreen() {
     setResending(true);
     try {
       const email = form.email.trim().toLowerCase();
-      const result = await api.auth.sendOtp(email);
+      await api.auth.sendOtp(email);
       const expiresAt = Date.now() + 10 * 60 * 1000;
-      setDevOtp(result.devOtp ?? null);
       setOtpExpiresAt(expiresAt);
       await setOtpPending({
         email,
         otp: "",
         expiresAt,
-        formData: snapshotFormData(),
+        formData: snapshotFormData() as any,
       });
-      if (result.devOtp) {
-        Alert.alert("New OTP (Demo)", `Your new OTP is: ${result.devOtp}`);
-      } else {
-        Alert.alert("OTP Resent", `A new OTP was sent to ${email}.`);
-      }
+      Alert.alert("OTP Resent", `A new OTP was sent to ${email}.`);
     } catch (err) {
       Alert.alert("Resend Failed", (err as Error).message);
     } finally {
@@ -226,6 +283,9 @@ export default function RegisterScreen() {
       city: form.city.trim() || undefined,
       state: form.state.trim() || undefined,
       emailVerifiedAt: verifiedAt,
+      preferredLanguage: form.preferredLanguage,
+      latitude: form.latitude ?? undefined,
+      longitude: form.longitude ?? undefined,
     });
     setLoading(false);
     if (!result.success) {
@@ -233,15 +293,115 @@ export default function RegisterScreen() {
     } else {
       // Clear the pending OTP so the next reload starts from the form.
       await clearOtpPending();
-      Alert.alert(
-        "Registration Submitted",
-        "Your account is pending admin approval. You will be notified once approved.",
-        [{ text: "OK", onPress: () => router.back() }]
-      );
+      // Account is auto-approved — show success and offer to log in.
+      setStep("success");
     }
   }
 
+  function handleBackToLogin() {
+    // Replace the register screen with the login screen so back button
+    // doesn't return here.
+    router.replace("/login");
+  }
+
   const topPad = insets.top + (Platform.OS === "web" ? 67 : 12);
+
+  // ── Success Step ────────────────────────────────────────────────────────
+  if (step === "success") {
+    return (
+      <KeyboardAvoidingView
+        style={{ flex: 1, backgroundColor: c.background }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <View
+          style={{
+            flex: 1,
+            paddingTop: topPad,
+            paddingBottom: insets.bottom + 32,
+            paddingHorizontal: 24,
+            justifyContent: "center",
+            alignItems: "center",
+            gap: 18,
+          }}
+        >
+          <View
+            style={{
+              width: 96,
+              height: 96,
+              borderRadius: 32,
+              backgroundColor: "#D1FAE5",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <MaterialIcons name="check-circle" size={64} color="#059669" />
+          </View>
+          <Text
+            style={{
+              fontSize: 26,
+              fontFamily: "Inter_700Bold",
+              color: c.foreground,
+              textAlign: "center",
+            }}
+          >
+            {t("register.success")}
+          </Text>
+          <Text
+            style={{
+              fontSize: 15,
+              fontFamily: "Inter_400Regular",
+              color: c.mutedForeground,
+              textAlign: "center",
+              lineHeight: 22,
+              paddingHorizontal: 16,
+            }}
+          >
+            {t("register.successMessage")}
+          </Text>
+
+          <View
+            style={{
+              backgroundColor: c.card,
+              borderRadius: colors.radius,
+              borderWidth: 1,
+              borderColor: c.border,
+              padding: 16,
+              width: "100%",
+              gap: 6,
+              marginTop: 6,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 12,
+                fontFamily: "Inter_600SemiBold",
+                color: c.mutedForeground,
+                textTransform: "uppercase",
+                letterSpacing: 0.5,
+              }}
+            >
+              Account
+            </Text>
+            <Text style={{ fontSize: 15, fontFamily: "Inter_500Medium", color: c.foreground }}>
+              {form.name}
+            </Text>
+            <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
+              {form.email}
+            </Text>
+          </View>
+
+          <Button
+            label={t("auth.login")}
+            onPress={handleBackToLogin}
+            fullWidth
+            size="lg"
+            icon="login"
+            style={{ marginTop: 6 }}
+          />
+        </View>
+      </KeyboardAvoidingView>
+    );
+  }
 
   // ── OTP Step ─────────────────────────────────────────────────────────────
   if (step === "otp") {
@@ -265,7 +425,7 @@ export default function RegisterScreen() {
           >
             <MaterialIcons name="arrow-back" size={20} color={c.foreground} />
             <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: c.foreground }}>
-              Back
+              {t("common.back")}
             </Text>
           </Pressable>
 
@@ -291,7 +451,7 @@ export default function RegisterScreen() {
               marginBottom: 8,
             }}
           >
-            Verify Email
+            {t("register.stepOtp")}
           </Text>
           <Text
             style={{
@@ -302,14 +462,11 @@ export default function RegisterScreen() {
               lineHeight: 20,
             }}
           >
-            We sent a 6-digit OTP to{"\n"}
-            <Text style={{ fontFamily: "Inter_600SemiBold", color: c.foreground }}>
-              {form.email}
-            </Text>
+            {t("register.otpPrompt", { email: form.email })}
           </Text>
 
           <Input
-            label="Enter OTP"
+            label="OTP"
             placeholder="6-digit code"
             value={enteredOtp}
             onChangeText={(v) => {
@@ -321,34 +478,8 @@ export default function RegisterScreen() {
             error={otpError}
           />
 
-          {devOtp ? (
-            <View
-              style={{
-                marginTop: 12,
-                padding: 12,
-                backgroundColor: "#EEF2FF",
-                borderRadius: colors.radius,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              <MaterialIcons name="info-outline" size={16} color="#4338CA" />
-              <Text
-                style={{
-                  flex: 1,
-                  fontSize: 12,
-                  fontFamily: "Inter_500Medium",
-                  color: "#4338CA",
-                }}
-              >
-                Demo OTP: <Text style={{ fontFamily: "Inter_700Bold" }}>{devOtp}</Text>
-              </Text>
-            </View>
-          ) : null}
-
           <Button
-            label="Verify & Complete Registration"
+            label={t("register.verify")}
             onPress={handleVerifyAndRegister}
             loading={loading}
             fullWidth
@@ -368,7 +499,7 @@ export default function RegisterScreen() {
                 color: resending ? c.mutedForeground : c.primary,
               }}
             >
-              {resending ? "Sending..." : "Resend OTP"}
+              {resending ? "Sending..." : t("register.resendOtp")}
             </Text>
           </Pressable>
         </ScrollView>
@@ -402,29 +533,74 @@ export default function RegisterScreen() {
           </Pressable>
           <View>
             <Text style={{ fontSize: 22, fontFamily: "Inter_700Bold", color: c.foreground }}>
-              Tailor Registration
+              {t("register.title")}
             </Text>
             <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
-              Create your tailor account
+              {t("register.stepForm")}
             </Text>
           </View>
         </View>
 
         <View style={{ gap: 14 }}>
+          {/* Preferred Language — at the very top so the rest of the form
+              can re-render in the chosen language as the user types. */}
+          <View style={{ gap: 6 }}>
+            <SectionLabel label={t("register.language")} />
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              {SUPPORTED_LANGUAGES.map((lng) => {
+                const selected = form.preferredLanguage === lng;
+                return (
+                  <Pressable
+                    key={lng}
+                    onPress={() => {
+                      setForm((f) => ({ ...f, preferredLanguage: lng as PreferredLanguage }));
+                      // Switch the UI language immediately so all labels
+                      // (including this section title) update.
+                      try {
+                        i18n.changeLanguage(lng);
+                      } catch (err) {
+                        console.warn("[register] changeLanguage failed:", err);
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 14,
+                      borderRadius: colors.radius,
+                      borderWidth: 1.5,
+                      borderColor: selected ? c.primary : c.border,
+                      backgroundColor: selected ? c.primary + "12" : c.card,
+                      alignItems: "center",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 14,
+                        fontFamily: selected ? "Inter_600SemiBold" : "Inter_500Medium",
+                        color: selected ? c.primary : c.mutedForeground,
+                      }}
+                    >
+                      {t(`languages.${lng}`)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
           {/* Personal Info */}
-          <SectionLabel label="Personal Information" />
+          <SectionLabel label={t("common.name") + " *"} />
 
           <Input
-            label="Full Name *"
-            placeholder="Enter your full name"
+            label=""
+            placeholder={t("register.name")}
             value={form.name}
             onChangeText={(v) => set("name", v)}
             icon="person"
             error={errors.name}
           />
           <Input
-            label="Email Address *"
-            placeholder="Enter email"
+            label=""
+            placeholder={t("register.email")}
             value={form.email}
             onChangeText={(v) => set("email", v)}
             icon="email"
@@ -433,17 +609,17 @@ export default function RegisterScreen() {
             error={errors.email}
           />
           <Input
-            label="Mobile Number * (10 digits)"
-            placeholder="Enter 10-digit mobile"
+            label=""
+            placeholder={t("register.mobile")}
             value={form.mobile}
-            onChangeText={(v) => set("mobile", v.replace(/\D/g, "").slice(0, 10))}
+            onChangeText={(v) => set("mobile", v.replace(/\D/g, "").slice(0, 15))}
             icon="phone"
             keyboardType="phone-pad"
             error={errors.mobile}
           />
           <Input
-            label="Password *"
-            placeholder="Min 8 chars, upper, lower, number, special"
+            label=""
+            placeholder={t("register.password")}
             value={form.password}
             onChangeText={(v) => set("password", v)}
             icon="lock"
@@ -451,8 +627,8 @@ export default function RegisterScreen() {
             error={errors.password}
           />
           <Input
-            label="Confirm Password *"
-            placeholder="Re-enter password"
+            label=""
+            placeholder={t("register.confirmPassword")}
             value={form.confirmPassword}
             onChangeText={(v) => set("confirmPassword", v)}
             icon="lock-outline"
@@ -462,17 +638,7 @@ export default function RegisterScreen() {
 
           {/* Speciality */}
           <View style={{ gap: 6, marginTop: 4 }}>
-            <Text
-              style={{
-                fontSize: 12,
-                fontFamily: "Inter_600SemiBold",
-                color: c.mutedForeground,
-                textTransform: "uppercase",
-                letterSpacing: 0.5,
-              }}
-            >
-              Speciality *
-            </Text>
+            <SectionLabel label={t("register.speciality") + " *"} />
             <View style={{ flexDirection: "row", gap: 10 }}>
               {SPECIALITY_OPTIONS.map((opt) => {
                 const selected = form.speciality === opt.value;
@@ -482,7 +648,7 @@ export default function RegisterScreen() {
                     onPress={() => setForm((f) => ({ ...f, speciality: opt.value }))}
                     style={{
                       flex: 1,
-                      padding: 12,
+                      paddingVertical: 14,
                       borderRadius: colors.radius,
                       borderWidth: 1.5,
                       borderColor: selected ? c.primary : c.border,
@@ -493,7 +659,7 @@ export default function RegisterScreen() {
                   >
                     <MaterialIcons
                       name={opt.icon as any}
-                      size={22}
+                      size={24}
                       color={selected ? c.primary : c.mutedForeground}
                     />
                     <Text
@@ -503,7 +669,7 @@ export default function RegisterScreen() {
                         color: selected ? c.primary : c.mutedForeground,
                       }}
                     >
-                      {opt.label}
+                      {t(`register.specialities.${opt.key}`)}
                     </Text>
                   </Pressable>
                 );
@@ -512,42 +678,89 @@ export default function RegisterScreen() {
           </View>
 
           {/* Shop Info (Optional) */}
-          <SectionLabel label="Shop Information (Optional)" style={{ marginTop: 8 }} />
+          <SectionLabel label={t("profile.shopName")} style={{ marginTop: 8 }} />
 
           <Input
-            label="Shop Name"
-            placeholder="Enter shop name (optional)"
+            label=""
+            placeholder={t("register.shopName")}
             value={form.shopName}
             onChangeText={(v) => set("shopName", v)}
             icon="storefront"
           />
-          <Input
-            label="Shop Address"
-            placeholder="Enter shop address"
-            value={form.shopAddress}
-            onChangeText={(v) => set("shopAddress", v)}
-            icon="location-on"
-            multiline
-          />
+          <View>
+            <Input
+              label=""
+              placeholder={t("register.shopAddress")}
+              value={form.shopAddress}
+              onChangeText={(v) => set("shopAddress", v)}
+              onFocus={handleShopAddressFocus}
+              ref={shopAddressRef}
+              icon="location-on"
+              multiline
+              rightElement={
+                fetchingAddress ? (
+                  <ActivityIndicator size="small" color={c.primary} />
+                ) : addressDetected ? (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 4,
+                      backgroundColor: "#D1FAE5",
+                      paddingHorizontal: 8,
+                      paddingVertical: 4,
+                      borderRadius: 8,
+                    }}
+                  >
+                    <MaterialIcons name="my-location" size={12} color="#059669" />
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontFamily: "Inter_600SemiBold",
+                        color: "#059669",
+                      }}
+                    >
+                      GPS
+                    </Text>
+                  </View>
+                ) : null
+              }
+            />
+            {fetchingAddress ? (
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontFamily: "Inter_400Regular",
+                  color: c.mutedForeground,
+                  marginTop: 4,
+                  marginLeft: 4,
+                }}
+              >
+                {t("register.fetchingLocation")}
+              </Text>
+            ) : null}
+          </View>
           <View style={{ flexDirection: "row", gap: 10 }}>
             <Input
-              label="City"
-              placeholder="City"
+              label=""
+              placeholder={t("register.city")}
               value={form.city}
               onChangeText={(v) => set("city", v)}
               containerStyle={{ flex: 1 }}
             />
             <Input
-              label="State"
-              placeholder="State"
+              label=""
+              placeholder={t("register.state")}
               value={form.state}
               onChangeText={(v) => set("state", v)}
               containerStyle={{ flex: 1 }}
             />
           </View>
 
+          {/* Use my location — removed. Address now auto-fills on focus. */}
+
           <Button
-            label="Send OTP & Continue"
+            label={t("common.next")}
             onPress={handleSendOtp}
             loading={loading}
             fullWidth
@@ -559,24 +772,23 @@ export default function RegisterScreen() {
           <View
             style={{
               padding: 14,
-              backgroundColor: "#FEF3C7",
+              backgroundColor: "#EFF6FF",
               borderRadius: colors.radius,
               flexDirection: "row",
               alignItems: "flex-start",
               gap: 8,
             }}
           >
-            <MaterialIcons name="info" size={16} color="#92400E" style={{ marginTop: 1 }} />
+            <MaterialIcons name="info" size={16} color="#1E40AF" style={{ marginTop: 1 }} />
             <Text
               style={{
                 flex: 1,
                 fontSize: 12,
                 fontFamily: "Inter_400Regular",
-                color: "#92400E",
+                color: "#1E40AF",
               }}
             >
-              An OTP will be sent to verify your email. Your account will then be
-              reviewed by admin before activation.
+              We'll send a 6-digit code to verify your email. Once verified you can log in immediately.
             </Text>
           </View>
         </View>

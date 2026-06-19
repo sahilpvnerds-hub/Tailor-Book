@@ -113,6 +113,7 @@ const createSchema = z.object({
   customerMobile: z.string().min(1),
   deliveryDate: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
+  orderId: z.string().nullable().optional(),
   items: z.array(itemSchema).min(1),
 });
 
@@ -191,6 +192,7 @@ router.post("/", async (req: Request, res: Response) => {
       id,
       invoiceNumber,
       orderLabel,
+      orderId: d.orderId ?? null,
       tailorId: req.user!.id,
       customerId: d.customerId,
       customerName: d.customerName,

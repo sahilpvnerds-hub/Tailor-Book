@@ -41,6 +41,11 @@ function listLanUrls(p: number): string[] {
 
 await bootstrapDatabase();
 
+import { smtpConfigured } from "./lib/email";
+console.log(
+  `[api-server] SMTP=${smtpConfigured() ? "enabled" : "disabled (demo mode — OTPs returned in devOtp)"}`,
+);
+
 app.listen(port, "0.0.0.0", (err?: Error) => {
   if (err) {
     logger.error({ err }, "Error listening on port");

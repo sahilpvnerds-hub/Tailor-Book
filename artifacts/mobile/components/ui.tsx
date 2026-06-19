@@ -100,12 +100,12 @@ export function Button({
   };
 
   const padMap = {
-    sm: { paddingHorizontal: 14, paddingVertical: 8 },
-    md: { paddingHorizontal: 18, paddingVertical: 12 },
-    lg: { paddingHorizontal: 24, paddingVertical: 15 },
+    sm: { paddingHorizontal: 16, paddingVertical: 10 },
+    md: { paddingHorizontal: 20, paddingVertical: 15 },
+    lg: { paddingHorizontal: 26, paddingVertical: 18 },
   };
 
-  const fontSize = size === "sm" ? 13 : size === "lg" ? 16 : 14;
+  const fontSize = size === "sm" ? 13 : size === "lg" ? 17 : 15;
 
   return (
     <Pressable
@@ -165,15 +165,18 @@ interface InputProps extends TextInputProps {
   containerStyle?: ViewStyle;
 }
 
-export function Input({
-  label,
-  error,
-  icon,
-  rightElement,
-  containerStyle,
-  style,
-  ...props
-}: InputProps) {
+export const Input = React.forwardRef<TextInput, InputProps>(function Input(
+  {
+    label,
+    error,
+    icon,
+    rightElement,
+    containerStyle,
+    style,
+    ...props
+  }: InputProps,
+  ref,
+) {
   const c = useColors();
   return (
     <View style={[{ gap: 5 }, containerStyle]}>
@@ -210,13 +213,15 @@ export function Input({
           />
         )}
         <TextInput
+          ref={ref}
           style={[
             {
               flex: 1,
-              fontSize: 15,
+              fontSize: 16,
               fontFamily: "Inter_400Regular",
               color: c.foreground,
-              paddingVertical: 12,
+              paddingVertical: 14,
+              minHeight: 26,
             },
             style,
           ]}
@@ -232,7 +237,7 @@ export function Input({
       )}
     </View>
   );
-}
+});
 
 // ── Badge ─────────────────────────────────────────────────────────────────────
 type BadgeVariant = "default" | "success" | "warning" | "destructive" | "secondary";

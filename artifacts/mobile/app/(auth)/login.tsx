@@ -65,7 +65,11 @@ export default function LoginScreen() {
           Alert.alert("Login Failed", raw);
         }
       } else {
-        router.replace("/(tabs)");
+        if (result.user?.role === "tailor" && !result.user?.onboardingComplete) {
+          router.replace("/onboarding");
+        } else {
+          router.replace("/(tabs)");
+        }
       }
     } catch (err) {
       setLoading(false);

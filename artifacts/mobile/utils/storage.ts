@@ -9,6 +9,8 @@ import {
   PendingOtp,
   ProductType,
   User,
+  Order,
+  OrderItem,
 } from "@/types";
 import { DEFAULT_PRODUCT_TYPES } from "@/constants/products";
 
@@ -19,12 +21,14 @@ export const STORAGE_KEYS = {
   FAMILY_MEMBERS: "@tailorbook/familyMembers",
   MEASUREMENTS: "@tailorbook/measurements",
   INVOICES: "@tailorbook/invoices",
+  ORDERS: "@tailorbook/orders",
   INVOICE_COUNTER: "@tailorbook/invoiceCounter",
   ORDER_COUNTER: "@tailorbook/orderCounter",
   PRODUCT_TYPES: "@tailorbook/productTypes",
   CUSTOM_FIELDS: "@tailorbook/customFields",
   NOTIFICATIONS: "@tailorbook/notifications",
   PENDING_OTP: "@tailorbook/pendingOtp",
+  MUTED_NOTIF_PREFIX: "@tailorbook/mutedNotif/",
 };
 
 export function generateId(): string {
@@ -131,6 +135,16 @@ export async function getInvoices(tailorId: string): Promise<Invoice[]> {
 
 export async function saveAllInvoices(invoices: Invoice[]): Promise<void> {
   await setStorageItem(STORAGE_KEYS.INVOICES, invoices);
+}
+
+// ── Orders ─────────────────────────────────────────────────────────────
+export async function getOrders(tailorId: string): Promise<Order[]> {
+  const all = (await getStorageItem<Order[]>(STORAGE_KEYS.ORDERS)) ?? [];
+  return all.filter((o) => o.tailorId === tailorId);
+}
+
+export async function saveAllOrders(orders: Order[]): Promise<void> {
+  await setStorageItem(STORAGE_KEYS.ORDERS, orders);
 }
 
 export async function getNextInvoiceNumber(): Promise<string> {
@@ -322,4 +336,21 @@ export function formatDate(isoString: string): string {
     month: "short",
     year: "numeric",
   });
+}
+
+// ── Muted notification types ────────────────────────────────────────────────
+
+export async function getMutedNotifTypes(userId: string): Promise<string[]> {
+  const key = STORAGE_KEYS.MUTED_NOTIF_PREFIX + userId;
+  return (await getStorageItem<string[]>(key)) ?? [];
+}
+
+export async function muteNotifType(userId: string, type: string): Promise<void> {
+  const existing = await getMutedNotifTypes(userId);
+  if (existing.includes(type)) return;
+  await setStorageItem(STORAGE_KEYS.MUTED_NOTIF_PREFIX + userId, [...existing, type]);
+}
+
+export async function setMutedNotifTypes(userId: string, types: string[]): Promise<void> {
+  await setStorageItem(STORAGE_KEYS.MUTED_NOTIF_PREFIX + userId, types);
 }

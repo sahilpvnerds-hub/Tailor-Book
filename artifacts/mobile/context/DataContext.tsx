@@ -7,8 +7,11 @@ import {
   Invoice,
   InvoiceItem,
   Measurement,
+  MeasurementUnit,
   Notification,
   ProductType,
+  Order,
+  OrderItem,
 } from "@/types";
 import { useAuth } from "./AuthContext";
 import {
@@ -19,6 +22,7 @@ import {
   getFamilyMembers,
   getInvoices,
   getMeasurements,
+  getMutedNotifTypes,
   getNextInvoiceNumber,
   getNextOrderLabel,
   getNotifications,
@@ -31,6 +35,9 @@ import {
   saveAllMeasurements,
   saveAllNotifications,
   saveAllProductTypes,
+  setMutedNotifTypes,
+  getOrders,
+  saveAllOrders,
   STORAGE_KEYS,
 } from "@/utils/storage";
 
@@ -39,6 +46,7 @@ interface DataContextType {
   familyMembers: FamilyMember[];
   measurements: Measurement[];
   invoices: Invoice[];
+  orders: Order[];
   productTypes: ProductType[];
   customFields: CustomMeasurementField[];
   notifications: Notification[];
@@ -50,8 +58,8 @@ interface DataContextType {
   deleteCustomer: (id: string) => Promise<void>;
   addFamilyMember: (data: Omit<FamilyMember, "id" | "tailorId" | "createdAt">) => Promise<FamilyMember>;
   deleteFamilyMember: (id: string) => Promise<void>;
-  addProductType: (data: { name: string; amount: number }) => Promise<ProductType>;
-  updateProductType: (id: string, data: { name?: string; amount?: number }) => Promise<void>;
+  addProductType: (data: { name: string; amount: number; unit?: MeasurementUnit }) => Promise<ProductType>;
+  updateProductType: (id: string, data: { name?: string; amount?: number; unit?: MeasurementUnit }) => Promise<void>;
   deleteProductType: (id: string) => Promise<void>;
   addCustomField: (fieldName: string) => Promise<CustomMeasurementField>;
   deleteCustomField: (id: string) => Promise<void>;
@@ -69,13 +77,26 @@ interface DataContextType {
     items: InvoiceItem[];
     notes?: string;
     deliveryDate?: string;
+    orderId?: string | null;
   }) => Promise<Invoice>;
   updateInvoiceStatus: (id: string, status: Invoice["status"]) => Promise<void>;
   deleteInvoice: (id: string) => Promise<void>;
   getCustomerInvoices: (customerId: string) => Invoice[];
+  addOrder: (data: {
+    customerId: string;
+    customerName: string;
+    customerMobile: string;
+    items: Omit<OrderItem, "id" | "orderId" | "createdAt">[];
+    notes?: string;
+    deliveryDate?: string;
+    advanceAmount?: number;
+  }) => Promise<Order>;
+  updateOrderStatus: (id: string, status: Order["status"]) => Promise<void>;
+  deleteOrder: (id: string) => Promise<void>;
+  generateInvoiceFromOrder: (orderId: string, familyMemberId?: string | null) => Promise<Invoice>;
   markNotificationRead: (id: string) => Promise<void>;
   markAllRead: () => Promise<void>;
-  clearAllNotifications: () => Promise<void>;
+  clearAllNotifications: (options?: { muteTypes?: string[] }) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType>({} as DataContextType);
@@ -86,6 +107,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [productTypes, setProductTypes] = useState<ProductType[]>([]);
   const [customFields, setCustomFields] = useState<CustomMeasurementField[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -94,16 +116,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     if (!user) {
       setCustomers([]); setFamilyMembers([]); setMeasurements([]);
-      setInvoices([]); setProductTypes([]); setCustomFields([]);
+      setInvoices([]); setOrders([]); setProductTypes([]); setCustomFields([]);
       setNotifications([]); setIsLoading(false);
       return;
     }
     setIsLoading(true);
-    const [c, fm, m, inv, pt, cf] = await Promise.all([
+    const [c, fm, m, inv, ord, pt, cf] = await Promise.all([
       getCustomers(user.id),
       getFamilyMembers(user.id),
       getMeasurements(user.id),
       getInvoices(user.id),
+      getOrders(user.id),
       getProductTypes(user.id),
       getCustomFields(user.id),
     ]);
@@ -111,12 +134,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setFamilyMembers(fm);
     setMeasurements(m.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
     setInvoices(inv.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+    setOrders(ord.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
     setProductTypes(pt);
     setCustomFields(cf);
-    // Generate & reload notifications
+    // Generate & reload notifications, but skip any type the user has
+    // muted so they aren't bothered by reminders they've opted out of.
     await generateNotifications(user.id, m, inv);
-    const notifs = await getNotifications(user.id);
-    setNotifications(notifs);
+    const [notifs, mutedTypes] = await Promise.all([
+      getNotifications(user.id),
+      getMutedNotifTypes(user.id),
+    ]);
+    const mutedSet = new Set(mutedTypes);
+    const visibleNotifs = notifs.filter((n: Notification) => !mutedSet.has(n.type));
+    setNotifications(visibleNotifs);
     setIsLoading(false);
   }, [user]);
 
@@ -178,7 +208,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }
 
   // ── Product Types ─────────────────────────────────────────────────────────
-  async function addProductType(data: { name: string; amount: number }) {
+  async function addProductType(data: { name: string; amount: number; unit?: MeasurementUnit }) {
     if (!user) throw new Error("Not authenticated");
     const all = await rawGet<ProductType>(STORAGE_KEYS.PRODUCT_TYPES);
     const now = new Date().toISOString();
@@ -188,7 +218,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return pt;
   }
 
-  async function updateProductType(id: string, data: { name?: string; amount?: number }) {
+  async function updateProductType(id: string, data: { name?: string; amount?: number; unit?: MeasurementUnit }) {
     const all = await rawGet<ProductType>(STORAGE_KEYS.PRODUCT_TYPES);
     await saveAllProductTypes(
       all.map((p) => (p.id === id ? { ...p, ...data, updatedAt: new Date().toISOString() } : p))
@@ -367,6 +397,166 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
+  // ── Orders ──────────────────────────────────────────────────────────────────
+  async function addOrder(data: {
+    customerId: string;
+    customerName: string;
+    customerMobile: string;
+    items: Omit<OrderItem, "id" | "orderId" | "createdAt">[];
+    notes?: string;
+    deliveryDate?: string;
+    advanceAmount?: number;
+  }) {
+    if (!user) throw new Error("Not authenticated");
+    const all = await rawGet<Order>(STORAGE_KEYS.ORDERS);
+    const orderNumber = await getNextOrderLabel();
+    const totalAmount = data.items.reduce((s, it) => s + it.price * it.quantity, 0);
+    const advancePaid = Math.min(data.advanceAmount ?? 0, totalAmount);
+    const balanceDue = totalAmount - advancePaid;
+    const orderId = generateId();
+    const customer = customers.find((c) => c.id === data.customerId);
+
+    const items: OrderItem[] = data.items.map((item) => {
+      const member = item.familyMemberId
+        ? familyMembers.find((fm) => fm.id === item.familyMemberId)
+        : undefined;
+      return {
+        id: generateId(),
+        orderId,
+        createdAt: new Date().toISOString(),
+        ...item,
+        personName: member?.name ?? item.personName ?? customer?.name ?? data.customerName,
+        relation: member?.relation ?? item.relation ?? "self",
+        invoiceId: null,
+      } as OrderItem;
+    });
+
+    const ord: Order = {
+      id: orderId,
+      orderNumber,
+      tailorId: user.id,
+      status: "pending",
+      totalAmount,
+      advanceAmount: advancePaid,
+      balanceDue,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ...data,
+      items,
+    };
+
+    await saveAllOrders([...all, ord]);
+    setOrders((prev) => [ord, ...prev]);
+    return ord;
+  }
+
+  async function updateOrderStatus(id: string, status: Order["status"]) {
+    const all = await rawGet<Order>(STORAGE_KEYS.ORDERS);
+    const updated = all.map((o) =>
+      o.id === id ? { ...o, status, updatedAt: new Date().toISOString() } : o
+    );
+    await saveAllOrders(updated);
+    setOrders((prev) =>
+      prev.map((o) => (o.id === id ? { ...o, status, updatedAt: new Date().toISOString() } : o))
+    );
+  }
+
+  async function deleteOrder(id: string) {
+    const all = await rawGet<Order>(STORAGE_KEYS.ORDERS);
+    await saveAllOrders(all.filter((o) => o.id !== id));
+    setOrders((prev) => prev.filter((o) => o.id !== id));
+  }
+
+  async function generateInvoiceFromOrder(orderId: string, familyMemberId?: string | null) {
+    if (!user) throw new Error("Not authenticated");
+
+    const order = orders.find((o) => o.id === orderId);
+    if (!order) throw new Error("Order not found");
+
+    const allInvoices = await rawGet<Invoice>(STORAGE_KEYS.INVOICES);
+    const allOrders = await rawGet<Order>(STORAGE_KEYS.ORDERS);
+
+    let itemsToInvoice = order.items?.filter((it) => !it.invoiceId) ?? [];
+    if (itemsToInvoice.length === 0) throw new Error("No uninvoiced items in this order");
+
+    if (familyMemberId) {
+      if (familyMemberId === "self") {
+        itemsToInvoice = itemsToInvoice.filter((it) => !it.familyMemberId || it.relation === "self");
+      } else {
+        itemsToInvoice = itemsToInvoice.filter((it) => it.familyMemberId === familyMemberId);
+      }
+    }
+
+    if (itemsToInvoice.length === 0) {
+      throw new Error("No uninvoiced items found for this family member");
+    }
+
+    const subtotal = itemsToInvoice.reduce((s, it) => s + it.price * it.quantity, 0);
+    const invoiceNumber = await getNextInvoiceNumber();
+    const invoiceId = generateId();
+
+    const invoiceItemsList: InvoiceItem[] = itemsToInvoice.map((it) => ({
+      productType: it.productType,
+      quantity: it.quantity,
+      price: it.price,
+      measurementId: it.measurementId ?? undefined,
+      familyMemberId: it.familyMemberId,
+      personName: it.personName,
+      relation: it.relation,
+      measurementValues: it.measurementValues ?? undefined,
+    }));
+
+    const inv: Invoice = {
+      id: invoiceId,
+      invoiceNumber,
+      orderLabel: order.orderNumber,
+      orderId: order.id,
+      tailorId: user.id,
+      customerId: order.customerId,
+      customerName: order.customerName,
+      customerMobile: order.customerMobile,
+      subtotal,
+      total: subtotal,
+      // Carry advance from order proportionally if billing a sub-set of members
+      paidAmount: familyMemberId ? undefined : (order.advanceAmount ?? 0),
+      status: "pending",
+      deliveryDate: order.deliveryDate ?? undefined,
+      notes: order.notes ?? undefined,
+      createdAt: new Date().toISOString(),
+      items: invoiceItemsList,
+    };
+
+    await saveAllInvoices([...allInvoices, inv]);
+    setInvoices((prev) => [inv, ...prev]);
+
+    const updatedOrders = allOrders.map((o) => {
+      if (o.id === orderId) {
+        const updatedItems = o.items?.map((it) => {
+          const matched = itemsToInvoice.some((toInv) => toInv.id === it.id);
+          return matched ? { ...it, invoiceId } : it;
+        }) ?? [];
+        return { ...o, items: updatedItems, updatedAt: new Date().toISOString() };
+      }
+      return o;
+    });
+
+    await saveAllOrders(updatedOrders);
+    setOrders((prev) =>
+      prev.map((o) => {
+        if (o.id === orderId) {
+          const updatedItems = o.items?.map((it) => {
+            const matched = itemsToInvoice.some((toInv) => toInv.id === it.id);
+            return matched ? { ...it, invoiceId } : it;
+          }) ?? [];
+          return { ...o, items: updatedItems, updatedAt: new Date().toISOString() };
+        }
+        return o;
+      })
+    );
+
+    return inv;
+  }
+
   // ── Notifications ─────────────────────────────────────────────────────────
   async function markNotificationRead(id: string) {
     const all = await rawGet<Notification>(STORAGE_KEYS.NOTIFICATIONS);
@@ -380,16 +570,26 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
   }
 
-  async function clearAllNotifications() {
+  /**
+   * Clear every notification for the current user. If `options.muteTypes`
+   * is provided, those notification types are also added to the user's
+   * muted list so they won't be re-generated on the next refresh.
+   */
+  async function clearAllNotifications(options?: { muteTypes?: string[] }) {
     if (!user) return;
     const all = await rawGet<Notification>(STORAGE_KEYS.NOTIFICATIONS);
     await saveAllNotifications(all.filter((n) => n.tailorId !== user.id));
+    if (options?.muteTypes && options.muteTypes.length > 0) {
+      const existing = await getMutedNotifTypes(user.id);
+      const merged = Array.from(new Set([...existing, ...options.muteTypes]));
+      await setMutedNotifTypes(user.id, merged);
+    }
     setNotifications([]);
   }
 
   return (
     <DataContext.Provider value={{
-      customers, familyMembers, measurements, invoices,
+      customers, familyMembers, measurements, invoices, orders,
       productTypes, customFields, notifications, unreadCount,
       isLoading, refresh,
       addCustomer, updateCustomer, deleteCustomer,
@@ -399,6 +599,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       addMeasurement, addMeasurementSession, updateMeasurement, deleteMeasurement, getCustomerMeasurements,
       getCustomerMeasurementsByProduct, getCustomerProducts,
       createInvoice, updateInvoiceStatus, deleteInvoice, getCustomerInvoices,
+      addOrder, updateOrderStatus, deleteOrder, generateInvoiceFromOrder,
       markNotificationRead, markAllRead, clearAllNotifications,
     }}>
       {children}

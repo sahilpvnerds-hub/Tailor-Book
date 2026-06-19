@@ -6,30 +6,36 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 import colors from "@/constants/colors";
+import { useTranslation } from "@/utils/i18n";
 
-const SLIDES = [
+const SLIDES: Array<{
+  icon: keyof typeof MaterialIcons.glyphMap;
+  titleKey: string;
+  bodyKey: string;
+  color: string;
+}> = [
   {
     icon: "storefront" as const,
-    title: "Welcome to Tailor Book",
-    subtitle: "Your complete tailoring business management solution. Manage customers, measurements, and invoices all in one place.",
+    titleKey: "onboarding.slides.storefront.title",
+    bodyKey: "onboarding.slides.storefront.body",
     color: "#0D6E6E",
   },
   {
     icon: "straighten" as const,
-    title: "Smart Measurements",
-    subtitle: "Record precise measurements for each customer by product type. All fields are validated to ensure accuracy and consistency.",
+    titleKey: "onboarding.slides.measurements.title",
+    bodyKey: "onboarding.slides.measurements.body",
     color: "#6366F1",
   },
   {
     icon: "notifications-active" as const,
-    title: "Delivery Reminders",
-    subtitle: "Never miss a delivery. Get automatic alerts the day before an order is due so you always stay on schedule.",
+    titleKey: "onboarding.slides.notifications.title",
+    bodyKey: "onboarding.slides.notifications.body",
     color: "#D97706",
   },
   {
     icon: "receipt" as const,
-    title: "Easy Invoicing",
-    subtitle: "Generate professional invoices in seconds. Prices auto-fill from your Product Type Master. Share via WhatsApp or email instantly.",
+    titleKey: "onboarding.slides.receipt.title",
+    bodyKey: "onboarding.slides.receipt.body",
     color: "#059669",
   },
 ];
@@ -38,6 +44,7 @@ export default function OnboardingScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { updateOnboardingComplete } = useAuth();
+  const { t } = useTranslation();
   const [current, setCurrent] = useState(0);
 
   async function finish() {
@@ -76,7 +83,7 @@ export default function OnboardingScreen() {
         }}
       >
         <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: c.mutedForeground }}>
-          Skip
+          {t("onboarding.skip")}
         </Text>
       </Pressable>
 
@@ -115,7 +122,7 @@ export default function OnboardingScreen() {
               textAlign: "center",
             }}
           >
-            {slide.title}
+            {t(slide.titleKey)}
           </Text>
           <Text
             style={{
@@ -126,7 +133,7 @@ export default function OnboardingScreen() {
               lineHeight: 24,
             }}
           >
-            {slide.subtitle}
+            {t(slide.bodyKey)}
           </Text>
         </View>
 
@@ -178,7 +185,7 @@ export default function OnboardingScreen() {
               color: c.foreground,
             }}
           >
-            Previous
+            {t("common.previous")}
           </Text>
         </Pressable>
 
@@ -203,7 +210,7 @@ export default function OnboardingScreen() {
           })}
         >
           <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#FFFFFF" }}>
-            {current === SLIDES.length - 1 ? "Get Started" : "Next"}
+            {current === SLIDES.length - 1 ? t("onboarding.getStarted") : t("common.next")}
           </Text>
         </Pressable>
       </View>

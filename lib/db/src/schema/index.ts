@@ -33,6 +33,14 @@ export const users = mysqlTable("users", {
   status: mysqlEnum("status", ["pending", "approved", "rejected"]).notNull().default("pending"),
   emailVerifiedAt: timestamp("email_verified_at"),
   onboardingComplete: boolean("onboarding_complete").notNull().default(false),
+  // Multi-language preference. Stored as ISO-639-1 codes that match the
+  // `expo-localization` / `i18next` locales shipped in `mobile/locales/`.
+  preferredLanguage: mysqlEnum("preferred_language", ["en", "hi", "gu"])
+    .notNull()
+    .default("en"),
+  // Tailor shop GPS coordinates captured during registration / profile edit.
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
 });
@@ -48,6 +56,9 @@ export const customers = mysqlTable("customers", {
   address: text("address"),
   notes: text("notes"),
   profilePicture: text("profile_picture"),
+  // Optional GPS for the customer's location.
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
 });
@@ -73,6 +84,12 @@ export const productTypes = mysqlTable("product_types", {
   tailorId: varchar("tailor_id", { length: 36 }).notNull(),
   name: varchar("name", { length: 100 }).notNull(),
   amount: decimal("amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  // Measurement unit for the body measurements taken against this product
+  // type. Drives the field label suffix in the mobile UI ("Chest (inches)"
+  // vs "Chest (cm)"). Per-product so a tailor can mix systems.
+  unit: mysqlEnum("unit", ["inches", "cm"]).notNull().default("inches"),
+  // Sub-type feature options: [{ label: string; gender?: 'male'|'female'|'both' }]
+  features: json("features").$type<{ label: string; gender?: "male" | "female" | "both" }[]>().default([]),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
 });
@@ -94,6 +111,8 @@ export const measurements = mysqlTable("measurements", {
   tailorId: varchar("tailor_id", { length: 36 }).notNull(),
   customerName: varchar("customer_name", { length: 100 }).notNull(),
   productType: varchar("product_type", { length: 50 }).notNull(),
+  // Optional feature/sub-type label (e.g. "Half Boy Shirt", "V-Type Kurta")
+  featureLabel: varchar("feature_label", { length: 100 }),
   measurementDate: date("measurement_date").notNull(),
   deliveryDate: date("delivery_date"),
 
@@ -140,6 +159,8 @@ export const measurementItems = mysqlTable("measurement_items", {
   measurementSessionId: varchar("measurement_session_id", { length: 36 }).notNull(),
   productTypeId: varchar("product_type_id", { length: 36 }),
   productType: varchar("product_type", { length: 100 }).notNull(),
+  // Optional feature/sub-type label selected at measurement time
+  featureLabel: varchar("feature_label", { length: 100 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -154,17 +175,55 @@ export const invoices = mysqlTable("invoices", {
   id: varchar("id", { length: 36 }).notNull().primaryKey(),
   invoiceNumber: varchar("invoice_number", { length: 20 }).notNull().unique(),
   orderLabel: varchar("order_label", { length: 20 }).notNull().unique(),
+  orderId: varchar("order_id", { length: 36 }),
   tailorId: varchar("tailor_id", { length: 36 }).notNull(),
   customerId: varchar("customer_id", { length: 36 }).notNull(),
   customerName: varchar("customer_name", { length: 100 }).notNull(),
   customerMobile: varchar("customer_mobile", { length: 20 }).notNull(),
   subtotal: decimal("subtotal", { precision: 12, scale: 2 }).notNull().default("0"),
   total: decimal("total", { precision: 12, scale: 2 }).notNull().default("0"),
+  /** Advance / deposit already received — carried over from the parent order. */
+  paidAmount: decimal("paid_amount", { precision: 12, scale: 2 }).notNull().default("0"),
   status: mysqlEnum("status", ["pending", "completed", "cancelled"]).notNull().default("pending"),
   deliveryDate: date("delivery_date"),
   notes: text("notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+
+export const orders = mysqlTable("orders", {
+  id: varchar("id", { length: 36 }).notNull().primaryKey(),
+  orderNumber: varchar("order_number", { length: 20 }).notNull().unique(),
+  tailorId: varchar("tailor_id", { length: 36 }).notNull(),
+  customerId: varchar("customer_id", { length: 36 }).notNull(),
+  customerName: varchar("customer_name", { length: 100 }).notNull(),
+  customerMobile: varchar("customer_mobile", { length: 20 }).notNull(),
+  status: mysqlEnum("status", ["pending", "completed", "cancelled"]).notNull().default("pending"),
+  deliveryDate: date("delivery_date"),
+  notes: text("notes"),
+  totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  /** Advance / deposit paid at order creation time. */
+  advanceAmount: decimal("advance_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  /** Remaining balance = totalAmount - advanceAmount. */
+  balanceDue: decimal("balance_due", { precision: 12, scale: 2 }).notNull().default("0"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+});
+
+export const orderItems = mysqlTable("order_items", {
+  id: varchar("id", { length: 36 }).notNull().primaryKey(),
+  orderId: varchar("order_id", { length: 36 }).notNull(),
+  productType: varchar("product_type", { length: 50 }).notNull(),
+  featureLabel: varchar("feature_label", { length: 100 }),
+  quantity: int("quantity").notNull().default(1),
+  price: decimal("price", { precision: 12, scale: 2 }).notNull().default("0"),
+  measurementId: varchar("measurement_id", { length: 36 }),
+  familyMemberId: varchar("family_member_id", { length: 36 }),
+  personName: varchar("person_name", { length: 100 }),
+  relation: varchar("relation", { length: 50 }),
+  measurementValues: json("measurement_values").$type<Record<string, string>>(),
+  invoiceId: varchar("invoice_id", { length: 36 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 export const invoiceItems = mysqlTable("invoice_items", {
@@ -193,7 +252,12 @@ export const notifications = mysqlTable("notifications", {
   title: varchar("title", { length: 200 }).notNull(),
   message: text("message").notNull(),
   type: mysqlEnum("type", [
-    "delivery_due_today", "delivery_due_tomorrow", "pending_invoice", "general",
+    "delivery_due_today",
+    "delivery_due_tomorrow",
+    "delivery_overdue",
+    "pending_invoice",
+    "general",
+    "whatsapp_due",
   ]).notNull().default("general"),
   relatedId: varchar("related_id", { length: 36 }),
   isRead: boolean("is_read").notNull().default(false),
@@ -297,6 +361,17 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
   createdAt: true,
 });
 
+export const insertOrderSchema = createInsertSchema(orders).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertOrderItemSchema = createInsertSchema(orderItems).omit({
+  id: true,
+  createdAt: true,
+});
+
 // ---------------------------------------------------------------------------
 // TypeScript types inferred from the Drizzle table definitions
 // ---------------------------------------------------------------------------
@@ -314,3 +389,5 @@ export type InvoiceItem = typeof invoiceItems.$inferSelect;
 export type Counter = typeof counters.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
 export type PendingOtp = typeof pendingOtps.$inferSelect;
+export type Order = typeof orders.$inferSelect;
+export type OrderItem = typeof orderItems.$inferSelect;

@@ -4,6 +4,7 @@ import { and, desc, eq, gt, or } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { pendingOtps, users } from "@workspace/db/schema";
 import { signToken, authMiddleware } from "../middlewares/auth";
+import { sendOtpEmail, smtpConfigured } from "../lib/email";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -31,14 +32,18 @@ function userResponse(u: typeof users.$inferSelect) {
     status: u.status,
     emailVerifiedAt: u.emailVerifiedAt,
     onboardingComplete: u.onboardingComplete,
+    preferredLanguage: u.preferredLanguage,
+    latitude: u.latitude,
+    longitude: u.longitude,
     createdAt: u.createdAt,
   };
 }
 
 // --- POST /api/auth/send-otp ----------------------------------------------
 // Generate a 6-digit OTP for the given email and store it in pending_otps.
-// In demo mode (no SMTP env vars) the OTP is returned in the response so the
-// mobile app can show it in an alert. In production we'd send it via email.
+// The OTP is delivered via the configured SMTP server (Gmail). If SMTP
+// is not configured OR the send fails, the request is rejected — the
+// OTP is never returned in the response anymore.
 router.post("/send-otp", async (req: Request, res: Response) => {
   const body = z.object({ email: z.string().email() }).safeParse(req.body);
   if (!body.success) {
@@ -46,6 +51,13 @@ router.post("/send-otp", async (req: Request, res: Response) => {
     return;
   }
   const email = body.data.email.toLowerCase().trim();
+
+  if (!smtpConfigured()) {
+    res.status(503).json({
+      error: "Email service is not configured. Please contact support.",
+    });
+    return;
+  }
 
   // Invalidate any older unused OTPs for this email
   await db.delete(pendingOtps).where(eq(pendingOtps.email, email));
@@ -62,20 +74,28 @@ router.post("/send-otp", async (req: Request, res: Response) => {
     consumed: false,
   });
 
-  // SMTP is not configured, so we return the OTP for the demo alert.
-  // When SMTP is wired up, this would dispatch an email and not return it.
-  const hasSmtp = !!process.env.SMTP_HOST;
-  const out: Record<string, unknown> = {
+  // Send via SMTP. If delivery fails, the OTP stays in the DB but we do
+  // not return it to the client — the user must request a new one.
+  const delivery = await sendOtpEmail(email, otp, 10);
+  if (!delivery.delivered) {
+    console.error(
+      `[send-otp] SMTP delivery failed for ${email}:`,
+      delivery.reason,
+    );
+    res.status(502).json({
+      error: `Failed to send OTP email. ${delivery.reason ?? "Please try again."}`,
+    });
+    return;
+  }
+
+  res.json({
     ok: true,
-    message: hasSmtp
-      ? `OTP sent to ${email}`
-      : `OTP generated for ${email} (demo mode — no SMTP configured)`,
+    message: `OTP sent to ${email}`,
     expiresAt: expiresAt.toISOString(),
     ttlMs: OTP_TTL_MS,
-  };
-  if (!hasSmtp) out.devOtp = otp;
-
-  res.json(out);
+    delivered: true,
+    channel: "smtp",
+  });
 });
 
 // --- POST /api/auth/verify-otp --------------------------------------------
@@ -177,10 +197,8 @@ router.post("/login", async (req: Request, res: Response) => {
     return;
   }
 
-  if (user.status === "pending") {
-    res.status(403).json({ error: "Your account is pending admin approval" });
-    return;
-  }
+  // Rejected accounts still can't login. (Admins no longer reject newly
+  // registered tailors, but legacy rejected accounts remain blocked.)
   if (user.status === "rejected") {
     res.status(403).json({ error: "Your account has been rejected" });
     return;
@@ -195,6 +213,10 @@ router.post("/login", async (req: Request, res: Response) => {
 // last 30 minutes (a recently-consumed pending_otps row for this email).
 // The client passes the emailVerifiedAt it received from verify-otp so the
 // created user record can record when verification happened.
+//
+// As of the 0006_enhancements migration, new tailors are auto-approved on
+// successful registration — there is no admin approval gate. The
+// `status` column is kept on the table for legacy data.
 router.post("/register", async (req: Request, res: Response) => {
   const body = z
     .object({
@@ -207,6 +229,10 @@ router.post("/register", async (req: Request, res: Response) => {
       shopAddress: z.string().optional().default(""),
       city: z.string().optional().default(""),
       state: z.string().optional().default(""),
+      // New in 0006_enhancements
+      preferredLanguage: z.enum(["en", "hi", "gu"]).optional().default("en"),
+      latitude: z.number().min(-90).max(90).optional(),
+      longitude: z.number().min(-180).max(180).optional(),
       emailVerifiedAt: z.string().optional(),
     })
     .safeParse(req.body);
@@ -257,6 +283,12 @@ router.post("/register", async (req: Request, res: Response) => {
   const id = crypto.randomUUID();
   const hashedPassword = await bcrypt.hash(d.password, 10);
 
+  // Coerce optional lat/lng into strings so Drizzle can insert into decimal.
+  // Drizzle accepts `null` for nullable decimal columns; we use that when
+  // the client didn't supply coordinates.
+  const latitude = d.latitude != null ? String(d.latitude) : null;
+  const longitude = d.longitude != null ? String(d.longitude) : null;
+
   await db.insert(users).values({
     id,
     name: d.name,
@@ -269,11 +301,18 @@ router.post("/register", async (req: Request, res: Response) => {
     shopAddress: d.shopAddress,
     city: d.city,
     state: d.state,
-    status: "pending",
+    status: "approved", // Auto-approve on successful registration
     emailVerifiedAt: d.emailVerifiedAt ? new Date(d.emailVerifiedAt) : new Date(),
+    preferredLanguage: d.preferredLanguage,
+    latitude,
+    longitude,
   });
 
-  res.status(201).json({ id, message: "Registration submitted for approval" });
+  res.status(201).json({
+    id,
+    message: "Account created — you can now log in",
+    status: "approved",
+  });
 });
 
 // --- GET /api/auth/me -----------------------------------------------------
@@ -295,8 +334,8 @@ router.post("/logout", authMiddleware, (_req: Request, res: Response) => {
 
 // --- PATCH /api/auth/me ---------------------------------------------------
 // Update the authenticated user's own profile. Users can update only their
-// own name, email, mobile, shop info, and avatar. Role and status are admin-
-// only fields and are NOT exposed here.
+// own name, email, mobile, shop info, language, GPS, and avatar. Role and
+// status are admin-only fields and are NOT exposed here.
 const updateMeSchema = z.object({
   name: z.string().min(1).optional(),
   email: z.string().email().optional(),
@@ -308,6 +347,10 @@ const updateMeSchema = z.object({
   avatarUri: z.string().nullable().optional(),
   speciality: z.enum(["male", "female", "unisex"]).nullable().optional(),
   onboardingComplete: z.boolean().optional(),
+  // New in 0006_enhancements
+  preferredLanguage: z.enum(["en", "hi", "gu"]).optional(),
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
 });
 router.patch("/me", authMiddleware, async (req: Request, res: Response) => {
   const body = updateMeSchema.safeParse(req.body);
@@ -315,9 +358,16 @@ router.patch("/me", authMiddleware, async (req: Request, res: Response) => {
     res.status(400).json({ error: "Invalid request body" });
     return;
   }
-  console.log("PATCH /me body:", req.body);
-  console.log("PATCH /me parsed:", body.data);
-  await db.update(users).set(body.data).where(eq(users.id, req.user!.id));
+  const data = body.data;
+  // Coerce lat/lng from number → string for the decimal column.
+  const update: Record<string, unknown> = { ...data };
+  if ("latitude" in data) {
+    update.latitude = data.latitude == null ? null : String(data.latitude);
+  }
+  if ("longitude" in data) {
+    update.longitude = data.longitude == null ? null : String(data.longitude);
+  }
+  await db.update(users).set(update).where(eq(users.id, req.user!.id));
   const [updated] = await db
     .select()
     .from(users)

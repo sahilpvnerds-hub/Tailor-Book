@@ -15,10 +15,16 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/context/AuthContext";
 import { DataProvider } from "@/context/DataContext";
+import { initI18n } from "@/utils/i18n";
 
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
+
+// Boot i18n at the very top of the app so the first frame is localised
+// even before any auth state is restored. AuthProvider will then
+// re-initialise with the cached user's preferred language.
+initI18n();
 
 function RootLayoutNav() {
   return (
@@ -33,6 +39,8 @@ function RootLayoutNav() {
       <Stack.Screen name="measurements/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="invoices/new" options={{ presentation: "modal", headerShown: false }} />
       <Stack.Screen name="invoices/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="orders/new" options={{ presentation: "modal", headerShown: false }} />
+      <Stack.Screen name="orders/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="notifications/index" options={{ headerShown: false }} />
       <Stack.Screen name="search" options={{ presentation: "modal", headerShown: false }} />
     </Stack>
