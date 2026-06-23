@@ -47,13 +47,13 @@ function getPublicOrigin(host) {
 
 function spawnProcess(name, cwd, cmd, args, env) {
   console.log(`[runner] starting ${name}: ${cmd} ${args.join(" ")} (cwd=${cwd})`);
+  const isCmdShim = process.platform === "win32" && (cmd.endsWith(".cmd") || cmd.endsWith(".bat") || cmd === "pnpm");
   const child = spawn(cmd, args, {
     cwd,
     env: { ...process.env, ...env, FORCE_COLOR: "1" },
     stdio: ["ignore", "pipe", "pipe"],
-    // shell:false so spaces in cwd / args don't get tokenised wrong on
-    // Windows. We resolve the executable ourselves when shell is needed.
-    shell: false,
+    // Use shell on Windows only to invoke .cmd shims
+    shell: isCmdShim,
   });
   child.stdout?.on("data", (d) => process.stdout.write(`[${name}] ${d}`));
   child.stderr?.on("data", (d) => process.stderr.write(`[${name}] ${d}`));
@@ -67,23 +67,24 @@ function spawnProcess(name, cwd, cmd, args, env) {
   return child;
 }
 
-function runProcess(name, cwd, cmd, args, env) {
+function runProcess(name, cwd, cmd, args, env, fatal = true) {
   console.log(`[runner] running ${name}: ${cmd} ${args.join(" ")} (cwd=${cwd})`);
+  const isCmdShim = process.platform === "win32" && (cmd.endsWith(".cmd") || cmd.endsWith(".bat") || cmd === "pnpm");
   const result = spawnSync(cmd, args, {
     cwd,
     env: { ...process.env, ...env, FORCE_COLOR: "1" },
     stdio: "inherit",
-    shell: false,
+    shell: isCmdShim,
   });
 
   if (result.error) {
     console.error(`[runner] ${name} failed: ${result.error.message}`);
-    process.exit(1);
+    if (fatal) process.exit(1);
   }
 
   if (result.status !== 0) {
     console.error(`[runner] ${name} exited with code ${result.status}`);
-    process.exit(result.status ?? 1);
+    if (fatal) process.exit(result.status ?? 1);
   }
 }
 
@@ -93,7 +94,7 @@ function runProcess(name, cwd, cmd, args, env) {
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 runProcess("db:migrate", path.join(ROOT, "lib", "db"), pnpmCommand, ["run", "migrate"], {
   NODE_ENV,
-});
+}, false);
 runProcess("seed-admin", API_SERVER, pnpmCommand, ["exec", "tsx", "src/seed-admin.ts"], {
   NODE_ENV,
 });

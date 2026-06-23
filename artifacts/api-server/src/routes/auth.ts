@@ -39,6 +39,51 @@ function userResponse(u: typeof users.$inferSelect) {
   };
 }
 
+// --- POST /api/auth/check-availability -------------------------------------
+// Lightweight pre-check the mobile app calls before sending the OTP. Returns
+// whether the given email or mobile is already registered so the user can be
+// shown a friendly error before they wait for an email.
+router.post("/check-availability", async (req: Request, res: Response) => {
+  const body = z
+    .object({
+      email: z.string().email().optional(),
+      mobile: z.string().min(5).optional(),
+    })
+    .refine((d) => d.email || d.mobile, {
+      message: "At least one of email or mobile is required",
+    })
+    .safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: "Provide email or mobile to check" });
+    return;
+  }
+  const d = body.data;
+  const conditions = [];
+  if (d.email) conditions.push(eq(users.email, d.email.toLowerCase().trim()));
+  if (d.mobile) conditions.push(eq(users.mobile, d.mobile.trim()));
+  const rows = await db
+    .select({ email: users.email, mobile: users.mobile })
+    .from(users)
+    .where(conditions.length > 1 ? or(...conditions) : conditions[0])
+    .limit(1);
+  if (rows.length === 0) {
+    res.json({ available: true });
+    return;
+  }
+  const taken = rows[0];
+  const conflicts: string[] = [];
+  if (d.email && taken.email === d.email.toLowerCase().trim()) conflicts.push("email");
+  if (d.mobile && taken.mobile === d.mobile.trim()) conflicts.push("mobile");
+  res.status(409).json({
+    available: false,
+    conflicts,
+    message:
+      conflicts.length === 2
+        ? "An account with this email and mobile already exists"
+        : `An account with this ${conflicts[0]} already exists`,
+  });
+});
+
 // --- POST /api/auth/send-otp ----------------------------------------------
 // Generate a 6-digit OTP for the given email and store it in pending_otps.
 // The OTP is delivered via the configured SMTP server (Gmail). If SMTP

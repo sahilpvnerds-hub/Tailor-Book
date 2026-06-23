@@ -45,7 +45,7 @@
     "haveAccount": "Already have an account?",
     "createAccount": "Create your account",
     "signInPrompt": "Sign in to continue",
-    "demoAdminHint": "Demo admin: admin@tailorbook.com / admin123",
+    "demoAdminHint": "",
     "errors": {
       "invalidCredentials": "Invalid credentials",
       "pendingApproval": "Your account is pending admin approval",
@@ -80,15 +80,16 @@
     "successMessage": "Welcome to Tailor Book! Your account is ready.",
     "devOtpAlert": "Demo OTP: {{code}}\n\nIn production this would be sent to your email.",
     "specialities": {
-      "male": "Male Specialist",
-      "female": "Female Specialist",
-      "unisex": "Unisex Specialist"
-    }
+      "male": "Male",
+      "female": "Female",
+      "unisex": "Unisex"
+    },
+    "refetchLocation": "Re-detect location"
   },
   "languages": {
     "en": "English",
-    "hi": "हिन्दी (Hindi)",
-    "gu": "ગુજરાતી (Gujarati)"
+    "hi": "हिन्दी",
+    "gu": "ગુજરાતી"
   },
   "tabs": {
     "home": "Home",
@@ -144,6 +145,26 @@
     "errors": {
       "nameRequired": "Product name is required",
       "amountRequired": "Enter a valid amount"
+    },
+    "features": {
+      "title": "Features / Sub-types",
+      "subtitle": "Pick every sub-type that applies to this product. Tailors can leave some on for reference and disable the rest.",
+      "selected": "{{count}} selected",
+      "selectedList": "Selected Features",
+      "suggestions": "Suggestions",
+      "filterAll": "All",
+      "filterMale": "Male",
+      "filterFemale": "Female",
+      "noSuggestions": "Type a product name above to see suggested sub-types, or add a custom one below.",
+      "customLabel": "Add custom sub-type",
+      "customPlaceholder": "e.g. Half Sleeve, V-Neck",
+      "addCustom": "Add",
+      "alreadyExists": "Already added",
+      "removed": "Removed",
+      "added": "Added",
+      "male": "Male",
+      "female": "Female",
+      "both": "Both"
     }
   },
   "customers": {
@@ -280,8 +301,8 @@
     "about": "About",
     "signOut": "Sign out",
     "signOutConfirm": "Are you sure you want to sign out?",
-    "signOutConfirmDialog": "This will clear all your data from this device.",
-    "signOutSubtitle": "Clears all local data"
+    "signOutConfirmDialog": "Are sure you want to sign out?",
+    "signOutSubtitle": ""
   },
   "onboarding": {
     "skip": "Skip",
@@ -342,7 +363,8 @@
     "searchHint": "Type to search customers",
     "searchNoResults": "No customer found",
     "searchAddNew": "Add New Customer",
-    "searchNoResultsHint": "We couldn't find anyone matching \"{{query}}\""
+    "searchNoResultsHint": "We couldn't find anyone matching \"{{query}}\"",
+    "newOrder": "New order"
   },
   "specialities": {
     "male": "Male",

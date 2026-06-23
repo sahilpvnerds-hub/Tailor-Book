@@ -80,15 +80,16 @@
     "successMessage": "ટેલર બુકમાં આપનું સ્વાગત છે! તમારું એકાઉન્ટ તૈયાર છે.",
     "devOtpAlert": "ડેમો OTP: {{code}}\n\nપ્રોડક્શનમાં આ તમારા ઈમેઈલ પર મોકલવામાં આવશે.",
     "specialities": {
-      "male": "પુરુષ નિષ્ણાંત",
-      "female": "સ્ત્રી નિષ્ણાંત",
-      "unisex": "સર્વલિંગી નિષ્ણાંત"
-    }
+      "male": "Male",
+      "female": "Female",
+      "unisex": "Unisex"
+    },
+    "refetchLocation": "ફરી જગ્યા શોધો"
   },
   "languages": {
     "en": "English",
-    "hi": "हिन्दी (Hindi)",
-    "gu": "ગુજરાતી (Gujarati)"
+    "hi": "हिन्दी",
+    "gu": "ગુજરાતી"
   },
   "tabs": {
     "home": "હોમ",
@@ -144,6 +145,26 @@
     "errors": {
       "nameRequired": "ઉત્પાદનનું નામ જરૂરી છે",
       "amountRequired": "માન્ય રકમ દાખલ કરો"
+    },
+    "features": {
+      "title": "ફીચર્સ / ઉપ-પ્રકાર",
+      "subtitle": "આ ઉત્પાદન માટે લાગુ પડતા દરેક ઉપ-પ્રકારને પસંદ કરો. જે જોઈએ એ રાખો, બાકીના દૂર કરો.",
+      "selected": "{{count}} પસંદ કરેલા",
+      "selectedList": "પસંદ કરેલા ફીચર્સ",
+      "suggestions": "સૂચનો",
+      "filterAll": "બધા",
+      "filterMale": "પુરુષ",
+      "filterFemale": "સ્ત્રી",
+      "noSuggestions": "સૂચનો જોવા માટે ઉપર ઉત્પાદનનું નામ લખો, અથવા નીચે તમારો ઉમેરો.",
+      "customLabel": "કસ્ટમ ઉપ-પ્રકાર ઉમેરો",
+      "customPlaceholder": "દા.ત.: હાફ સ્લીવ, વી-નેક",
+      "addCustom": "ઉમેરો",
+      "alreadyExists": "પહેલેથી ઉમેરેલું છે",
+      "removed": "દૂર કર્યું",
+      "added": "ઉમેર્યું",
+      "male": "પુરુષ",
+      "female": "સ્ત્રી",
+      "both": "બંને"
     }
   },
   "customers": {
@@ -342,7 +363,8 @@
     "searchHint": "ગ્રાહકો શોધવા માટે ટાઇપ કરો",
     "searchNoResults": "કોઈ ગ્રાહક મળ્યો નથી",
     "searchAddNew": "નવો ગ્રાહક ઉમેરો",
-    "searchNoResultsHint": "\"{{query}}\" સાથે મેળ ખાતો કોઈ મળ્યો નથી"
+    "searchNoResultsHint": "\"{{query}}\" સાથે મેળ ખાતો કોઈ મળ્યો નથી",
+    "newOrder": "નવો ઓર્ડર"
   },
   "specialities": {
     "male": "પુરુષ",

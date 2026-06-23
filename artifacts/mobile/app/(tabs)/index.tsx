@@ -488,6 +488,12 @@ export default function DashboardScreen() {
             onPress={() => router.push("/customers/new")}
           />
           <QuickAction
+            icon="content-cut"
+            label={t("dashboard.newOrder")}
+            color="#0D6E6E"
+            onPress={() => router.push("/orders/new")}
+          />
+          <QuickAction
             icon="receipt"
             label={t("dashboard.newInvoice")}
             color="#059669"

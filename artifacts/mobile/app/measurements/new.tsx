@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
-  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -21,9 +20,8 @@ import { Button, Input } from "@/components/ui";
 import { DatePicker } from "@/components/DatePicker";
 import { MEASUREMENT_FIELDS, getFieldsForProduct } from "@/constants/products";
 import { MeasurementKey } from "@/constants/measurementFields";
-import { base64ToDataUri, pickMeasurementPhotos } from "@/utils/photos";
 import colors from "@/constants/colors";
-import type { FamilyMember, Measurement } from "@/types";
+import type { Measurement } from "@/types";
 
 type MeasurementValues = Partial<Record<MeasurementKey, string>>;
 
@@ -31,6 +29,10 @@ type ProductDraft = {
   values: MeasurementValues;
   customValues: Record<string, string>;
   fieldErrors: Record<string, string>;
+  /** Feature / sub-type labels the tailor picked for this product
+   *  (e.g. "Half Boy Shirt"). Persisted on the measurement's
+   *  `featureLabel` field and surfaced on the order/invoice later. */
+  selectedFeatures: string[];
   expanded: boolean;
 };
 
@@ -66,17 +68,26 @@ export default function NewMeasurementScreen() {
     measurements,
     productTypes,
   } = useData();
-  const params = useLocalSearchParams<{ customerId?: string; customerName?: string }>();
+  const params = useLocalSearchParams<{
+    customerId?: string;
+    customerName?: string;
+    /** Optional — pre-selects the family member in the "Select Person"
+     *  picker. Omit / pass "self" to default to the primary customer. */
+    familyMemberId?: string;
+  }>();
 
   const [selectedCustomerId, setSelectedCustomerId] = useState(params.customerId ?? "");
-  const [selectedPersonId, setSelectedPersonId] = useState(SELF_PERSON_ID);
+  // Pre-seed the selected person from the route param so tapping a
+  // measurement row in the customer page (which already knows whether
+  // it belongs to a family member) drops the user on the right person.
+  const [selectedPersonId, setSelectedPersonId] = useState<string>(
+    params.familyMemberId ?? SELF_PERSON_ID,
+  );
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [activeProductId, setActiveProductId] = useState("");
   const [productDrafts, setProductDrafts] = useState<Record<string, ProductDraft>>({});
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [deliveryDate, setDeliveryDate] = useState("");
   const [notes, setNotes] = useState("");
-  const [photos, setPhotos] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
   const [showCustomModal, setShowCustomModal] = useState(false);
@@ -115,7 +126,13 @@ export default function NewMeasurementScreen() {
 
   function buildDraft(productId: string, expanded = true): ProductDraft {
     const product = productTypes.find((p) => p.id === productId);
-    const draft: ProductDraft = { values: {}, customValues: {}, fieldErrors: {}, expanded };
+    const draft: ProductDraft = {
+      values: {},
+      customValues: {},
+      fieldErrors: {},
+      selectedFeatures: [],
+      expanded,
+    };
     if (!product || !selectedCustomerId) return draft;
 
     const latest = latestPreviousMeasurement(product.name, selectedPersonId);
@@ -133,6 +150,15 @@ export default function NewMeasurementScreen() {
       if (match) draft.customValues[match.id] = String(cm.value);
     }
 
+    if (latest.featureLabel) {
+      // Recover the previous selection so the tailor sees the same
+      // sub-types ticked when editing/refreshing.
+      draft.selectedFeatures = latest.featureLabel
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+
     return draft;
   }
 
@@ -144,10 +170,24 @@ export default function NewMeasurementScreen() {
   }, [productTypes, selectedProductIds.length]);
 
   useEffect(() => {
-    setProductDrafts(() => {
+    setProductDrafts((prev) => {
       const next: Record<string, ProductDraft> = {};
       for (const productId of selectedProductIds) {
-        next[productId] = buildDraft(productId, productId === activeProductId || selectedProductIds.length === 1);
+        const seed = buildDraft(productId, productId === activeProductId || selectedProductIds.length === 1);
+        const existing = prev[productId];
+        // CRITICAL: preserve any in-progress values/customValues/feature
+        // picks the user has already typed. Without this, picking a
+        // second product clobbers product 1's draft because
+        // `buildDraft` reseeds from the previous measurement.
+        next[productId] = {
+          ...seed,
+          ...(existing ?? {}),
+          values: { ...seed.values, ...(existing?.values ?? {}) },
+          customValues: { ...seed.customValues, ...(existing?.customValues ?? {}) },
+          fieldErrors: existing?.fieldErrors ?? {},
+          selectedFeatures: existing?.selectedFeatures ?? seed.selectedFeatures,
+          expanded: existing?.expanded ?? seed.expanded,
+        };
       }
       return next;
     });
@@ -209,17 +249,6 @@ export default function NewMeasurementScreen() {
     }));
   }
 
-  async function handleAddPhotos() {
-    const picked = await pickMeasurementPhotos(photos.length);
-    if (picked.length === 0) return;
-    setPhotos((prev) => [...prev, ...picked.map((p) => p.base64).filter(Boolean)]);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }
-
-  function handleRemovePhoto(idx: number) {
-    setPhotos((prev) => prev.filter((_, i) => i !== idx));
-  }
-
   async function handleAddCustomField() {
     if (!newFieldName.trim()) return;
     await addCustomField(newFieldName.trim());
@@ -270,10 +299,6 @@ export default function NewMeasurementScreen() {
       Alert.alert("Error", "Measurement Date cannot be in the past.");
       return;
     }
-    if (deliveryDate && new Date(deliveryDate).getTime() < todayStart.getTime()) {
-      Alert.alert("Error", "Delivery Date cannot be in the past.");
-      return;
-    }
     if (!validate()) {
       Alert.alert("Incomplete Measurements", "Please fill all required fields in the highlighted product.");
       return;
@@ -288,14 +313,21 @@ export default function NewMeasurementScreen() {
         familyMemberId: selectedFamilyMember?.id,
         familyMemberName: selectedFamilyMember?.name,
         date: new Date(date).toISOString(),
-        deliveryDate: deliveryDate ? new Date(deliveryDate).toISOString() : undefined,
+        // Delivery date is captured on the order, not on the measurement.
+        // We don't set it here so the order's date is the source of truth.
         productType: product.name,
         productTypeId: product.id,
+        featureLabel:
+          draft.selectedFeatures.length > 0 ? draft.selectedFeatures.join(", ") : undefined,
         customMeasurements: customFields
           .map((cf) => ({ label: cf.fieldName, value: parseFloat(draft.customValues[cf.id] || "0") }))
           .filter((cm) => cm.value > 0),
         notes: notes.trim(),
-        photos,
+        // Photos are no longer attached to the measurement itself —
+        // they're uploaded when the order is created so they travel with
+        // the order. The measurement's `photos` field stays as an empty
+        // array (the type is optional in the model).
+        photos: [],
       };
 
       for (const fieldKey of getFieldsForProduct(product.name)) {
@@ -460,13 +492,8 @@ export default function NewMeasurementScreen() {
           </Text>
         </View>
 
-        <View style={{ flexDirection: "row", gap: 12 }}>
-          <View style={{ flex: 1 }}>
-            <DatePicker label="Measurement Date" value={date} onChange={setDate} placeholder="Select date" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <DatePicker label="Delivery Date" value={deliveryDate} onChange={setDeliveryDate} placeholder="Select date" />
-          </View>
+        <View style={{ flex: 1 }}>
+          <DatePicker label="Measurement Date" value={date} onChange={setDate} placeholder="Select date" />
         </View>
 
         <View style={{ gap: 8 }}>
@@ -515,6 +542,18 @@ export default function NewMeasurementScreen() {
             const fields = MEASUREMENT_FIELDS.filter((f) =>
               getFieldsForProduct(product.name).includes(f.key as MeasurementKey),
             );
+            // Filter features by the selected person's gender so the
+            // tailor doesn't see options like "Ladies Blouse" on a male
+            // customer. `selectedPersonGender` may be undefined when the
+            // person is a family member stored without gender; in that
+            // case we fall back to "both"/undefined features.
+            const personGender =
+              selectedFamilyMember?.gender ?? selectedCustomer?.gender;
+            const productFeatures = (product.features ?? []).filter((f) => {
+              if (!f.gender || f.gender === "both") return true;
+              if (!personGender || personGender === "unisex") return true;
+              return f.gender === personGender;
+            });
             const expanded = draft.expanded;
             const productErrorCount = Object.keys(draft.fieldErrors).length;
 
@@ -583,6 +622,59 @@ export default function NewMeasurementScreen() {
                       );
                     })}
 
+                    {productFeatures.length > 0 && (
+                      <View style={{ borderTopWidth: 1, borderTopColor: c.border, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, gap: 8, backgroundColor: c.muted + "40" }}>
+                        <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                          Sub-types / Features
+                        </Text>
+                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                          {productFeatures.map((f) => {
+                            const checked = draft.selectedFeatures.includes(f.label);
+                            return (
+                              <Pressable
+                                key={f.label}
+                                onPress={() => {
+                                  setProductDraft(productId, (d) => {
+                                    const next = checked
+                                      ? d.selectedFeatures.filter((s) => s !== f.label)
+                                      : [...d.selectedFeatures, f.label];
+                                    return { ...d, selectedFeatures: next };
+                                  });
+                                  Haptics.selectionAsync();
+                                }}
+                                style={{
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  gap: 6,
+                                  paddingHorizontal: 12,
+                                  paddingVertical: 7,
+                                  borderRadius: 18,
+                                  backgroundColor: checked ? c.primary : c.card,
+                                  borderWidth: 1,
+                                  borderColor: checked ? c.primary : c.border,
+                                }}
+                              >
+                                <MaterialIcons
+                                  name={checked ? "check-box" : "check-box-outline-blank"}
+                                  size={16}
+                                  color={checked ? "#FFFFFF" : c.mutedForeground}
+                                />
+                                <Text
+                                  style={{
+                                    fontSize: 13,
+                                    fontFamily: checked ? "Inter_600SemiBold" : "Inter_400Regular",
+                                    color: checked ? "#FFFFFF" : c.foreground,
+                                  }}
+                                >
+                                  {f.label}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    )}
+
                     {customFields.length > 0 && (
                       <View style={{ borderTopWidth: 1, borderTopColor: c.border }}>
                         <Text style={{ paddingHorizontal: 16, paddingTop: 12, fontSize: 11, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
@@ -627,34 +719,11 @@ export default function NewMeasurementScreen() {
           </Text>
         </Pressable>
 
-        <View style={{ gap: 6 }}>
-          <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.6 }}>
-            Photos ({photos.length}/4)
+        <View style={{ backgroundColor: c.muted, borderRadius: colors.radius, padding: 12, flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <MaterialIcons name="info-outline" size={16} color={c.mutedForeground} />
+          <Text style={{ flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
+            Photos are uploaded with the order, not with the measurement.
           </Text>
-          {photos.length > 0 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
-              {photos.map((photo, idx) => (
-                <View key={idx} style={{ position: "relative" }}>
-                  <Image source={{ uri: base64ToDataUri(photo) }} style={{ width: 90, height: 90, borderRadius: 12, backgroundColor: c.muted }} resizeMode="cover" />
-                  <Pressable onPress={() => handleRemovePhoto(idx)} style={{ position: "absolute", top: -6, right: -6, backgroundColor: "#EF4444", borderRadius: 12, width: 24, height: 24, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: c.card }}>
-                    <MaterialIcons name="close" size={14} color="#FFFFFF" />
-                  </Pressable>
-                </View>
-              ))}
-            </ScrollView>
-          )}
-          {photos.length < 4 && (
-            <Pressable
-              onPress={handleAddPhotos}
-              style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 10, padding: 14, backgroundColor: c.card, borderRadius: colors.radius, borderWidth: 1.5, borderColor: c.border, borderStyle: "dashed", opacity: pressed ? 0.8 : 1 })}
-            >
-              <MaterialIcons name="add-a-photo" size={20} color={c.primary} />
-              <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: c.primary }}>Add Photos</Text>
-              <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: c.mutedForeground, marginLeft: "auto" as any }}>
-                Up to 4
-              </Text>
-            </Pressable>
-          )}
         </View>
 
         <Input label="Notes" placeholder="Additional notes..." value={notes} onChangeText={setNotes} icon="notes" multiline />

@@ -63,7 +63,6 @@ export default function RegisterScreen() {
   const [enteredOtp, setEnteredOtp] = useState("");
   const [otpError, setOtpError] = useState("");
   const shopAddressRef = useRef<TextInput>(null);
-  const addressFetchedRef = useRef(false);
 
   const [form, setForm] = useState<{
     name: string;
@@ -119,6 +118,10 @@ export default function RegisterScreen() {
         preferredLanguage: (pending.formData.preferredLanguage as PreferredLanguage) ?? f.preferredLanguage,
       }));
       setOtpExpiresAt(pending.expiresAt);
+      // Start with a clean OTP input so any value from a prior session
+      // doesn't carry over.
+      setEnteredOtp("");
+      setOtpError("");
       setStep("otp");
     })();
   }, []);
@@ -156,16 +159,15 @@ export default function RegisterScreen() {
   }
 
   /**
-   * Fired when the user taps the Shop Address field. We ask for GPS
-   * permission, read the coordinates, then reverse-geocode via
-   * OpenStreetMap Nominatim (no API key, no IP-based guess) to fill
-   * the address, city, and state automatically. We only do this once
-   * per visit so we don't spam the API when the user re-focuses the
-   * field to edit the text.
+   * Fired when the user taps the explicit "Use my location" button. We
+   * ask for GPS permission, read the coordinates, then reverse-geocode
+   * via OpenStreetMap Nominatim (no API key, no IP-based guess) to fill
+   * the address, city, and state automatically.
+   *
+   * The button can be tapped again to re-detect if the user has moved
+   * to a new address or the first attempt failed.
    */
-  async function handleShopAddressFocus() {
-    if (addressFetchedRef.current) return;
-    addressFetchedRef.current = true;
+  async function handleFetchLocation() {
     setFetchingAddress(true);
     try {
       const coords = await requestAndGetCoords();
@@ -208,6 +210,37 @@ export default function RegisterScreen() {
     setLoading(true);
     try {
       const email = form.email.trim().toLowerCase();
+      const mobile = form.mobile.trim();
+      // Pre-check: don't waste the user's time sending an OTP if the
+      // account already exists with this email or mobile. Server still
+      // re-checks at /register as the source of truth.
+      try {
+        const check = await api.auth.checkAvailability({ email, mobile });
+        if (!check.available) {
+          setLoading(false);
+          const fieldErrors: Record<string, string> = {};
+          for (const f of check.conflicts ?? []) {
+            fieldErrors[f] =
+              f === "email"
+                ? "An account with this email already exists"
+                : "An account with this mobile already exists";
+          }
+          setErrors(fieldErrors);
+          Alert.alert(
+            "Already registered",
+            check.message ?? "An account with these details already exists",
+            [
+              { text: "Log in", onPress: () => router.replace("/login") },
+              { text: "Use a different email", style: "cancel" },
+            ],
+          );
+          return;
+        }
+      } catch (checkErr) {
+        // Check endpoint unavailable — fall through, server will still
+        // reject at /register if the account already exists.
+        console.warn("[register] availability check failed:", checkErr);
+      }
       await api.auth.sendOtp(email);
       const expiresAt = Date.now() + 10 * 60 * 1000; // 10 min — matches server
       setOtpExpiresAt(expiresAt);
@@ -217,6 +250,10 @@ export default function RegisterScreen() {
         expiresAt,
         formData: snapshotFormData() as any,
       });
+      // Reset any previously entered OTP in case the user is re-entering
+      // this step from the form.
+      setEnteredOtp("");
+      setOtpError("");
       setStep("otp");
       // Email is sent by the server via SMTP. The user must check their
       // inbox for the 6-digit code.
@@ -241,6 +278,8 @@ export default function RegisterScreen() {
         formData: snapshotFormData() as any,
       });
       Alert.alert("OTP Resent", `A new OTP was sent to ${email}.`);
+      setEnteredOtp("");
+      setOtpError("");
     } catch (err) {
       Alert.alert("Resend Failed", (err as Error).message);
     } finally {
@@ -420,7 +459,13 @@ export default function RegisterScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <Pressable
-            onPress={() => setStep("form")}
+            onPress={() => {
+              // Clear the previously entered OTP so when the user re-enters
+              // this step the field is empty and any old error is gone.
+              setEnteredOtp("");
+              setOtpError("");
+              setStep("form");
+            }}
             style={{ marginBottom: 28, flexDirection: "row", alignItems: "center", gap: 8 }}
           >
             <MaterialIcons name="arrow-back" size={20} color={c.foreground} />
@@ -693,52 +738,75 @@ export default function RegisterScreen() {
               placeholder={t("register.shopAddress")}
               value={form.shopAddress}
               onChangeText={(v) => set("shopAddress", v)}
-              onFocus={handleShopAddressFocus}
               ref={shopAddressRef}
               icon="location-on"
               multiline
-              rightElement={
-                fetchingAddress ? (
-                  <ActivityIndicator size="small" color={c.primary} />
-                ) : addressDetected ? (
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 4,
-                      backgroundColor: "#D1FAE5",
-                      paddingHorizontal: 8,
-                      paddingVertical: 4,
-                      borderRadius: 8,
-                    }}
-                  >
-                    <MaterialIcons name="my-location" size={12} color="#059669" />
-                    <Text
-                      style={{
-                        fontSize: 11,
-                        fontFamily: "Inter_600SemiBold",
-                        color: "#059669",
-                      }}
-                    >
-                      GPS
-                    </Text>
-                  </View>
-                ) : null
-              }
             />
-            {fetchingAddress ? (
+            <Pressable
+              onPress={handleFetchLocation}
+              disabled={fetchingAddress}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                marginTop: 8,
+                paddingVertical: 12,
+                paddingHorizontal: 14,
+                borderRadius: 10,
+                backgroundColor: addressDetected ? c.primary + "10" : c.muted,
+                borderWidth: 1,
+                borderColor: addressDetected ? c.primary : c.border,
+              }}
+            >
+              {fetchingAddress ? (
+                <ActivityIndicator size="small" color={c.primary} />
+              ) : (
+                <MaterialIcons
+                  name={addressDetected ? "refresh" : "my-location"}
+                  size={16}
+                  color={addressDetected ? c.primary : c.foreground}
+                />
+              )}
               <Text
                 style={{
-                  fontSize: 11,
-                  fontFamily: "Inter_400Regular",
-                  color: c.mutedForeground,
-                  marginTop: 4,
-                  marginLeft: 4,
+                  fontSize: 13,
+                  fontFamily: "Inter_600SemiBold",
+                  color: addressDetected ? c.primary : c.foreground,
                 }}
               >
-                {t("register.fetchingLocation")}
+                {fetchingAddress
+                  ? t("register.fetchingLocation")
+                  : addressDetected
+                    ? t("register.refetchLocation")
+                    : t("register.useMyLocation")}
               </Text>
-            ) : null}
+              {addressDetected && !fetchingAddress ? (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 4,
+                    backgroundColor: "#D1FAE5",
+                    paddingHorizontal: 6,
+                    paddingVertical: 2,
+                    borderRadius: 6,
+                    marginLeft: 4,
+                  }}
+                >
+                  <MaterialIcons name="check-circle" size={11} color="#059669" />
+                  <Text
+                    style={{
+                      fontSize: 10,
+                      fontFamily: "Inter_600SemiBold",
+                      color: "#059669",
+                    }}
+                  >
+                    GPS
+                  </Text>
+                </View>
+              ) : null}
+            </Pressable>
           </View>
           <View style={{ flexDirection: "row", gap: 10 }}>
             <Input

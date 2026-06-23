@@ -8,6 +8,7 @@ import {
   Pressable,
   ScrollView,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -18,7 +19,8 @@ import { useColors } from "@/hooks/useColors";
 import { useData } from "@/context/DataContext";
 import { Badge, Button, Card, Divider, Input } from "@/components/ui";
 import { DatePicker } from "@/components/DatePicker";
-import { MEASUREMENT_FIELDS } from "@/constants/products";
+import { MEASUREMENT_FIELDS, getFieldsForProduct } from "@/constants/products";
+import { MeasurementKey } from "@/constants/measurementFields";
 import { formatDate } from "@/utils/storage";
 import { base64ToDataUri, pickMeasurementPhotos } from "@/utils/photos";
 import colors from "@/constants/colors";
@@ -38,6 +40,12 @@ export default function MeasurementDetailScreen() {
   const [editPhotos, setEditPhotos] = useState<string[]>(measurement?.photos ?? []);
   const [editNotes, setEditNotes] = useState(measurement?.notes ?? "");
   const [editDeliveryDate, setEditDeliveryDate] = useState(measurement?.deliveryDate?.split("T")[0] ?? "");
+  // Editable copies of the measurement's per-field values. Initialised
+  // on open and merged into the existing measurement on save — and the
+  // save cascades the new values to every order / invoice that
+  // references this measurement.
+  const [editFieldValues, setEditFieldValues] = useState<Record<string, string>>({});
+  const [editCustomValues, setEditCustomValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [photoView, setPhotoView] = useState<string | null>(null);
 
@@ -51,14 +59,29 @@ export default function MeasurementDetailScreen() {
     );
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     Alert.alert("Delete Measurement", "Delete this measurement record?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
         style: "destructive",
         onPress: async () => {
-          await deleteMeasurement(measurement!.id);
+          const result = await deleteMeasurement(measurement!.id);
+          // DataContext returns `{ ok: false, references }` if the
+          // measurement is still referenced by an order or invoice.
+          if (result && result.ok === false) {
+            const refs = result.references ?? { orders: [], invoices: [] };
+            const orderText = refs.orders.length > 0 ? refs.orders.join(", ") : "";
+            const invoiceText = refs.invoices.length > 0 ? refs.invoices.join(", ") : "";
+            const parts: string[] = [];
+            if (orderText) parts.push(`orders: ${orderText}`);
+            if (invoiceText) parts.push(`invoices: ${invoiceText}`);
+            Alert.alert(
+              "Cannot delete",
+              `This measurement is used in ${parts.join(" and ")}. Delete or edit those orders/invoices first.`,
+            );
+            return;
+          }
           router.back();
         },
       },
@@ -69,6 +92,19 @@ export default function MeasurementDetailScreen() {
     setEditPhotos(measurement!.photos ?? []);
     setEditNotes(measurement!.notes ?? "");
     setEditDeliveryDate(measurement!.deliveryDate?.split("T")[0] ?? "");
+    // Seed the per-field edit state from the current measurement so
+    // the tailor can correct any value.
+    const fieldValues: Record<string, string> = {};
+    for (const key of getFieldsForProduct(measurement!.productType)) {
+      const raw = (measurement as any)[key];
+      if (raw !== undefined && raw !== null) fieldValues[key] = String(raw);
+    }
+    setEditFieldValues(fieldValues);
+    const customValues: Record<string, string> = {};
+    for (const cm of measurement!.customMeasurements ?? []) {
+      customValues[cm.label] = String(cm.value);
+    }
+    setEditCustomValues(customValues);
     setEditing(true);
   }
 
@@ -82,11 +118,31 @@ export default function MeasurementDetailScreen() {
     }
 
     setSaving(true);
-    await updateMeasurement(measurement!.id, {
+    // Compose the patch — note the field values are merged with the
+    // existing measurement so we don't drop keys the user didn't
+    // touch.
+    const patch: Record<string, any> = {
       photos: editPhotos,
       notes: editNotes.trim(),
       deliveryDate: editDeliveryDate ? new Date(editDeliveryDate).toISOString() : undefined,
+    };
+    for (const [key, val] of Object.entries(editFieldValues)) {
+      if (val && val.trim() !== "") {
+        const parsed = parseFloat(val);
+        if (!isNaN(parsed)) patch[key] = parsed;
+      }
+    }
+    // Persist edited custom measurements too — keep the existing
+    // label/value shape, just with the updated number.
+    const existingCustom = measurement!.customMeasurements ?? [];
+    const updatedCustom = existingCustom.map((cm) => {
+      const next = editCustomValues[cm.label];
+      if (next === undefined) return cm;
+      const parsed = parseFloat(next);
+      return { label: cm.label, value: isNaN(parsed) ? cm.value : parsed };
     });
+    patch.customMeasurements = updatedCustom;
+    await updateMeasurement(measurement!.id, patch);
     setSaving(false);
     setEditing(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -361,6 +417,73 @@ export default function MeasurementDetailScreen() {
             <Text style={{ fontSize: 18, fontFamily: "Inter_700Bold", color: c.foreground }}>
               Edit Measurement
             </Text>
+
+            <ScrollView style={{ maxHeight: 360 }} keyboardShouldPersistTaps="handled">
+              {getFieldsForProduct(measurement!.productType).length > 0 && (
+                <View style={{ gap: 6 }}>
+                  <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    Measurement Values (inches)
+                  </Text>
+                  {getFieldsForProduct(measurement!.productType).map((key) => {
+                    const meta = MEASUREMENT_FIELDS.find((f) => f.key === key);
+                    const label = meta?.label ?? key;
+                    return (
+                      <View
+                        key={key}
+                        style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4 }}
+                      >
+                        <Text style={{ width: 110, fontSize: 13, fontFamily: "Inter_500Medium", color: c.foreground }}>
+                          {label}
+                        </Text>
+                        <TextInput
+                          style={{ flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.foreground, backgroundColor: c.input, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: c.border }}
+                          placeholder="-"
+                          placeholderTextColor={c.mutedForeground}
+                          value={editFieldValues[key as string] ?? ""}
+                          onChangeText={(v) => {
+                            // Same sanitisation as the new-measurement
+                            // form: digits + single dot, capped at 5 chars.
+                            const cleaned = v.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1").slice(0, 5);
+                            setEditFieldValues((prev) => ({ ...prev, [key as string]: cleaned }));
+                          }}
+                          keyboardType="decimal-pad"
+                          maxLength={5}
+                        />
+                        <Text style={{ width: 14, fontSize: 12, color: c.mutedForeground }}>"</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+
+              {Object.keys(editCustomValues).length > 0 && (
+                <View style={{ gap: 6, marginTop: 6 }}>
+                  <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    Custom Values (inches)
+                  </Text>
+                  {Object.entries(editCustomValues).map(([label, val]) => (
+                    <View key={label} style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4 }}>
+                      <Text style={{ width: 110, fontSize: 13, fontFamily: "Inter_500Medium", color: c.foreground }}>
+                        {label}
+                      </Text>
+                      <TextInput
+                        style={{ flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.foreground, backgroundColor: c.input, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: c.border }}
+                        placeholder="-"
+                        placeholderTextColor={c.mutedForeground}
+                        value={val}
+                        onChangeText={(v) => {
+                          const cleaned = v.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1").slice(0, 5);
+                          setEditCustomValues((prev) => ({ ...prev, [label]: cleaned }));
+                        }}
+                        keyboardType="decimal-pad"
+                        maxLength={5}
+                      />
+                      <Text style={{ width: 14, fontSize: 12, color: c.mutedForeground }}>"</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
 
             <DatePicker
               label="Delivery Date"

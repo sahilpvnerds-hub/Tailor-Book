@@ -213,6 +213,7 @@ export const orders = mysqlTable("orders", {
 export const orderItems = mysqlTable("order_items", {
   id: varchar("id", { length: 36 }).notNull().primaryKey(),
   orderId: varchar("order_id", { length: 36 }).notNull(),
+  productTypeId: varchar("product_type_id", { length: 36 }),
   productType: varchar("product_type", { length: 50 }).notNull(),
   featureLabel: varchar("feature_label", { length: 100 }),
   quantity: int("quantity").notNull().default(1),
@@ -229,7 +230,9 @@ export const orderItems = mysqlTable("order_items", {
 export const invoiceItems = mysqlTable("invoice_items", {
   id: varchar("id", { length: 36 }).notNull().primaryKey(),
   invoiceId: varchar("invoice_id", { length: 36 }).notNull(),
+  productTypeId: varchar("product_type_id", { length: 36 }),
   productType: varchar("product_type", { length: 50 }).notNull(),
+  featureLabel: varchar("feature_label", { length: 100 }),
   quantity: int("quantity").notNull().default(1),
   price: decimal("price", { precision: 12, scale: 2 }).notNull().default("0"),
   measurementId: varchar("measurement_id", { length: 36 }),

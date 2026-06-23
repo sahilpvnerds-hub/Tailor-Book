@@ -87,6 +87,36 @@ interface ApiError {
 
 // ── Auth API ───────────────────────────────────────────────────────────────
 
+export interface CheckAvailabilityResult {
+  available: boolean;
+  conflicts?: string[];
+  message?: string;
+}
+
+export async function checkAvailability(
+  payload: { email?: string; mobile?: string },
+): Promise<CheckAvailabilityResult> {
+  const response = await fetch(`${API_BASE_URL}/auth/check-availability`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (response.status === 404 || response.status === 200) {
+    // Server may not have this endpoint yet (older build). Treat as available
+    // so the flow falls through to register where the server still re-checks.
+    if (response.status === 404) return { available: true };
+    const data = await parseJson<CheckAvailabilityResult>(response, "Check failed");
+    return data;
+  }
+  if (response.status === 409) {
+    const data = await parseJson<CheckAvailabilityResult>(response, "Check failed");
+    return { available: false, conflicts: data.conflicts, message: data.message };
+  }
+  // Other errors — let the caller handle
+  const data = await parseJson<any>(response, "Check failed");
+  throw new Error(data?.error ?? "Availability check failed");
+}
+
 export async function sendOtp(email: string): Promise<{ ok: boolean; message: string }> {
   const response = await fetch(`${API_BASE_URL}/auth/send-otp`, {
     method: "POST",
@@ -560,7 +590,7 @@ export async function getProductTypes(token: string): Promise<ProductType[]> {
   return data;
 }
 
-export async function addProductType(token: string, productType: { name: string; amount: number; unit?: "inches" | "cm" }): Promise<ProductType> {
+export async function addProductType(token: string, productType: { name: string; amount: number; unit?: "inches" | "cm"; features?: ProductType["features"] }): Promise<ProductType> {
   const response = await fetch(`${API_BASE_URL}/product-types`, {
     method: "POST",
     headers: {
@@ -576,7 +606,7 @@ export async function addProductType(token: string, productType: { name: string;
   return data;
 }
 
-export async function updateProductType(token: string, productTypeId: string, data: { name?: string; amount?: number; unit?: "inches" | "cm" }): Promise<ProductType> {
+export async function updateProductType(token: string, productTypeId: string, data: { name?: string; amount?: number; unit?: "inches" | "cm"; features?: ProductType["features"] }): Promise<ProductType> {
   const response = await fetch(`${API_BASE_URL}/product-types/${productTypeId}`, {
     method: "PATCH",
     headers: {
@@ -783,6 +813,7 @@ export function setupApi() {
 
 export const api = {
   auth: {
+    checkAvailability,
     sendOtp,
     verifyOtp,
     login,

@@ -121,6 +121,10 @@ router.patch("/:id", async (req: Request, res: Response) => {
 });
 
 // ---- DELETE /api/customers/:id ------------------------------------------
+// Cascading delete: removing a customer also removes their family
+// members, measurements, orders and invoices via the FK ON DELETE
+// CASCADE constraints declared in db/schema.sql (see
+// db/migrate_cascade_deletes.sql for the migration that adds them).
 router.delete("/:id", async (req: Request, res: Response) => {
   const id = getParam(req, "id");
   const [existing] = await db

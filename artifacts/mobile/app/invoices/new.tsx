@@ -74,6 +74,7 @@ export default function NewInvoiceScreen() {
       return [{
         productType: sourceMeasurement.productType,
         productTypeId: pt?.id,
+        featureLabel: sourceMeasurement.featureLabel,
         quantity: 1,
         price: pt?.amount ?? 0,
         measurementId: sourceMeasurement.id,

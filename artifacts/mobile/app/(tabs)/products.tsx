@@ -20,93 +20,24 @@ import { Button, EmptyState, Input } from "@/components/ui";
 import { useTranslation } from "@/utils/i18n";
 import colors from "@/constants/colors";
 import { MeasurementUnit, ProductFeature, ProductType } from "@/types";
+import {
+  FEATURE_SUGGESTIONS,
+  defaultFeaturesFor,
+  getProductSuggestions,
+  type FeatureGender,
+} from "@/constants/products";
 
-// ─── Feature suggestions by product name keyword + gender ──────────────────
-type FeatureGender = "male" | "female" | "both";
+// Re-export for any callers that previously imported the helper from
+// this module (kept here so the UI file's local getSuggestions alias
+// below remains a drop-in for the rest of the component).
+type Suggestion = { label: string; gender: FeatureGender };
+const getSuggestions = (productName: string, gender: FeatureGender | "all"): Suggestion[] =>
+  getProductSuggestions(productName, gender);
 
-const FEATURE_SUGGESTIONS: Record<string, { label: string; gender: FeatureGender }[]> = {
-  shirt: [
-    { label: "Half Sleeve", gender: "both" },
-    { label: "Full Sleeve", gender: "both" },
-    { label: "Half Boy Shirt", gender: "male" },
-    { label: "Full Boy Shirt", gender: "male" },
-    { label: "Collar Shirt", gender: "male" },
-    { label: "Formal Shirt", gender: "male" },
-    { label: "Casual Shirt", gender: "both" },
-  ],
-  kurta: [
-    { label: "Straight Kurta", gender: "both" },
-    { label: "V-Type Kurta", gender: "female" },
-    { label: "Round-Type Kurta", gender: "female" },
-    { label: "Anarkali", gender: "female" },
-    { label: "Angrakha", gender: "male" },
-    { label: "Band Collar Kurta", gender: "male" },
-    { label: "Short Kurta", gender: "male" },
-  ],
-  pant: [
-    { label: "Regular Fit", gender: "both" },
-    { label: "Slim Fit", gender: "both" },
-    { label: "Bootcut", gender: "both" },
-    { label: "Pleated", gender: "both" },
-    { label: "Straight Cut", gender: "both" },
-  ],
-  trouser: [
-    { label: "Regular Fit", gender: "both" },
-    { label: "Slim Fit", gender: "both" },
-    { label: "Formal", gender: "both" },
-    { label: "Casual", gender: "both" },
-  ],
-  lehenga: [
-    { label: "A-Line", gender: "female" },
-    { label: "Circular", gender: "female" },
-    { label: "Mermaid", gender: "female" },
-    { label: "Straight", gender: "female" },
-  ],
-  blouse: [
-    { label: "Short Sleeve", gender: "female" },
-    { label: "Sleeveless", gender: "female" },
-    { label: "Long Sleeve", gender: "female" },
-    { label: "Back Open", gender: "female" },
-    { label: "Round Neck", gender: "female" },
-    { label: "V-Neck", gender: "female" },
-  ],
-  suit: [
-    { label: "Single Breasted", gender: "male" },
-    { label: "Double Breasted", gender: "male" },
-    { label: "3-Piece", gender: "male" },
-    { label: "2-Piece", gender: "male" },
-  ],
-  blazer: [
-    { label: "Slim Fit", gender: "both" },
-    { label: "Regular Fit", gender: "both" },
-    { label: "Single Button", gender: "both" },
-    { label: "Double Button", gender: "both" },
-  ],
-  salwar: [
-    { label: "Churidar", gender: "female" },
-    { label: "Patiala", gender: "female" },
-    { label: "Palazzo", gender: "female" },
-    { label: "Straight", gender: "female" },
-  ],
-  dupatta: [
-    { label: "Plain", gender: "female" },
-    { label: "Embroidered", gender: "female" },
-    { label: "Printed", gender: "female" },
-  ],
-};
-
-function getSuggestions(productName: string, genderTarget: FeatureGender | "all"): { label: string; gender: FeatureGender }[] {
-  const lower = productName.toLowerCase();
-  const key = Object.keys(FEATURE_SUGGESTIONS).find((k) => lower.includes(k));
-  const all = key ? FEATURE_SUGGESTIONS[key] : [];
-  if (genderTarget === "all") return all;
-  return all.filter((s) => s.gender === "both" || s.gender === genderTarget);
-}
-
-const GENDER_TARGET_OPTIONS: { value: FeatureGender | "all"; label: string; icon: string }[] = [
-  { value: "all", label: "All", icon: "people" },
-  { value: "male", label: "Male", icon: "man" },
-  { value: "female", label: "Female", icon: "woman" },
+const GENDER_TARGET_OPTIONS: { value: FeatureGender | "all"; labelKey: string; icon: string }[] = [
+  { value: "all", labelKey: "products.features.filterAll", icon: "people" },
+  { value: "male", labelKey: "products.features.filterMale", icon: "man" },
+  { value: "female", labelKey: "products.features.filterFemale", icon: "woman" },
 ];
 
 // ─── ProductTypeForm ─────────────────────────────────────────────────────────
@@ -127,11 +58,32 @@ function ProductTypeForm({
   const [amount, setAmount] = useState(initial?.amount ?? "");
   const [unit, setUnit] = useState<MeasurementUnit>(initial?.unit ?? "inches");
   const [genderTarget, setGenderTarget] = useState<FeatureGender | "all">("all");
-  const [features, setFeatures] = useState<ProductFeature[]>(initial?.features ?? []);
+  // Editing keeps the saved features; creating seeds ALL suggested
+  // features so the tailor starts from "everything ticked".
+  const [features, setFeatures] = useState<ProductFeature[]>(
+    initial?.features ?? getSuggestions(initial?.name ?? "", "all").map((s) => ({ label: s.label, gender: s.gender })),
+  );
   const [customFeatureText, setCustomFeatureText] = useState("");
   const [errors, setErrors] = useState<{ name?: string; amount?: string }>({});
 
   const suggestions = getSuggestions(name, genderTarget);
+
+  // If the tailor changes the gender target on a NEW (not yet saved)
+  // product, re-seed so the chips reflect the active scope.
+  function changeGenderTarget(next: FeatureGender | "all") {
+    setGenderTarget(next);
+    if (!initial) {
+      // New product: pre-select every suggested feature for the chosen
+      // gender target. Anything the tailor has already added stays
+      // even if it isn't part of the current suggestion list.
+      const seeded = getSuggestions(name, next).map((s) => ({ label: s.label, gender: s.gender }));
+      setFeatures((prev) => {
+        const labels = new Set(seeded.map((s) => s.label));
+        const customOnly = prev.filter((p) => !labels.has(p.label) && !getSuggestions(name, "all").some((s) => s.label === p.label));
+        return [...seeded, ...customOnly];
+      });
+    }
+  }
 
   function handleSave() {
     const e: typeof errors = {};
@@ -223,11 +175,13 @@ function ProductTypeForm({
       <View style={{ gap: 10 }}>
         <View style={{ flexDirection: "row", alignItems: "center" }}>
           <Text style={{ flex: 1, fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
-            Features / Sub-types
+            {t("products.features.title")}
           </Text>
           {features.length > 0 && (
             <View style={{ backgroundColor: c.primary, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 }}>
-              <Text style={{ fontSize: 11, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>{features.length}</Text>
+              <Text style={{ fontSize: 11, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>
+                {t("products.features.selected", { count: features.length })}
+              </Text>
             </View>
           )}
         </View>
@@ -239,7 +193,7 @@ function ProductTypeForm({
             return (
               <Pressable
                 key={opt.value}
-                onPress={() => setGenderTarget(opt.value)}
+                onPress={() => changeGenderTarget(opt.value)}
                 style={{
                   flex: 1,
                   flexDirection: "row",
@@ -255,7 +209,7 @@ function ProductTypeForm({
               >
                 <MaterialIcons name={opt.icon as any} size={14} color={sel ? c.primary : c.mutedForeground} />
                 <Text style={{ fontSize: 12, fontFamily: sel ? "Inter_700Bold" : "Inter_400Regular", color: sel ? c.primary : c.mutedForeground }}>
-                  {opt.label}
+                  {t(opt.labelKey)}
                 </Text>
               </Pressable>
             );
@@ -266,7 +220,7 @@ function ProductTypeForm({
         {suggestions.length > 0 && (
           <View>
             <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: c.mutedForeground, marginBottom: 6 }}>
-              Suggestions
+              {t("products.features.suggestions")}
             </Text>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
               {suggestions.map((s) => {
@@ -312,7 +266,7 @@ function ProductTypeForm({
         >
           <TextInput
             style={{ flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", color: c.foreground, paddingHorizontal: 12, paddingVertical: 10 }}
-            placeholder="Add custom feature..."
+            placeholder={t("products.features.customPlaceholder")}
             placeholderTextColor={c.mutedForeground}
             value={customFeatureText}
             onChangeText={setCustomFeatureText}
@@ -322,6 +276,7 @@ function ProductTypeForm({
           <Pressable
             onPress={addCustomFeature}
             style={{ backgroundColor: c.primary, padding: 10, alignItems: "center", justifyContent: "center" }}
+            accessibilityLabel={t("products.features.addCustom")}
           >
             <MaterialIcons name="add" size={18} color="#FFFFFF" />
           </Pressable>
@@ -331,7 +286,7 @@ function ProductTypeForm({
         {features.length > 0 && (
           <View>
             <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: c.mutedForeground, marginBottom: 6 }}>
-              Selected Features
+              {t("products.features.selectedList")}
             </Text>
             <View style={{ gap: 6 }}>
               {features.map((f) => (
@@ -356,7 +311,13 @@ function ProductTypeForm({
                   {f.gender && f.gender !== "both" && (
                     <View style={{ backgroundColor: c.primary + "18", borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
                       <Text style={{ fontSize: 10, fontFamily: "Inter_600SemiBold", color: c.primary }}>
-                        {f.gender}
+                        {t(
+                          f.gender === "male"
+                            ? "products.features.male"
+                            : f.gender === "female"
+                            ? "products.features.female"
+                            : "products.features.both",
+                        )}
                       </Text>
                     </View>
                   )}

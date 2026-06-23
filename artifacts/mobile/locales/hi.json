@@ -80,15 +80,16 @@
     "successMessage": "टेलर बुक में आपका स्वागत है! आपका खाता तैयार है।",
     "devOtpAlert": "डेमो OTP: {{code}}\n\nप्रोडक्शन में यह आपके ईमेल पर भेजा जाएगा।",
     "specialities": {
-      "male": "पुरुष विशेषज्ञ",
-      "female": "महिला विशेषज्ञ",
-      "unisex": "सर्वलिंगी विशेषज्ञ"
-    }
+      "male": "Male",
+      "female": "Female",
+      "unisex": "Unisex"
+    },
+    "refetchLocation": "दोबारा लोकेशन खोजें"
   },
   "languages": {
     "en": "English",
-    "hi": "हिन्दी (Hindi)",
-    "gu": "ગુજરાતી (Gujarati)"
+    "hi": "हिन्दी",
+    "gu": "ગુજરાતી"
   },
   "tabs": {
     "home": "होम",
@@ -144,6 +145,26 @@
     "errors": {
       "nameRequired": "उत्पाद का नाम आवश्यक है",
       "amountRequired": "मान्य राशि दर्ज करें"
+    },
+    "features": {
+      "title": "फ़ीचर्स / उप-प्रकार",
+      "subtitle": "इस प्रोडक्ट पर लागू होने वाले हर उप-प्रकार को चुनें। जो चाहिए वही रखें, बाकी हटा दें।",
+      "selected": "{{count}} चुने हुए",
+      "selectedList": "चुने हुए फ़ीचर्स",
+      "suggestions": "सुझाव",
+      "filterAll": "सभी",
+      "filterMale": "पुरुष",
+      "filterFemale": "महिला",
+      "noSuggestions": "सुझाव देखने के लिए ऊपर प्रोडक्ट का नाम टाइप करें, या नीचे अपना जोड़ें।",
+      "customLabel": "कस्टम उप-प्रकार जोड़ें",
+      "customPlaceholder": "जैसे: हाफ स्लीव, वी-नेक",
+      "addCustom": "जोड़ें",
+      "alreadyExists": "पहले से जोड़ा है",
+      "removed": "हटा दिया",
+      "added": "जोड़ दिया",
+      "male": "पुरुष",
+      "female": "महिला",
+      "both": "दोनों"
     }
   },
   "customers": {
@@ -342,7 +363,8 @@
     "searchHint": "ग्राहक खोजने के लिए टाइप करें",
     "searchNoResults": "कोई ग्राहक नहीं मिला",
     "searchAddNew": "नया ग्राहक जोड़ें",
-    "searchNoResultsHint": "\"{{query}}\" से मेल खाता कोई भी नहीं मिला"
+    "searchNoResultsHint": "\"{{query}}\" से मेल खाता कोई भी नहीं मिला",
+    "newOrder": "नया ऑर्डर"
   },
   "specialities": {
     "male": "पुरुष",

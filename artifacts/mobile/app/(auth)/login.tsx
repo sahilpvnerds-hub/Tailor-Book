@@ -219,7 +219,7 @@ export default function LoginScreen() {
           />
 
           {/* Admin hint */}
-          <View
+          {/* <View
             style={{
               padding: 14,
               backgroundColor: c.muted,
@@ -247,7 +247,7 @@ export default function LoginScreen() {
             >
               Admin demo: admin@tailorbook.com{"\n"}Password: admin123
             </Text>
-          </View>
+          </View> */}
 
           {/* Register */}
           <View

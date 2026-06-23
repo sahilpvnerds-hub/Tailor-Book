@@ -99,7 +99,13 @@ async function ensureColumns(database: string): Promise<void> {
   await addColumnIfMissing(database, "invoice_items", "family_member_id", "`family_member_id` varchar(36) NULL AFTER `measurement_id`");
   await addColumnIfMissing(database, "invoice_items", "person_name", "`person_name` varchar(100) NULL AFTER `family_member_id`");
   await addColumnIfMissing(database, "invoice_items", "relation", "`relation` varchar(50) NULL AFTER `person_name`");
+  await addColumnIfMissing(database, "invoice_items", "product_type_id", "`product_type_id` varchar(36) NULL AFTER `invoice_id`");
+  await addColumnIfMissing(database, "invoice_items", "feature_label", "`feature_label` varchar(100) NULL AFTER `product_type`");
+  await addIndexIfMissing(database, "invoice_items", "idx_invoice_items_product_type", "(`product_type_id`)");
   await addIndexIfMissing(database, "invoice_items", "idx_invoice_items_family_member", "(`family_member_id`)");
+
+  await addColumnIfMissing(database, "order_items", "product_type_id", "`product_type_id` varchar(36) NULL AFTER `order_id`");
+  await addIndexIfMissing(database, "order_items", "idx_order_items_product_type", "(`product_type_id`)");
 }
 
 async function ensureTables(): Promise<void> {

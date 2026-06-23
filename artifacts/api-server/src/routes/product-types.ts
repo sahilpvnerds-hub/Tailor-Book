@@ -2,7 +2,13 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@workspace/db";
-import { productTypes } from "@workspace/db/schema";
+import {
+  productTypes,
+  measurements,
+  measurementItems,
+  orderItems,
+  invoiceItems,
+} from "@workspace/db/schema";
 import { authMiddleware } from "../middlewares/auth";
 import { getParam } from "../lib/params";
 
@@ -92,6 +98,97 @@ router.patch("/:id", async (req: Request, res: Response) => {
   const patch: Record<string, unknown> = { ...body.data };
   if (patch.amount !== undefined) patch.amount = String(patch.amount);
   await db.update(productTypes).set(patch as any).where(eq(productTypes.id, id));
+
+  // Propagate the new feature list to existing records so the change
+  // takes effect everywhere — see also the same logic in
+  // artifacts/mobile/context/DataContext.tsx for the offline flow.
+  if (body.data.features !== undefined) {
+    const newLabels = body.data.features.map((f) => f.label);
+    const newLabelSet = new Set(newLabels);
+    const previousLabels = (existing.features ?? []).map((f: any) => f.label);
+    const previousLabelSet = new Set(previousLabels);
+
+    const renamedLabelMap = new Map<string, string>();
+    const removed = (existing.features ?? []).filter((f: any) => !newLabelSet.has(f.label));
+    const added = body.data.features.filter((f) => !previousLabelSet.has(f.label));
+    removed.forEach((r: any, i: number) => {
+      const candidate = added[i] ?? added.find((a) => a.gender === r.gender);
+      if (candidate) renamedLabelMap.set(r.label, candidate.label);
+    });
+
+    const remapLabel = (label: string | null | undefined) => {
+      if (!label) return label;
+      const parts = label.split(",").map((s) => s.trim()).filter(Boolean);
+      const next: string[] = [];
+      for (const p of parts) {
+        if (newLabelSet.has(p)) next.push(p);
+        else if (renamedLabelMap.has(p)) next.push(renamedLabelMap.get(p)!);
+      }
+      return next.join(", ");
+    };
+
+    // PATCH measurements (this table has no productTypeId column —
+    // match by name since each tailor's product name is unique to them)
+    const meas = await db
+      .select()
+      .from(measurements)
+      .where(eq(measurements.productType, existing.name));
+    for (const m of meas) {
+      const newLabel = remapLabel((m as any).featureLabel);
+      if (newLabel !== (m as any).featureLabel) {
+        await db
+          .update(measurements)
+          .set({ featureLabel: newLabel as any } as any)
+          .where(eq(measurements.id, (m as any).id));
+      }
+    }
+
+    // PATCH measurement_items
+    const mItems = await db
+      .select()
+      .from(measurementItems)
+      .where(eq(measurementItems.productTypeId, id));
+    for (const mi of mItems) {
+      const newLabel = remapLabel((mi as any).featureLabel);
+      if (newLabel !== (mi as any).featureLabel) {
+        await db
+          .update(measurementItems)
+          .set({ featureLabel: newLabel as any } as any)
+          .where(eq(measurementItems.id, (mi as any).id));
+      }
+    }
+
+    // PATCH order_items
+    const oItems = await db
+      .select()
+      .from(orderItems)
+      .where(eq(orderItems.productTypeId, id));
+    for (const it of oItems) {
+      const newLabel = remapLabel((it as any).featureLabel);
+      if (newLabel !== (it as any).featureLabel) {
+        await db
+          .update(orderItems)
+          .set({ featureLabel: newLabel as any } as any)
+          .where(eq(orderItems.id, (it as any).id));
+      }
+    }
+
+    // PATCH invoice_items
+    const iItems = await db
+      .select()
+      .from(invoiceItems)
+      .where(eq(invoiceItems.productTypeId, id));
+    for (const it of iItems) {
+      const newLabel = remapLabel((it as any).featureLabel);
+      if (newLabel !== (it as any).featureLabel) {
+        await db
+          .update(invoiceItems)
+          .set({ featureLabel: newLabel as any } as any)
+          .where(eq(invoiceItems.id, (it as any).id));
+      }
+    }
+  }
+
   const [updated] = await db
     .select()
     .from(productTypes)

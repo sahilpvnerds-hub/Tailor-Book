@@ -91,7 +91,9 @@ router.get("/:id", async (req: Request, res: Response) => {
 
 // ---- POST /api/invoices ---------------------------------------------------
 const itemSchema = z.object({
+  productTypeId: z.string().nullable().optional(),
   productType: z.string().min(1),
+  featureLabel: z.string().nullable().optional(),
   quantity: z.number().int().positive().default(1),
   price: z.number().nonnegative().default(0),
   measurementId: z.string().nullable().optional(),
@@ -209,7 +211,9 @@ router.post("/", async (req: Request, res: Response) => {
       await tx.insert(invoiceItems).values({
         id: crypto.randomUUID(),
         invoiceId: id,
+        productTypeId: it.productTypeId ?? null,
         productType: it.productType,
+        featureLabel: it.featureLabel ?? null,
         quantity: it.quantity,
         price: String(it.price),
         measurementId: it.measurementId ?? null,

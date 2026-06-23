@@ -148,7 +148,9 @@ export interface ApiMeasurement {
   familyMemberId?: string | null;
   tailorId: string;
   customerName: string;
+  productTypeId?: string | null;
   productType: string;
+  featureLabel?: string | null;
   measurementDate: string; // YYYY-MM-DD
   chest?: string | null;
   shoulder?: string | null;
@@ -171,7 +173,9 @@ export interface ApiMeasurement {
 export interface ApiInvoiceItem {
   id: string;
   invoiceId: string;
+  productTypeId?: string | null;
   productType: string;
+  featureLabel?: string | null;
   quantity: number;
   price: string;
   measurementId?: string | null;
@@ -273,7 +277,9 @@ export function bindApiMethods(client: ApiClient) {
       gstRate: number;
       notes?: string;
       items: Array<{
+        productTypeId?: string | null;
         productType: string;
+        featureLabel?: string | null;
         quantity: number;
         price: number;
         measurementId?: string | null;

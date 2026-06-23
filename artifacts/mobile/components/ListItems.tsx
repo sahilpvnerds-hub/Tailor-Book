@@ -198,6 +198,9 @@ export function MeasurementItem({ measurement, onPress }: MeasurementItemProps) 
 interface InvoiceItemProps {
   invoice: Invoice;
   onPress: () => void;
+  /** Optional override for the outer container — used by the customer
+   *  page to integrate with the row-level delete control. */
+  style?: any;
 }
 
 const statusConfig = {
@@ -221,7 +224,7 @@ const statusConfig = {
   },
 };
 
-export function InvoiceItem({ invoice, onPress }: InvoiceItemProps) {
+export function InvoiceItem({ invoice, onPress, style }: InvoiceItemProps) {
   const c = useColors();
   const sc = statusConfig[invoice.status];
 
@@ -240,6 +243,7 @@ export function InvoiceItem({ invoice, onPress }: InvoiceItemProps) {
         gap: 12,
         borderWidth: 1,
         borderColor: c.border,
+        ...(style ?? {}),
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.04,

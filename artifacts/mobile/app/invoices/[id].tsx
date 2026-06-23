@@ -35,11 +35,18 @@ function buildInvoiceText(invoice: Invoice): string {
     `Mobile: ${invoice.customerMobile}`,
     ``,
     `ORDER ITEMS`,
-    ...invoice.items.flatMap((item, idx) => [
-      `${idx + 1}. Product: ${item.productType}`,
-      `   Person: ${invoiceItemPersonLabel(item, invoice.customerName)}`,
-      `   Qty/Rate: ${item.quantity} x ${formatCurrency(item.price)} = ${formatCurrency(item.price * item.quantity)}`,
-    ]),
+    ...invoice.items.flatMap((item, idx) => {
+      const itemLines = [
+        `${idx + 1}. Product: ${item.productType}${item.featureLabel ? ` (${item.featureLabel})` : ""}`,
+        `   Person: ${invoiceItemPersonLabel(item, invoice.customerName)}`,
+        `   Qty/Rate: ${item.quantity} x ${formatCurrency(item.price)} = ${formatCurrency(item.price * item.quantity)}`,
+      ];
+      if (item.measurementValues && Object.keys(item.measurementValues).length > 0) {
+        const measList = Object.entries(item.measurementValues).map(([k, v]) => `${titleCase(k)}: ${v}`).join(", ");
+        itemLines.push(`   Measurements: ${measList}`);
+      }
+      return itemLines;
+    }),
     ``,
     `Subtotal: ${formatCurrency(invoice.subtotal)}`,
     `TOTAL: ${formatCurrency(invoice.total)}`,
@@ -280,42 +287,71 @@ export default function InvoiceDetailScreen() {
             Order Items
           </Text>
           <View style={{ gap: 0 }}>
-            {invoice.items.map((item, idx) => (
-              <React.Fragment key={idx}>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 10, alignItems: "flex-start" }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 15, fontFamily: "Inter_500Medium", color: c.foreground }}>
-                      {item.productType}
-                    </Text>
-                    <View
-                      style={{
-                        alignSelf: "flex-start",
-                        marginTop: 3,
-                        backgroundColor: "#EEF2FF",
-                        borderRadius: 6,
-                        paddingHorizontal: 7,
-                        paddingVertical: 2,
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 3,
-                      }}
-                    >
-                      <MaterialIcons name={item.familyMemberId ? "group" : "person"} size={11} color="#6366F1" />
-                      <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: "#6366F1" }}>
-                        {invoiceItemPersonLabel(item, invoice.customerName)}
+            {invoice.items.map((item, idx) => {
+              const itemMeasurement = item.measurementId ? measurements.find((m) => m.id === item.measurementId) : undefined;
+              return (
+                <React.Fragment key={idx}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 10, alignItems: "flex-start" }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: c.foreground }}>
+                        {item.productType} {item.featureLabel ? `(${item.featureLabel})` : ""}
                       </Text>
+                      <View
+                        style={{
+                          alignSelf: "flex-start",
+                          marginTop: 3,
+                          backgroundColor: "#EEF2FF",
+                          borderRadius: 6,
+                          paddingHorizontal: 7,
+                          paddingVertical: 2,
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 3,
+                        }}
+                      >
+                        <MaterialIcons name={item.familyMemberId ? "group" : "person"} size={11} color="#6366F1" />
+                        <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: "#6366F1" }}>
+                          {invoiceItemPersonLabel(item, invoice.customerName)}
+                        </Text>
+                      </View>
+                      <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground, marginTop: 2 }}>
+                        {item.quantity} x {formatCurrency(item.price)}
+                      </Text>
+                      
+                      {item.measurementValues && Object.keys(item.measurementValues).length > 0 && (
+                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                          {Object.entries(item.measurementValues).map(([key, val]) => (
+                            <View key={key} style={{ backgroundColor: c.muted, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                              <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: c.mutedForeground }}>
+                                {titleCase(key)}: {val}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+
+                      {itemMeasurement?.photos && itemMeasurement.photos.length > 0 && (
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginTop: 8 }}>
+                          {itemMeasurement.photos.map((p, pIdx) => (
+                            <Pressable key={pIdx} onPress={() => setPhotoView(p)}>
+                              <Image
+                                source={{ uri: base64ToDataUri(p) }}
+                                style={{ width: 60, height: 60, borderRadius: 8, backgroundColor: c.muted }}
+                                resizeMode="cover"
+                              />
+                            </Pressable>
+                          ))}
+                        </ScrollView>
+                      )}
                     </View>
-                    <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground, marginTop: 2 }}>
-                      {item.quantity} x {formatCurrency(item.price)}
+                    <Text style={{ fontSize: 15, fontFamily: "Inter_700Bold", color: c.foreground }}>
+                      {formatCurrency(item.price * item.quantity)}
                     </Text>
                   </View>
-                  <Text style={{ fontSize: 15, fontFamily: "Inter_700Bold", color: c.foreground }}>
-                    {formatCurrency(item.price * item.quantity)}
-                  </Text>
-                </View>
-                {idx < invoice.items.length - 1 && <Divider />}
-              </React.Fragment>
-            ))}
+                  {idx < invoice.items.length - 1 && <Divider />}
+                </React.Fragment>
+              );
+            })}
           </View>
 
           <Divider style={{ marginVertical: 8 }} />
@@ -567,7 +603,7 @@ export default function InvoiceDetailScreen() {
                           color: c.foreground,
                         }}
                       >
-                        {item.productType} x{item.quantity}
+                        {item.productType} {item.featureLabel ? `(${item.featureLabel})` : ""} x{item.quantity}
                       </Text>
                       <Text
                         style={{
@@ -588,6 +624,18 @@ export default function InvoiceDetailScreen() {
                     >
                       {invoiceItemPersonLabel(item, invoice.customerName)}
                     </Text>
+                    {item.measurementValues && Object.keys(item.measurementValues).length > 0 && (
+                      <Text
+                        style={{
+                          fontSize: 10,
+                          fontFamily: "Inter_400Regular",
+                          color: c.mutedForeground,
+                          marginTop: 1,
+                        }}
+                      >
+                        {Object.entries(item.measurementValues).map(([k, v]) => `${titleCase(k)}: ${v}`).join(", ")}
+                      </Text>
+                    )}
                   </View>
                 ))}
               </View>
@@ -607,12 +655,15 @@ export default function InvoiceDetailScreen() {
                   `Date: ${formatDate(invoice.createdAt)}\n\n` +
                   `ITEMS\n` +
                   invoice.items
-                    .map(
-                      (i) =>
-                        `- ${i.productType} x${i.quantity} - ${invoiceItemPersonLabel(i, invoice.customerName)} - ${formatCurrency(
-                          i.price * i.quantity,
-                        )}`,
-                    )
+                    .map((i) => {
+                      let desc = `- ${i.productType}${i.featureLabel ? ` (${i.featureLabel})` : ""} x${i.quantity} - ${invoiceItemPersonLabel(i, invoice.customerName)}`;
+                      if (i.measurementValues && Object.keys(i.measurementValues).length > 0) {
+                        const measList = Object.entries(i.measurementValues).map(([k, v]) => `${titleCase(k)}: ${v}`).join(", ");
+                        desc += `\n  Measurements: ${measList}`;
+                      }
+                      desc += ` - ${formatCurrency(i.price * i.quantity)}`;
+                      return desc;
+                    })
                     .join("\n") +
                   `\n\nTotal: ${formatCurrency(invoice.total)}`;
                 try {

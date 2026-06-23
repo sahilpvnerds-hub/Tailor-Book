@@ -155,8 +155,9 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
     console.log(`Setting EXPO_PUBLIC_REPL_ID=${expoPublicReplId}`);
   }
 
+  const pnpmCmd = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
   metroProcess = spawn(
-    "pnpm",
+    pnpmCmd,
     [
       "exec",
       "expo",
@@ -170,6 +171,7 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
       detached: false,
       cwd: projectRoot,
       env,
+      shell: process.platform === "win32",
     },
   );
 

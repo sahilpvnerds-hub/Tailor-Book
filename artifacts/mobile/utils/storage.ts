@@ -12,7 +12,7 @@ import {
   Order,
   OrderItem,
 } from "@/types";
-import { DEFAULT_PRODUCT_TYPES } from "@/constants/products";
+import { DEFAULT_PRODUCT_TYPES, defaultFeaturesFor } from "@/constants/products";
 
 export const STORAGE_KEYS = {
   USERS: "@tailorbook/users",
@@ -97,18 +97,37 @@ export async function getProductTypes(tailorId: string): Promise<ProductType[]> 
   const all = (await getStorageItem<ProductType[]>(STORAGE_KEYS.PRODUCT_TYPES)) ?? [];
   const mine = all.filter((p) => p.tailorId === tailorId);
   if (mine.length === 0) {
-    // Seed defaults on first use
+    // First-time login: seed defaults with EVERY suggested sub-type
+    // enabled so the picker comes up pre-ticked for the tailor.
     const now = new Date().toISOString();
     const defaults: ProductType[] = DEFAULT_PRODUCT_TYPES.map((p) => ({
       id: generateId(),
       tailorId,
       name: p.name,
       amount: p.amount,
+      unit: "inches",
+      features: defaultFeaturesFor(p.name, "all"),
       createdAt: now,
       updatedAt: now,
     }));
     await setStorageItem(STORAGE_KEYS.PRODUCT_TYPES, [...all, ...defaults]);
     return defaults;
+  }
+  // Back-fill for tailors whose default products were seeded before
+  // we shipped the auto-features behaviour — fill in any missing
+  // suggestions so the master always shows the latest picker state.
+  let changed = false;
+  const patched = mine.map((p) => {
+    if ((p.features ?? []).length > 0) return p;
+    const suggestions = defaultFeaturesFor(p.name, "all");
+    if (suggestions.length === 0) return p;
+    changed = true;
+    return { ...p, features: suggestions, updatedAt: new Date().toISOString() };
+  });
+  if (changed) {
+    const others = all.filter((p) => p.tailorId !== tailorId);
+    await setStorageItem(STORAGE_KEYS.PRODUCT_TYPES, [...others, ...patched]);
+    return patched;
   }
   return mine;
 }

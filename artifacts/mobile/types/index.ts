@@ -163,6 +163,7 @@ export interface Measurement {
 export interface InvoiceItem {
   productType: string;
   productTypeId?: string;
+  featureLabel?: string | null;
   quantity: number;
   price: number;
   measurementId?: string;
@@ -231,6 +232,7 @@ export type OrderStatus = "pending" | "completed" | "cancelled";
 export interface OrderItem {
   id: string;
   orderId: string;
+  productTypeId?: string | null;
   productType: string;
   featureLabel?: string | null;
   quantity: number;

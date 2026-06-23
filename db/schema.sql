@@ -94,7 +94,11 @@ CREATE TABLE IF NOT EXISTS family_members (
   updated_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
   INDEX idx_family_members_tailor  (tailor_id),
-  INDEX idx_family_members_primary (primary_customer_id)
+  INDEX idx_family_members_primary (primary_customer_id),
+
+  CONSTRAINT fk_family_members_primary_customer
+    FOREIGN KEY (primary_customer_id) REFERENCES customers(id)
+    ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
@@ -171,6 +175,9 @@ CREATE TABLE IF NOT EXISTS measurements (
 
   CONSTRAINT fk_measurements_customer
     FOREIGN KEY (customer_id) REFERENCES customers(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_measurements_family_member
+    FOREIGN KEY (family_member_id) REFERENCES family_members(id)
     ON DELETE CASCADE,
   CONSTRAINT fk_measurements_tailor
     FOREIGN KEY (tailor_id) REFERENCES users(id)
@@ -276,7 +283,7 @@ CREATE TABLE IF NOT EXISTS orders (
     ON DELETE CASCADE,
   CONSTRAINT fk_orders_customer
     FOREIGN KEY (customer_id) REFERENCES customers(id)
-    ON DELETE RESTRICT,
+    ON DELETE CASCADE,
 
   INDEX idx_orders_tailor   (tailor_id),
   INDEX idx_orders_customer (customer_id),
@@ -292,6 +299,7 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE TABLE IF NOT EXISTS order_items (
   id                 VARCHAR(36)   NOT NULL PRIMARY KEY,
   order_id           VARCHAR(36)   NOT NULL,
+  product_type_id    VARCHAR(36)   NULL,
   product_type       VARCHAR(50)   NOT NULL,
   feature_label      VARCHAR(100)  NULL,
   quantity           INT           NOT NULL DEFAULT 1,
@@ -307,8 +315,18 @@ CREATE TABLE IF NOT EXISTS order_items (
   CONSTRAINT fk_order_items_order
     FOREIGN KEY (order_id) REFERENCES orders(id)
     ON DELETE CASCADE,
+  CONSTRAINT fk_order_items_measurement
+    FOREIGN KEY (measurement_id) REFERENCES measurements(id)
+    ON DELETE SET NULL,
+  CONSTRAINT fk_order_items_invoice
+    FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+    ON DELETE SET NULL,
+  CONSTRAINT fk_order_items_family_member
+    FOREIGN KEY (family_member_id) REFERENCES family_members(id)
+    ON DELETE CASCADE,
 
   INDEX idx_order_items_order         (order_id),
+  INDEX idx_order_items_product_type  (product_type_id),
   INDEX idx_order_items_family_member (family_member_id),
   INDEX idx_order_items_measurement   (measurement_id),
   INDEX idx_order_items_invoice       (invoice_id)
@@ -341,7 +359,7 @@ CREATE TABLE IF NOT EXISTS invoices (
     ON DELETE CASCADE,
   CONSTRAINT fk_invoices_customer
     FOREIGN KEY (customer_id) REFERENCES customers(id)
-    ON DELETE RESTRICT,
+    ON DELETE CASCADE,
 
   INDEX idx_invoices_tailor   (tailor_id),
   INDEX idx_invoices_customer (customer_id),
@@ -358,7 +376,9 @@ CREATE TABLE IF NOT EXISTS invoices (
 CREATE TABLE IF NOT EXISTS invoice_items (
   id                 VARCHAR(36)   NOT NULL PRIMARY KEY,
   invoice_id         VARCHAR(36)   NOT NULL,
+  product_type_id    VARCHAR(36)   NULL,
   product_type       VARCHAR(50)   NOT NULL,
+  feature_label      VARCHAR(100)  NULL,
   quantity           INT           NOT NULL DEFAULT 1,
   price              DECIMAL(12,2) NOT NULL DEFAULT 0,
   measurement_id     VARCHAR(36)   NULL,
@@ -372,8 +392,15 @@ CREATE TABLE IF NOT EXISTS invoice_items (
   CONSTRAINT fk_invoice_items_invoice
     FOREIGN KEY (invoice_id) REFERENCES invoices(id)
     ON DELETE CASCADE,
+  CONSTRAINT fk_invoice_items_measurement
+    FOREIGN KEY (measurement_id) REFERENCES measurements(id)
+    ON DELETE SET NULL,
+  CONSTRAINT fk_invoice_items_family_member
+    FOREIGN KEY (family_member_id) REFERENCES family_members(id)
+    ON DELETE CASCADE,
 
   INDEX idx_invoice_items_invoice     (invoice_id),
+  INDEX idx_invoice_items_product_type (product_type_id),
   INDEX idx_invoice_items_family_member (family_member_id),
   INDEX idx_invoice_items_measurement (measurement_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

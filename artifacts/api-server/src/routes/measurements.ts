@@ -11,6 +11,8 @@ import {
   measurements,
   productTypes,
 } from "@workspace/db/schema";
+import { orders, orderItems } from "@workspace/db/schema";
+import { invoices, invoiceItems } from "@workspace/db/schema";
 import { authMiddleware } from "../middlewares/auth";
 import { getParam } from "../lib/params";
 
@@ -502,6 +504,26 @@ router.patch("/:id", async (req: Request, res: Response) => {
 });
 
 // ---- DELETE /api/measurements/:id ----------------------------------------
+// Refuse the delete if any order or invoice item still references the
+// measurement. The mobile app expects a `{ ok: false, references }`
+// payload here so it can surface the offending numbers.
+async function getMeasurementReferences(id: string) {
+  const orderRefs = await db
+    .select({ orderNumber: orders.orderNumber })
+    .from(orderItems)
+    .innerJoin(orders, eq(orders.id, orderItems.orderId))
+    .where(eq(orderItems.measurementId, id));
+  const invoiceRefs = await db
+    .select({ invoiceNumber: invoices.invoiceNumber })
+    .from(invoiceItems)
+    .innerJoin(invoices, eq(invoices.id, invoiceItems.invoiceId))
+    .where(eq(invoiceItems.measurementId, id));
+  return {
+    orders: orderRefs.map((r) => r.orderNumber),
+    invoices: invoiceRefs.map((r) => r.invoiceNumber),
+  };
+}
+
 router.delete("/:id", async (req: Request, res: Response) => {
   const id = getParam(req, "id");
   const [existing] = await db
@@ -515,6 +537,15 @@ router.delete("/:id", async (req: Request, res: Response) => {
   }
   if (!ensureOwnership(req, existing.tailorId)) {
     res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  const references = await getMeasurementReferences(id);
+  if (references.orders.length > 0 || references.invoices.length > 0) {
+    res.status(409).json({
+      ok: false,
+      error: "Measurement is referenced by orders or invoices",
+      references,
+    });
     return;
   }
   await db.delete(measurements).where(eq(measurements.id, id));

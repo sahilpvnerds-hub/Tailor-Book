@@ -15,9 +15,8 @@ import { MaterialIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useData } from "@/context/DataContext";
-import { Card, Divider, EmptyState, SectionHeader, Badge } from "@/components/ui";
-import { InvoiceItem } from "@/components/ListItems";
-import { formatDate, formatCurrency } from "@/utils/storage";
+import { EmptyState, SectionHeader } from "@/components/ui";
+import { formatDate } from "@/utils/storage";
 import colors from "@/constants/colors";
 import { FamilyMember, Relation } from "@/types";
 import { Button, Input } from "@/components/ui";
@@ -126,6 +125,7 @@ function PersonMeasurementSection({
   personName,
   relation,
   personIcon,
+  familyMemberId,
   measurements,
   onAddMeasurement,
   customer,
@@ -134,6 +134,8 @@ function PersonMeasurementSection({
   personName: string;
   relation: string;
   personIcon: string;
+  /** Family member id (undefined for the primary customer / "Self"). */
+  familyMemberId?: string;
   measurements: any[];
   onAddMeasurement: () => void;
   customer: any;
@@ -218,7 +220,16 @@ function PersonMeasurementSection({
           measurements.map((m: any, idx: number) => (
             <Pressable
               key={m.id}
-              onPress={() => router.push(`/measurements/${m.id}` as any)}
+              onPress={() =>
+                router.push({
+                  pathname: "/measurements/new",
+                  params: {
+                    customerId: customer.id,
+                    customerName: personName,
+                    familyMemberId: familyMemberId ?? "self",
+                  },
+                })
+              }
               style={({ pressed }) => ({
                 flexDirection: "row",
                 alignItems: "center",
@@ -292,11 +303,9 @@ export default function CustomerDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const {
     customers, familyMembers, measurements: allMeasurementsCtx,
-    getCustomerInvoices, deleteCustomer, deleteFamilyMember,
-    orders,
+    orders, deleteCustomer, deleteFamilyMember,
   } = useData();
   const customer = customers.find((c) => c.id === id);
-  const invoices = customer ? getCustomerInvoices(customer.id) : [];
   const customerOrders = customer ? orders.filter((o) => o.customerId === customer.id) : [];
   const members = familyMembers.filter((m) => m.primaryCustomerId === id);
   const [showAddMember, setShowAddMember] = useState(false);
@@ -546,7 +555,7 @@ export default function CustomerDetailScreen() {
             personIcon="person"
             measurements={selfMeasurements}
             onAddMeasurement={() =>
-              router.push({ pathname: "/measurements/new", params: { customerId: customer.id, customerName: customer.name } })
+              router.push({ pathname: "/measurements/new", params: { customerId: customer.id, customerName: customer.name, familyMemberId: "self" } })
             }
             customer={customer}
             c={c}
@@ -559,6 +568,7 @@ export default function CustomerDetailScreen() {
               personName={m.name}
               relation={m.relation.charAt(0).toUpperCase() + m.relation.slice(1)}
               personIcon={relationIcon[m.relation] ?? "person"}
+              familyMemberId={m.id}
               measurements={memberMeasurementsMap[m.id] ?? []}
               onAddMeasurement={() =>
                 router.push({ pathname: "/measurements/new", params: { customerId: customer.id, customerName: m.name, familyMemberId: m.id } })
@@ -569,136 +579,9 @@ export default function CustomerDetailScreen() {
           ))}
         </View>
 
-        {/* Orders */}
-        <View>
-          <SectionHeader
-            title="Orders"
-            action={{
-              label: "Create",
-              onPress: () =>
-                router.push({
-                  pathname: "/orders/new",
-                  params: {
-                    customerId: customer.id,
-                    customerName: customer.name,
-                    customerMobile: customer.mobile,
-                  },
-                }),
-            }}
-          />
-          {customerOrders.length === 0 ? (
-            <View
-              style={{
-                alignItems: "center",
-                padding: 24,
-                backgroundColor: c.muted,
-                borderRadius: colors.radius,
-                gap: 8,
-              }}
-            >
-              <MaterialIcons name="shopping-bag" size={28} color={c.mutedForeground} />
-              <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
-                No orders yet
-              </Text>
-            </View>
-          ) : (
-            <View style={{ gap: 8 }}>
-              {customerOrders.map((o) => (
-                <Pressable
-                  key={o.id}
-                  onPress={() => router.push(`/orders/${o.id}` as any)}
-                  style={({ pressed }) => ({
-                    flexDirection: "row",
-                    alignItems: "center",
-                    backgroundColor: c.card,
-                    borderRadius: colors.radius,
-                    padding: 14,
-                    gap: 12,
-                    borderWidth: 1,
-                    borderColor: c.border,
-                    opacity: pressed ? 0.88 : 1,
-                  })}
-                >
-                  <View
-                    style={{
-                      width: 46,
-                      height: 46,
-                      borderRadius: 14,
-                      backgroundColor:
-                        o.status === "completed"
-                          ? "#D1FAE5"
-                          : o.status === "cancelled"
-                            ? "#FEE2E2"
-                            : "#FEF3C7",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <MaterialIcons
-                      name="shopping-bag"
-                      size={22}
-                      color={
-                        o.status === "completed"
-                          ? "#059669"
-                          : o.status === "cancelled"
-                            ? "#DC2626"
-                            : "#D97706"
-                      }
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: c.foreground }}>
-                      {o.orderNumber}
-                    </Text>
-                    <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground, marginTop: 1 }}>
-                      Items: {o.items?.length ?? 0} · {formatDate(o.createdAt)}
-                    </Text>
-                  </View>
-                  <View style={{ alignItems: "flex-end", gap: 5 }}>
-                    <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>
-                      {formatCurrency(Number(o.totalAmount))}
-                    </Text>
-                    <Badge
-                      label={
-                        o.status === "completed"
-                          ? "Completed"
-                          : o.status === "cancelled"
-                            ? "Cancelled"
-                            : "Pending"
-                      }
-                      variant={
-                        o.status === "completed"
-                          ? "success"
-                          : o.status === "cancelled"
-                            ? "destructive"
-                            : "warning"
-                      }
-                    />
-                  </View>
-                </Pressable>
-              ))}
-            </View>
-          )}
-        </View>
-
-        {/* Invoices */}
-        <View>
-          <SectionHeader
-            title="Invoices"
-          />
-          {invoices.length === 0 ? (
-            <View style={{ alignItems: "center", padding: 24, backgroundColor: c.muted, borderRadius: colors.radius, gap: 8 }}>
-              <MaterialIcons name="receipt" size={28} color={c.mutedForeground} />
-              <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>No invoices yet</Text>
-            </View>
-          ) : (
-            <View style={{ gap: 8 }}>
-              {invoices.map((i) => (
-                <InvoiceItem key={i.id} invoice={i} onPress={() => router.push(`/invoices/${i.id}` as any)} />
-              ))}
-            </View>
-          )}
-        </View>
+        {/* Orders and Invoices lists are intentionally hidden on the
+            customer detail page per the latest spec — they are
+            available in the global Orders / Invoices tabs. */}
       </View>
 
       <AddFamilyMemberModal
