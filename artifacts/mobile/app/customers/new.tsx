@@ -20,10 +20,10 @@ export default function NewCustomerScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { addCustomer } = useData();
-  const params = useLocalSearchParams<{ q?: string }>();
+  const params = useLocalSearchParams<{ q?: string; returnTo?: string }>();
   const [loading, setLoading] = useState(false);
-  // If the home-page search sent a query, prefill either the name or
-  // mobile field based on whether the query looks like digits.
+  // If the home-page or order-page search sent a query, prefill either
+  // the name or mobile field based on whether the query looks like digits.
   const prefill = typeof params.q === "string" ? params.q : "";
   const prefillIsMobile = /^\+?[\d\s\-()]+$/.test(prefill);
   const [name, setName] = useState(prefillIsMobile ? "" : prefill);
@@ -43,7 +43,15 @@ export default function NewCustomerScreen() {
     const customer = await addCustomer({ name: name.trim(), mobile: mobile.trim(), gender: "unisex" });
     setLoading(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    router.replace(`/customers/${customer.id}` as any);
+    // If the user came from the order page, route back to the order page
+    // with the newly-created customer pre-selected, so the order entry
+    // flow continues seamlessly. Otherwise go to the customer detail page
+    // (the original /customers tab flow).
+    if (params.returnTo === "order") {
+      router.replace({ pathname: "/orders/new", params: { customerId: customer.id } } as any);
+    } else {
+      router.replace(`/customers/${customer.id}` as any);
+    }
   }
 
   const topPad = Platform.OS === "web" ? 67 : 0;
@@ -88,10 +96,11 @@ export default function NewCustomerScreen() {
           label="Full Name *"
           placeholder="Enter customer's full name"
           value={name}
-          onChangeText={(v) => { setName(v); setErrors((e) => ({ ...e, name: undefined as any })); }}
+          onChangeText={(v) => { setName(v.slice(0, 80)); setErrors((e) => ({ ...e, name: undefined as any })); }}
           icon="person"
           error={errors.name}
           autoFocus
+          maxLength={80}
         />
 
         <Input
@@ -105,6 +114,7 @@ export default function NewCustomerScreen() {
           icon="phone"
           keyboardType="phone-pad"
           error={errors.mobile}
+          maxLength={10}
         />
       </ScrollView>
     </KeyboardAvoidingView>

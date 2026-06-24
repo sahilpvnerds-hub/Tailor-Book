@@ -91,6 +91,24 @@ export default function NewOrderScreen() {
   const [advanceAmount, setAdvanceAmount] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // React to the customerId query param changing — this happens when the
+  // user adds a new customer from the inline search / modal picker and the
+  // customers/new page routes back here with ?customerId=<newId>.
+  useEffect(() => {
+    const id = params.customerId;
+    if (id && id !== selectedCustomerId) {
+      const cu = customers.find((c) => c.id === id);
+      if (cu) {
+        setSelectedCustomerId(id);
+        setCustomerSearch(cu.name);
+        setShowCustomerList(false);
+        setShowCustomerModal(false);
+        setLocalItems([]);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.customerId, customers]);
+
   // Selected customer details
   const selectedCustomer = customers.find((cu) => cu.id === selectedCustomerId);
   
@@ -267,7 +285,7 @@ export default function NewOrderScreen() {
   }, [orderItemsList]);
 
   const advancePaid = useMemo(() => {
-    const n = Number(advanceAmount.replace(/[^0-9.]/g, ""));
+    const n = Number(advanceAmount);
     return isNaN(n) ? 0 : Math.min(n, totalAmount);
   }, [advanceAmount, totalAmount]);
 
@@ -381,15 +399,28 @@ export default function NewOrderScreen() {
       const fields = getFieldsForProduct(item.productType);
       fields.forEach((k) => {
         const val = measDraftValues[k];
-        if (val) valuesToSave[k] = parseFloat(val);
+        if (!val) return;
+        const n = parseFloat(val);
+        // Guard against NaN / negative / zero — only persist sensible values
+        if (Number.isFinite(n) && n > 0) valuesToSave[k] = n;
       });
 
       const customToSave = customFields
-        .map((cf) => ({
-          label: cf.fieldName,
-          value: parseFloat(measDraftCustom[cf.id] || "0")
-        }))
+        .map((cf) => {
+          const raw = measDraftCustom[cf.id] || "";
+          const n = parseFloat(raw);
+          return { label: cf.fieldName, value: Number.isFinite(n) ? n : 0 };
+        })
         .filter((cm) => cm.value > 0);
+
+      // Require at least one measurement value to save — prevents empty
+      // "ghost" measurements from being created when the user opens the
+      // editor and just taps Save.
+      if (Object.keys(valuesToSave).length === 0 && customToSave.length === 0) {
+        Alert.alert("No measurements", "Please enter at least one measurement value before saving.");
+        setSavingMeasurement(false);
+        return;
+      }
 
       const payload = {
         customerId: selectedCustomerId,
@@ -400,7 +431,7 @@ export default function NewOrderScreen() {
         featureLabel: getValidSelectedFeatures(item).join(", ") || undefined,
         measurementDate: new Date().toISOString().split("T")[0],
         photos: measDraftPhotos,
-        notes: measDraftNotes || undefined,
+        notes: measDraftNotes.trim() || undefined,
         customMeasurements: customToSave,
         ...valuesToSave
       };
@@ -458,6 +489,10 @@ export default function NewOrderScreen() {
       Alert.alert("Error", "Please enter family member's name");
       return;
     }
+    if (familyDraftName.trim().length < 2) {
+      Alert.alert("Validation", "Family member's name must be at least 2 characters");
+      return;
+    }
     setSavingFamily(true);
     try {
       const member = await addFamilyMember({
@@ -488,6 +523,25 @@ export default function NewOrderScreen() {
       return;
     }
 
+    // Per-item validation — every item needs a product, a non-zero price,
+    // and a positive quantity. We surface the first invalid item so the
+    // user can fix it.
+    for (let i = 0; i < localItems.length; i++) {
+      const it = localItems[i];
+      if (!it.productType || !it.productType.trim()) {
+        Alert.alert("Item incomplete", `Item #${i + 1}: please select a product type.`);
+        return;
+      }
+      if (!(it.price > 0)) {
+        Alert.alert("Item incomplete", `Item #${i + 1}: price must be greater than 0.`);
+        return;
+      }
+      if (!(it.quantity >= 1)) {
+        Alert.alert("Item incomplete", `Item #${i + 1}: quantity must be at least 1.`);
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       await addOrder({
@@ -495,7 +549,7 @@ export default function NewOrderScreen() {
         customerName: selectedCustomer.name,
         customerMobile: selectedCustomer.mobile,
         deliveryDate: deliveryDate || undefined,
-        notes: notes || undefined,
+        notes: notes.trim() || undefined,
         advanceAmount: advancePaid,
         items: orderItemsList,
       });
@@ -612,9 +666,40 @@ export default function NewOrderScreen() {
                     </Pressable>
                   ))}
                   {filteredCustomers.length === 0 && (
-                    <Text style={{ padding: 16, textAlign: "center", color: c.mutedForeground }}>
-                      No customers found
-                    </Text>
+                    <View style={{ padding: 16, gap: 10 }}>
+                      <Text style={{ textAlign: "center", color: c.mutedForeground, fontFamily: "Inter_500Medium", fontSize: 13 }}>
+                        No matches for "{customerSearch}"
+                      </Text>
+                      <Pressable
+                        onPress={() => {
+                          // Close the dropdown but keep the typed query so
+                          // the new-customer form can prefill it. The
+                          // "returnTo=order" param tells customers/new to
+                          // come back here with ?customerId=… so the new
+                          // customer is auto-selected for the order.
+                          setShowCustomerList(false);
+                          router.push({
+                            pathname: "/customers/new",
+                            params: { q: customerSearch.trim(), returnTo: "order" },
+                          });
+                        }}
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 6,
+                          backgroundColor: c.primary,
+                          paddingVertical: 10,
+                          paddingHorizontal: 14,
+                          borderRadius: 8,
+                        }}
+                      >
+                        <MaterialIcons name="person-add" size={16} color="#FFFFFF" />
+                        <Text style={{ color: "#FFFFFF", fontSize: 13, fontFamily: "Inter_700Bold" }}>
+                          Add new customer
+                        </Text>
+                      </Pressable>
+                    </View>
                   )}
                 </ScrollView>
               </View>
@@ -799,16 +884,17 @@ export default function NewOrderScreen() {
                             Price (₹)
                           </Text>
                           <TextInput
-                            keyboardType="numeric"
-                            value={String(item.price)}
+                            keyboardType="number-pad"
+                            value={item.price === 0 ? "" : String(item.price)}
                             onChangeText={(val) => {
-                              const num = Number(val.replace(/[^0-9]/g, ""));
+                              const clean = val.replace(/[^0-9]/g, "").slice(0, 7);
                               setLocalItems((prev) => {
                                 const updated = [...prev];
-                                updated[idx].price = num;
+                                updated[idx].price = clean === "" ? 0 : Math.min(9999999, Number(clean));
                                 return updated;
                               });
                             }}
+                            maxLength={7}
                             style={{
                               borderWidth: 1,
                               borderColor: c.border,
@@ -827,16 +913,27 @@ export default function NewOrderScreen() {
                             Qty
                           </Text>
                           <TextInput
-                            keyboardType="numeric"
-                            value={String(item.quantity)}
+                            keyboardType="number-pad"
+                            value={
+                              item.quantity === 1
+                                ? "1"
+                                : item.quantity === 0
+                                ? ""
+                                : String(item.quantity)
+                            }
                             onChangeText={(val) => {
-                              const num = Math.max(1, Number(val.replace(/[^0-9]/g, "")) || 1);
+                              const clean = val.replace(/[^0-9]/g, "").slice(0, 4);
                               setLocalItems((prev) => {
                                 const updated = [...prev];
-                                updated[idx].quantity = num;
+                                // Same pattern as price: clearing the field
+                                // stores 0 so the input goes blank and the
+                                // user can type any value. handleSave()
+                                // enforces >= 1 at submit time.
+                                updated[idx].quantity = clean === "" ? 0 : Math.min(9999, Number(clean));
                                 return updated;
                               });
                             }}
+                            maxLength={4}
                             style={{
                               borderWidth: 1,
                               borderColor: c.border,
@@ -1037,7 +1134,7 @@ export default function NewOrderScreen() {
                 Advance Paid (₹)
               </Text>
               <TextInput
-                keyboardType="numeric"
+                keyboardType="number-pad"
                 placeholder="0"
                 placeholderTextColor={c.mutedForeground}
                 style={{
@@ -1052,7 +1149,8 @@ export default function NewOrderScreen() {
                   fontFamily: "Inter_600SemiBold",
                 }}
                 value={advanceAmount}
-                onChangeText={setAdvanceAmount}
+                onChangeText={(v) => setAdvanceAmount(v.replace(/[^0-9]/g, "").slice(0, 7))}
+                maxLength={7}
               />
               {advancePaid > 0 && totalAmount > 0 && (
                 <View style={{ flexDirection: "row", justifyContent: "space-between", backgroundColor: balanceDue === 0 ? "#D1FAE5" : "#FEF3C7", borderRadius: 8, padding: 10 }}>
@@ -1072,9 +1170,10 @@ export default function NewOrderScreen() {
               label="Order Notes (Optional)"
               placeholder="E.g. urgent, specific tailoring design instructions..."
               value={notes}
-              onChangeText={setNotes}
+              onChangeText={(v) => setNotes(v.slice(0, 500))}
               multiline
               numberOfLines={3}
+              maxLength={500}
             />
           </Card>
         )}
@@ -1153,9 +1252,37 @@ export default function NewOrderScreen() {
               </Pressable>
             ))}
             {modalFiltered.length === 0 && (
-              <Text style={{ padding: 24, textAlign: "center", color: c.mutedForeground }}>
-                No customers found
-              </Text>
+              <View style={{ padding: 24, gap: 12, alignItems: "center" }}>
+                <Text style={{ textAlign: "center", color: c.mutedForeground, fontFamily: "Inter_500Medium", fontSize: 14 }}>
+                  {modalSearch.trim()
+                    ? `No matches for "${modalSearch.trim()}"`
+                    : "No customers yet"}
+                </Text>
+                <Pressable
+                  onPress={() => {
+                    setShowCustomerModal(false);
+                    router.push({
+                      pathname: "/customers/new",
+                      params: { q: modalSearch.trim(), returnTo: "order" },
+                    });
+                  }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    backgroundColor: c.primary,
+                    paddingVertical: 12,
+                    paddingHorizontal: 18,
+                    borderRadius: 10,
+                  }}
+                >
+                  <MaterialIcons name="person-add" size={18} color="#FFFFFF" />
+                  <Text style={{ color: "#FFFFFF", fontSize: 14, fontFamily: "Inter_700Bold" }}>
+                    Add new customer
+                  </Text>
+                </Pressable>
+              </View>
             )}
           </ScrollView>
         </View>
@@ -1196,13 +1323,16 @@ export default function NewOrderScreen() {
                         {field.label}
                       </Text>
                       <TextInput
-                        keyboardType="numeric"
+                        keyboardType="decimal-pad"
                         placeholder="--"
                         value={measDraftValues[field.key] || ""}
                         onChangeText={(val) => {
                           const clean = val.replace(/[^0-9.]/g, "");
-                          setMeasDraftValues((prev) => ({ ...prev, [field.key]: clean }));
+                          const parts = clean.split(".");
+                          const safe = parts.length > 1 ? parts[0] + "." + parts.slice(1).join("") : clean;
+                          setMeasDraftValues((prev) => ({ ...prev, [field.key]: safe }));
                         }}
+                        maxLength={5}
                         style={{
                           borderWidth: 1,
                           borderColor: c.border,
@@ -1233,13 +1363,16 @@ export default function NewOrderScreen() {
                           {cf.fieldName}
                         </Text>
                         <TextInput
-                          keyboardType="numeric"
+                          keyboardType="decimal-pad"
                           placeholder="--"
                           value={measDraftCustom[cf.id] || ""}
                           onChangeText={(val) => {
                             const clean = val.replace(/[^0-9.]/g, "");
-                            setMeasDraftCustom((prev) => ({ ...prev, [cf.id]: clean }));
+                            const parts = clean.split(".");
+                            const safe = parts.length > 1 ? parts[0] + "." + parts.slice(1).join("") : clean;
+                            setMeasDraftCustom((prev) => ({ ...prev, [cf.id]: safe }));
                           }}
+                          maxLength={5}
                           style={{
                             borderWidth: 1,
                             borderColor: c.border,
@@ -1320,9 +1453,10 @@ export default function NewOrderScreen() {
                 <TextInput
                   placeholder="Any specific fit adjustments or instructions..."
                   value={measDraftNotes}
-                  onChangeText={setMeasDraftNotes}
+                  onChangeText={(v) => setMeasDraftNotes(v.slice(0, 500))}
                   multiline
                   numberOfLines={4}
+                  maxLength={500}
                   style={{
                     borderWidth: 1,
                     borderColor: c.border,
@@ -1364,7 +1498,8 @@ export default function NewOrderScreen() {
               label="Name"
               placeholder="Enter name..."
               value={familyDraftName}
-              onChangeText={setFamilyDraftName}
+              onChangeText={(v) => setFamilyDraftName(v.slice(0, 80))}
+              maxLength={80}
             />
 
             <View style={{ gap: 6 }}>

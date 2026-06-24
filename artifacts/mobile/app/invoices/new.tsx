@@ -481,8 +481,15 @@ export default function NewInvoiceScreen() {
                   <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 5 }}>Price (₹)</Text>
                   <TextInput
                     style={{ backgroundColor: c.input, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground, borderWidth: 1, borderColor: c.border }}
-                    value={String(item.price)}
-                    onChangeText={(v) => updateItem(idx, "price", parseFloat(v) || 0)}
+                    value={item.price === 0 ? "" : String(item.price)}
+                    onChangeText={(v) => {
+                      // Allow digits + single decimal point so mid-typing values like "12." don't get clipped
+                      const cleaned = v.replace(/[^0-9.]/g, "");
+                      const parts = cleaned.split(".");
+                      const safe = parts.length > 1 ? parts[0] + "." + parts.slice(1).join("") : cleaned;
+                      const num = safe === "" ? 0 : parseFloat(safe);
+                      updateItem(idx, "price", Number.isFinite(num) ? num : 0);
+                    }}
                     keyboardType="decimal-pad"
                   />
                 </View>
@@ -498,7 +505,7 @@ export default function NewInvoiceScreen() {
         </View>
 
         {/* Notes & Delivery Date */}
-        <Input label="Notes" placeholder="Special instructions..." value={notes} onChangeText={setNotes} icon="notes" multiline />
+        <Input label="Notes" placeholder="Special instructions..." value={notes} onChangeText={(v) => setNotes(v.slice(0, 500))} icon="notes" multiline maxLength={500} />
         <DatePicker
           label="Delivery Date"
           value={deliveryDate}

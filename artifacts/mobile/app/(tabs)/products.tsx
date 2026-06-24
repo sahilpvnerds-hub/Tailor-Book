@@ -105,6 +105,10 @@ function ProductTypeForm({
   function addCustomFeature() {
     const label = customFeatureText.trim();
     if (!label) return;
+    if (label.length < 2) {
+      Alert.alert("Validation", "Feature name must be at least 2 characters");
+      return;
+    }
     if (features.find((f) => f.label.toLowerCase() === label.toLowerCase())) {
       setCustomFeatureText("");
       return;
@@ -269,9 +273,10 @@ function ProductTypeForm({
             placeholder={t("products.features.customPlaceholder")}
             placeholderTextColor={c.mutedForeground}
             value={customFeatureText}
-            onChangeText={setCustomFeatureText}
+            onChangeText={(v) => setCustomFeatureText(v.slice(0, 60))}
             onSubmitEditing={addCustomFeature}
             returnKeyType="done"
+            maxLength={60}
           />
           <Pressable
             onPress={addCustomFeature}

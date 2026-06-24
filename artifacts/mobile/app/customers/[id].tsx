@@ -77,10 +77,11 @@ function AddFamilyMemberModal({
             label="Name *"
             placeholder="Family member's name"
             value={name}
-            onChangeText={(v) => { setName(v); setErrors((e) => ({ ...e, name: undefined as any })); }}
+            onChangeText={(v) => { setName(v.slice(0, 80)); setErrors((e) => ({ ...e, name: undefined as any })); }}
             icon="person"
             error={errors.name}
             autoFocus
+            maxLength={80}
           />
           {/* Relation */}
           <View style={{ gap: 6 }}>

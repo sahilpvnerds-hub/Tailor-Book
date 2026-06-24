@@ -250,8 +250,13 @@ export default function NewMeasurementScreen() {
   }
 
   async function handleAddCustomField() {
-    if (!newFieldName.trim()) return;
-    await addCustomField(newFieldName.trim());
+    const trimmed = newFieldName.trim();
+    if (!trimmed) return;
+    if (trimmed.length < 2) {
+      Alert.alert("Validation", "Field name must be at least 2 characters");
+      return;
+    }
+    await addCustomField(trimmed);
     setNewFieldName("");
     setShowCustomModal(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -726,7 +731,7 @@ export default function NewMeasurementScreen() {
           </Text>
         </View>
 
-        <Input label="Notes" placeholder="Additional notes..." value={notes} onChangeText={setNotes} icon="notes" multiline />
+        <Input label="Notes" placeholder="Additional notes..." value={notes} onChangeText={(v) => setNotes(v.slice(0, 500))} icon="notes" multiline maxLength={500} />
       </ScrollView>
 
       <Modal visible={showProductModal} transparent animationType="slide" onRequestClose={() => setShowProductModal(false)}>
@@ -747,7 +752,7 @@ export default function NewMeasurementScreen() {
         <KeyboardAvoidingView style={{ flex: 1, justifyContent: "flex-end" }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={{ backgroundColor: c.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: insets.bottom + 24, gap: 16 }}>
             <Text style={{ fontSize: 18, fontFamily: "Inter_700Bold", color: c.foreground }}>Add Custom Field</Text>
-            <Input label="Field Name" placeholder="e.g. Collar Width, Arm Opening" value={newFieldName} onChangeText={setNewFieldName} icon="straighten" autoFocus />
+            <Input label="Field Name" placeholder="e.g. Collar Width, Arm Opening" value={newFieldName} onChangeText={(v) => setNewFieldName(v.slice(0, 60))} icon="straighten" autoFocus maxLength={60} />
             <View style={{ flexDirection: "row", gap: 10 }}>
               <Button label="Cancel" onPress={() => { setShowCustomModal(false); setNewFieldName(""); }} variant="outline" style={{ flex: 1 }} />
               <Button label="Add Field" onPress={handleAddCustomField} style={{ flex: 1 }} />

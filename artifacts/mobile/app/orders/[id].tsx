@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import {
   Alert,
+  Image,
   Linking,
   Platform,
   Pressable,
@@ -50,7 +51,7 @@ export default function OrderDetailScreen() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const { orders, invoices, updateOrderStatus, deleteOrder, generateInvoiceFromOrder } = useData();
+  const { orders, invoices, measurements, updateOrderStatus, deleteOrder, generateInvoiceFromOrder } = useData();
   const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
 
@@ -387,42 +388,100 @@ export default function OrderDetailScreen() {
                   {group.items.map((it) => {
                     // Look up invoice details if invoiced
                     const inv = it.invoiceId ? invoices.find((i) => i.id === it.invoiceId) : null;
-                    
+                    const measValues = it.measurementValues ?? null;
+                    const measEntries = measValues ? Object.entries(measValues) : [];
+                    // Photos live on the source measurement, not the order
+                    // item, so look them up via the measurements store.
+                    const sourceMeas = it.measurementId
+                      ? measurements.find((m) => m.id === it.measurementId)
+                      : null;
+                    const itemPhotos: string[] = (sourceMeas?.photos as string[] | undefined) ?? [];
+
                     return (
                       <View
                         key={it.id}
                         style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          justifyContent: "space-between",
                           backgroundColor: c.muted + "20",
                           padding: 10,
                           borderRadius: 8,
+                          gap: 8,
                         }}
                       >
-                        <View style={{ flex: 1, gap: 3 }}>
-                          <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.foreground }}>
-                            {it.productType} {it.featureLabel ? `(${it.featureLabel})` : ""}
-                          </Text>
-                          <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
-                            Qty: {it.quantity} · Price: {formatCurrency(Number(it.price))}
-                          </Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                          <View style={{ flex: 1, gap: 3 }}>
+                            <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.foreground }}>
+                              {it.productType} {it.featureLabel ? `(${it.featureLabel})` : ""}
+                            </Text>
+                            <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
+                              Qty: {it.quantity} · Price: {formatCurrency(Number(it.price))}
+                            </Text>
+                          </View>
+                          <View style={{ alignItems: "flex-end", gap: 4 }}>
+                            <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: c.foreground }}>
+                              {formatCurrency(Number(it.price) * it.quantity)}
+                            </Text>
+                            {it.invoiceId && inv ? (
+                              <Pressable
+                                onPress={() => router.push(`/invoices/${it.invoiceId}` as any)}
+                                style={{ flexDirection: "row", alignItems: "center", gap: 2 }}
+                              >
+                                <Badge label={inv.invoiceNumber} variant="success" />
+                              </Pressable>
+                            ) : (
+                              <Badge label="Uninvoiced" variant="warning" />
+                            )}
+                          </View>
                         </View>
-                        <View style={{ alignItems: "flex-end", gap: 4 }}>
-                          <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: c.foreground }}>
-                            {formatCurrency(Number(it.price) * it.quantity)}
-                          </Text>
-                          {it.invoiceId && inv ? (
-                            <Pressable
-                              onPress={() => router.push(`/invoices/${it.invoiceId}` as any)}
-                              style={{ flexDirection: "row", alignItems: "center", gap: 2 }}
-                            >
-                              <Badge label={inv.invoiceNumber} variant="success" />
-                            </Pressable>
-                          ) : (
-                            <Badge label="Uninvoiced" variant="warning" />
-                          )}
-                        </View>
+
+                        {/* Measurement values snapshot */}
+                        {measEntries.length > 0 && (
+                          <View style={{ backgroundColor: c.card, borderRadius: 6, padding: 8, gap: 4 }}>
+                            <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                              Measurements
+                            </Text>
+                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+                              {measEntries.map(([k, v]) => (
+                                <View key={k} style={{ backgroundColor: c.muted, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 }}>
+                                  <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: c.foreground }}>
+                                    {titleCase(k)}: <Text style={{ fontFamily: "Inter_700Bold" }}>{String(v)}</Text>
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          </View>
+                        )}
+
+                        {/* Photos from the source measurement */}
+                        {itemPhotos.length > 0 && (
+                          <View style={{ gap: 4 }}>
+                            <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                              Photos
+                            </Text>
+                            <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+                              {itemPhotos.slice(0, 6).map((p, pIdx) => (
+                                <Image
+                                  key={pIdx}
+                                  source={{ uri: p.startsWith("data:") ? p : `data:image/jpeg;base64,${p}` }}
+                                  style={{ width: 48, height: 48, borderRadius: 6, backgroundColor: c.muted }}
+                                  resizeMode="cover"
+                                />
+                              ))}
+                            </View>
+                          </View>
+                        )}
+
+                        {/* Link to source measurement if present */}
+                        {it.measurementId && (
+                          <Pressable
+                            onPress={() => router.push(`/measurements/${it.measurementId}` as any)}
+                            style={{ flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start" }}
+                          >
+                            <MaterialIcons name="straighten" size={14} color={c.primary} />
+                            <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: c.primary }}>
+                              View Source Measurement
+                            </Text>
+                          </Pressable>
+                        )}
                       </View>
                     );
                   })}
