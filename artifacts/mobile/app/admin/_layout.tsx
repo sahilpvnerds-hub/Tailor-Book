@@ -211,6 +211,7 @@ export default function AdminLayout() {
 const mobileTabs = [
   { label: "Overview", href: "/admin", icon: "dashboard" as const, match: (p: string) => p === "/admin" || p === "/admin/" },
   { label: "Tailors", href: "/admin/tailors", icon: "store" as const, match: (p: string) => p.startsWith("/admin/tailors") },
+  { label: "Products", href: "/admin/products", icon: "local-offer" as const, match: (p: string) => p.startsWith("/admin/products") },
   { label: "Customers", href: "/admin/customers", icon: "people" as const, match: (p: string) => p.startsWith("/admin/customers") },
   { label: "Orders", href: "/admin/orders", icon: "shopping-bag" as const, match: (p: string) => p.startsWith("/admin/orders") },
   { label: "Invoices", href: "/admin/invoices", icon: "receipt-long" as const, match: (p: string) => p.startsWith("/admin/invoices") },
@@ -266,6 +267,16 @@ function pageMeta(pathname: string, userName?: string): PageMeta {
       title: "Tailor Detail",
       subtitle: "Profile, stats, and account controls",
       crumbs: [...rootCrumbs, { label: "Tailors", href: "/admin/tailors" }, { label: "Detail" }],
+      actions: () => [],
+    };
+  }
+
+  // Products Master
+  if (pathname.startsWith("/admin/products")) {
+    return {
+      title: "Products Master",
+      subtitle: "Product catalog — pricing across all tailors",
+      crumbs: [...rootCrumbs, { label: "Products" }],
       actions: () => [],
     };
   }

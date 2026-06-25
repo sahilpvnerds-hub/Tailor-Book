@@ -337,7 +337,8 @@ export async function generateNotifications(
 
 // ── Utilities ──────────────────────────────────────────────────────────────
 export function formatCurrency(amount: number): string {
-  return `\u20B9${amount.toFixed(0)}`;
+  const n = Number(amount ?? 0);
+  return `\u20B9${n.toFixed(0)}`;
 }
 
 // Backward-compat helper for invoices

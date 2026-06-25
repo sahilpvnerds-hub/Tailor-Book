@@ -105,14 +105,20 @@ function ClassicTabLayout() {
             isIOS ? <SymbolView name="ellipsis" tintColor={color} size={24} /> : <Feather name="more-horizontal" size={22} color={color} />,
         }}
       />
-      {/* Hidden routes — accessible via push navigation */}
+      {/* Hidden route — measurements is accessible via push navigation.
+          Admin is NOT a tab — admins go directly to /admin via
+          index.tsx redirect, bypassing the tabs layout entirely. */}
       <Tabs.Screen name="measurements" options={{ href: null }} />
-      <Tabs.Screen name="admin" options={{ href: null }} />
     </Tabs>
   );
 }
 
 export default function TabLayout() {
-  if (isLiquidGlassAvailable()) return <NativeTabLayout />;
+  // Always use the classic TabLayout. The native iOS Liquid Glass tabs
+  // navigator has compatibility issues with hidden routes (measurements,
+  // admin) accessed via router.push — expo-router 6.0.24 with
+  // expo-glass-effect throws "BaseRoute" navigation errors when those
+  // hidden screens aren't registered as NativeTabs.Trigger. Sticking
+  // with the classic layout keeps navigation stable on every platform.
   return <ClassicTabLayout />;
 }

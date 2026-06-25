@@ -26,6 +26,7 @@ const NAV: NavItem[] = [
   { label: "Overview", href: "/admin", icon: "dashboard", section: "GENERAL" },
   { label: "Tailors", href: "/admin/tailors", icon: "store", section: "OPERATIONS" },
   { label: "Pending Approvals", href: "/admin/tailors/pending", icon: "pending-actions", badge: 0 /* filled in by parent */ },
+  { label: "Products", href: "/admin/products", icon: "local-offer", section: "CATALOG" },
   { label: "Customers", href: "/admin/customers", icon: "people", section: "CATALOG" },
   { label: "Orders", href: "/admin/orders", icon: "shopping-bag" },
   { label: "Invoices", href: "/admin/invoices", icon: "receipt-long" },

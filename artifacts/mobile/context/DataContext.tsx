@@ -196,7 +196,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         m = apiM;
         inv = apiInv;
         ord = (apiOrd as any[]).map(normalizeOrder);
-        pt = apiPt;
+        // Only use API product types if the server returned some.
+        // Otherwise keep the locally-seeded defaults (from first-login
+        // or earlier seeds) — that way a new tailor always sees
+        // default products even when the server has none yet.
+        if ((apiPt as any[])?.length > 0) {
+          pt = apiPt as any;
+        }
         cf = apiCf;
 
         await Promise.all([

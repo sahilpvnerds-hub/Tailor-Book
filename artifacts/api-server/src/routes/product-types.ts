@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import {
@@ -8,6 +8,7 @@ import {
   measurementItems,
   orderItems,
   invoiceItems,
+  users,
 } from "@workspace/db/schema";
 import { authMiddleware } from "../middlewares/auth";
 import { getParam } from "../lib/params";
@@ -34,10 +35,23 @@ const featureSchema = z.object({
 
 // ---- GET /api/product-types ---------------------------------------------
 router.get("/", async (req: Request, res: Response) => {
+  const isAdmin = req.user!.role === "admin";
   const rows = await db
-    .select()
+    .select({
+      id: productTypes.id,
+      tailorId: productTypes.tailorId,
+      name: productTypes.name,
+      amount: productTypes.amount,
+      unit: productTypes.unit,
+      features: productTypes.features,
+      createdAt: productTypes.createdAt,
+      updatedAt: productTypes.updatedAt,
+      tailorName: isAdmin ? users.name : sql<string | null>`NULL`,
+      tailorShop: isAdmin ? users.shopName : sql<string | null>`NULL`,
+    })
     .from(productTypes)
     .where(visibleFilter(req))
+    .leftJoin(users, eq(users.id, productTypes.tailorId))
     .orderBy(desc(productTypes.createdAt));
   res.json(rows);
 });
