@@ -4,12 +4,12 @@
 === AUTHENTICATION ===
 ✅ Admin exists (admin@tailorbook.com): {"name":"Admin Updated","role":"admin","status":"approved","pwd_len":60,"pwd_is_bcrypt":true}
 ✅ Search 'deep': "NOT FOUND (no user with 'deep' in name)"
-✅ Search 'patel': ["Sahil Patel"]
+✅ Search 'patel': ["Sahil Patel","Sahil Patel"]
 ✅ Test bcrypt: admin123 against admin hash: "✅ MATCH"
 ✅ Test bcrypt: Admin@123 against admin hash: "❌ MISMATCH"
 
 === TABLE COUNTS ===
-✅ COUNT users: 6
+✅ COUNT users: 7
 ✅ COUNT customers: 11
 ✅ COUNT measurements: 18
 ✅ COUNT invoices: 13

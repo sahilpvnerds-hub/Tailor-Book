@@ -1,18 +1,8 @@
-users: 9
-customers: 11
-measurements: 18
-invoices: 13
-notifications: 0
-product_types: 0
-family_members: 0
-custom_measurement_fields: 0
----
-{"name":"kaushik s","email":"kaushik@gmail.com","mobile":"8542356325","role":"tailor","status":"approved","speciality":null,"pwd_len":60,"pwd_is_bcrypt":true,"pwd_prefix":"$2a$","onboard":false,"created":"2026-06-16T11:13:25.000Z"}
-{"name":"sohil khan","email":"patelsahil2124@gmail.com","mobile":"8888555555","role":"tailor","status":"approved","speciality":"unisex","pwd_len":60,"pwd_is_bcrypt":true,"pwd_prefix":"$2a$","onboard":false,"created":"2026-06-17T14:06:34.000Z"}
-{"name":"Sahil Patel","email":"sahil24@gmail.com","mobile":"9876543211","role":"tailor","status":"approved","speciality":null,"pwd_len":60,"pwd_is_bcrypt":true,"pwd_prefix":"$2a$","onboard":true,"created":"2026-06-15T11:48:54.000Z"}
-{"name":"Test New Tailor","email":"newtest@example.com","mobile":"9876543299","role":"tailor","status":"approved","speciality":null,"pwd_len":60,"pwd_is_bcrypt":true,"pwd_prefix":"$2a$","onboard":false,"created":"2026-06-15T17:11:12.000Z"}
-{"name":"Admin Updated","email":"admin@tailorbook.com","mobile":"9999999999","role":"admin","status":"approved","speciality":null,"pwd_len":60,"pwd_is_bcrypt":true,"pwd_prefix":"$2a$","onboard":false,"created":"2026-06-15T10:20:41.000Z"}
-{"name":"E2E User","email":"e2e-flow@example.com","mobile":"9123450001","role":"tailor","status":"pending","speciality":"male","pwd_len":60,"pwd_is_bcrypt":true,"pwd_prefix":"$2a$","onboard":false,"created":"2026-06-17T11:43:44.000Z"}
-{"name":"E2E Final User","email":"e2e-test-final@example.com","mobile":"9876540002","role":"tailor","status":"approved","speciality":"male","pwd_len":60,"pwd_is_bcrypt":true,"pwd_prefix":"$2a$","onboard":false,"created":"2026-06-17T12:16:44.000Z"}
-{"name":"kuldip pandya","email":"kuldip12@gmail.com","mobile":"8542316585","role":"tailor","status":"approved","speciality":null,"pwd_len":60,"pwd_is_bcrypt":true,"pwd_prefix":"$2a$","onboard":false,"created":"2026-06-16T14:05:39.000Z"}
-{"name":"Ramesh Kumar","email":"ramesh@tailor.com","mobile":"9876543210","role":"tailor","status":"approved","speciality":null,"pwd_len":60,"pwd_is_bcrypt":true,"pwd_prefix":"$2a$","onboard":true,"created":"2026-06-15T10:20:41.000Z"}
+ERR: Failed query: select `id`, `customer_id`, `family_member_id`, `measurement_session_id`, `tailor_id`, `customer_name`, `product_type`, `feature_label`, `measurement_date`, `delivery_date`, `chest`, `shoulder`, `neck`, `sleeve`, `waist`, `length`, `hip`, `thigh`, `pant_length`, `bottom_width`, `armhole`, `wrist`, `custom_measurements`, `notes`, `photos`, `created_at`, `updated_at` from `measurements`
+params: 
+Error: Failed query: select `id`, `customer_id`, `family_member_id`, `measurement_session_id`, `tailor_id`, `customer_name`, `product_type`, `feature_label`, `measurement_date`, `delivery_date`, `chest`, `shoulder`, `neck`, `sleeve`, `waist`, `length`, `hip`, `thigh`, `pant_length`, `bottom_width`, `armhole`, `wrist`, `custom_measurements`, `notes`, `photos`, `created_at`, `updated_at` from `measurements`
+params: 
+    at MySql2PreparedQuery.queryWithCache (D:\New folder\Tailor-Book\node_modules\.pnpm\drizzle-orm@0.45.2_mysql2@3.22.5_@types+node@25.6.2_\node_modules\src\mysql-core\session.ts:79:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async MySql2PreparedQuery.execute (D:\New folder\Tailor-Book\node_modules\.pnpm\drizzle-orm@0.45.2_mysql2@3.22.5_@types+node@25.6.2_\node_modules\src\mysql2\session.ts:132:18)
+    at async <anonymous> (D:\New folder\Tailor-Book\artifacts\api-server\inspect.ts:21:17)

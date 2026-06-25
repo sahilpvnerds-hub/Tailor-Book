@@ -38,8 +38,12 @@ router.get("/", async (req: Request, res: Response) => {
   if (req.user!.role !== "admin") {
     conditions.push(eq(orders.tailorId, req.user!.id));
   }
-  const { customerId } = req.query as { customerId?: string };
+  const { customerId, tailorId } = req.query as { customerId?: string; tailorId?: string };
   if (customerId) conditions.push(eq(orders.customerId, customerId));
+  // Admin can filter by tailorId.
+  if (tailorId && req.user!.role === "admin") {
+    conditions.push(eq(orders.tailorId, tailorId));
+  }
 
   const rows = await db
     .select()
@@ -275,8 +279,28 @@ router.delete("/:id", async (req: Request, res: Response) => {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
-  await db.delete(orders).where(eq(orders.id, id));
-  res.json({ ok: true });
+
+  try {
+    await db.transaction(async (tx) => {
+      // Null out the order reference on every invoice that was generated
+      // from this order so the FK doesn't dangle. The invoice itself is
+      // kept (with its payment record) — the orderId just becomes null.
+      await tx
+        .update(invoices)
+        .set({ orderId: null })
+        .where(eq(invoices.orderId, id));
+
+      // order_items rows are removed automatically by ON DELETE CASCADE
+      // on the `fk_order_items_order` constraint. The orders row itself
+      // is removed by the delete below.
+      await tx.delete(orders).where(eq(orders.id, id));
+    });
+    res.json({ ok: true });
+  } catch (e: any) {
+    res
+      .status(500)
+      .json({ error: e?.message ?? "Failed to delete order" });
+  }
 });
 
 // ---- POST /api/orders/:id/invoice ----------------------------------------
@@ -285,9 +309,14 @@ router.delete("/:id", async (req: Request, res: Response) => {
 // - If empty: invoice all uninvoiced items.
 // - If 'self': invoice only primary customer's uninvoiced items.
 // - If a specific ID: invoice only that family member's uninvoiced items.
+// Can additionally specify `itemId` to restrict the invoice to a single
+// order item (used by the "Mark as Delivered → bill separate" flow).
 router.post("/:id/invoice", async (req: Request, res: Response) => {
   const id = getParam(req, "id");
-  const { familyMemberId } = req.query as { familyMemberId?: string };
+  const { familyMemberId, itemId } = req.query as {
+    familyMemberId?: string;
+    itemId?: string;
+  };
 
   const [order] = await db
     .select()
@@ -315,7 +344,10 @@ router.post("/:id/invoice", async (req: Request, res: Response) => {
   }
 
   // Apply filters
-  if (familyMemberId) {
+  if (itemId) {
+    // Single-item invoice (used by "Mark as Delivered → bill separate")
+    itemsToInvoice = itemsToInvoice.filter((it) => it.id === itemId);
+  } else if (familyMemberId) {
     if (familyMemberId === "self") {
       itemsToInvoice = itemsToInvoice.filter(
         (it) => !it.familyMemberId || it.relation === "self"
@@ -326,7 +358,7 @@ router.post("/:id/invoice", async (req: Request, res: Response) => {
   }
 
   if (itemsToInvoice.length === 0) {
-    res.status(400).json({ error: "No uninvoiced items found for this family member" });
+    res.status(400).json({ error: "No uninvoiced items found for this filter" });
     return;
   }
 
@@ -335,7 +367,9 @@ router.post("/:id/invoice", async (req: Request, res: Response) => {
 
   const invoiceSeq = await nextCounterValue("invoice");
   const invoiceNumber = `INV ${pad3(invoiceSeq)}`;
-  const orderLabel = order.orderNumber;
+  // orderLabel must be unique per row — use the invoice number so that
+  // multiple invoices generated from the same order don't collide.
+  const orderLabel = invoiceNumber;
   const invoiceId = crypto.randomUUID();
 
   await db.transaction(async (tx) => {

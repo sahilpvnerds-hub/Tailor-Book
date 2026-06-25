@@ -461,7 +461,7 @@ export default function DashboardScreen() {
         ))}
       </View>
 
-      {/* Quick Actions — Customer + Invoice only */}
+      {/* Quick Actions — Customer, Order, Invoice List */}
       <View style={{ marginHorizontal: 22, marginTop: 24 }}>
         <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground, marginBottom: 14 }}>
           {t("dashboard.quickActions")}
@@ -495,9 +495,9 @@ export default function DashboardScreen() {
           />
           <QuickAction
             icon="receipt"
-            label={t("dashboard.newInvoice")}
+            label={t("dashboard.invoiceList")}
             color="#059669"
-            onPress={() => router.push("/invoices/new")}
+            onPress={() => router.push("/invoices")}
           />
         </View>
       </View>
@@ -505,7 +505,7 @@ export default function DashboardScreen() {
       {/* Pending alert */}
       {pendingCount > 0 && (
         <Pressable
-          onPress={() => router.push("/(tabs)/invoices")}
+          onPress={() => router.push("/invoices")}
           style={({ pressed }) => ({
             marginHorizontal: 22,
             marginTop: 18,
@@ -566,7 +566,7 @@ export default function DashboardScreen() {
         <View style={{ marginTop: 24 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginHorizontal: 22, marginBottom: 12 }}>
             <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>{t("dashboard.recentInvoices")}</Text>
-            <Pressable onPress={() => router.push("/(tabs)/invoices")}>
+            <Pressable onPress={() => router.push("/invoices")}>
               <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: c.primary }}>{t("dashboard.seeAll")}</Text>
             </Pressable>
           </View>

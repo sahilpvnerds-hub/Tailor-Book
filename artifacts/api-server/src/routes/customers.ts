@@ -24,11 +24,20 @@ function ensureOwnership(req: Request, tailorId: string) {
 
 // ---- GET /api/customers ---------------------------------------------------
 router.get("/", async (req: Request, res: Response) => {
-  const where = customerVisibleFilter(req);
+  const filters = [];
+  const base = customerVisibleFilter(req);
+  if (base) filters.push(base);
+
+  // Admin can drill down by tailorId.
+  const { tailorId } = req.query as { tailorId?: string };
+  if (tailorId && req.user!.role === "admin") {
+    filters.push(eq(customers.tailorId, tailorId));
+  }
+
   const rows = await db
     .select()
     .from(customers)
-    .where(where)
+    .where(filters.length ? and(...filters) : undefined)
     .orderBy(desc(customers.createdAt));
   res.json(rows);
 });

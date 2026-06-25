@@ -225,7 +225,13 @@
     "validationRequired": "{{field}} is required",
     "validationNumber": "{{field}} must be a positive number",
     "pastDateError": "Date cannot be in the past",
-    "groupedByPerson": "Measurements grouped by person"
+    "groupedByPerson": "Measurements grouped by person",
+    "deleteCustomField": "Delete custom field",
+    "deleteCustomFieldConfirmTitle": "Delete \"{{name}}\"?",
+    "deleteCustomFieldConfirmMessage_zero": "\"{{name}}\" will be removed. No past orders use it.",
+    "deleteCustomFieldConfirmMessage_other": "\"{{name}}\" will be removed. {{count}} past order(s)/invoice(s) still show this value — historical data will be kept.",
+    "deleteCustomFieldCancel": "Cancel",
+    "deleteCustomFieldConfirm": "Delete"
   },
   "invoices": {
     "title": "Invoices",
@@ -350,6 +356,7 @@
     "quickActions": "Quick Actions",
     "addCustomer": "Add Customer",
     "newInvoice": "New Invoice",
+    "invoiceList": "Invoice List",
     "pendingInvoice": "{{count}} pending invoice",
     "pendingInvoicePlural": "{{count}} pending invoices",
     "awaitingCollection": "{{amount}} awaiting collection",

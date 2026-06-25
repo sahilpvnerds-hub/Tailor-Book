@@ -10,33 +10,23 @@ import { EmptyState, Badge } from "@/components/ui";
 import colors from "@/constants/colors";
 import { formatCurrency, formatDate } from "@/utils/storage";
 
-const statusConfig = {
-  pending: {
-    label: "Pending",
-    color: "#D97706",
-    bg: "#FEF3C7",
-    variant: "warning" as const,
-  },
-  completed: {
-    label: "Completed",
-    color: "#059669",
-    bg: "#D1FAE5",
-    variant: "success" as const,
-  },
-  cancelled: {
-    label: "Cancelled",
-    color: "#DC2626",
-    bg: "#FEE2E2",
-    variant: "destructive" as const,
-  },
-};
-
+/**
+ * Orders list — accessible via the "Orders" tab in the bottom bar.
+ * Renamed from the previous /invoices route, which now hosts the
+ * Invoices list.
+ */
 export default function OrdersScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { orders } = useData();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "pending" | "completed" | "cancelled">("all");
+
+  const statusConfig = {
+    pending: { label: "Pending", color: "#D97706", bg: "#FEF3C7", variant: "warning" as const },
+    completed: { label: "Completed", color: "#059669", bg: "#D1FAE5", variant: "success" as const },
+    cancelled: { label: "Cancelled", color: "#DC2626", bg: "#FEE2E2", variant: "destructive" as const },
+  };
 
   const filtered = useMemo(
     () =>
@@ -192,7 +182,6 @@ export default function OrdersScreen() {
                   <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: c.primary }}>
                     {item.items?.length ?? 0} item{(item.items?.length ?? 0) !== 1 ? "s" : ""}
                   </Text>
-                  {/* Delivery countdown */}
                   {item.deliveryDate && (() => {
                     const days = deliveryDaysLeft(item.deliveryDate);
                     if (days === null) return null;
@@ -204,7 +193,6 @@ export default function OrdersScreen() {
                       </View>
                     );
                   })()}
-                  {/* Balance due */}
                   {(item.balanceDue ?? 0) > 0 && (
                     <View style={{ backgroundColor: "#FEF3C7", borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1 }}>
                       <Text style={{ fontSize: 10, fontFamily: "Inter_700Bold", color: "#D97706" }}>

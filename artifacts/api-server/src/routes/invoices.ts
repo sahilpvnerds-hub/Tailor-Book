@@ -38,8 +38,12 @@ router.get("/", async (req: Request, res: Response) => {
   if (req.user!.role !== "admin") {
     conditions.push(eq(invoices.tailorId, req.user!.id));
   }
-  const { customerId } = req.query as { customerId?: string };
+  const { customerId, tailorId } = req.query as { customerId?: string; tailorId?: string };
   if (customerId) conditions.push(eq(invoices.customerId, customerId));
+  // Admin can filter by tailorId.
+  if (tailorId && req.user!.role === "admin") {
+    conditions.push(eq(invoices.tailorId, tailorId));
+  }
 
   const rows = await db
     .select()

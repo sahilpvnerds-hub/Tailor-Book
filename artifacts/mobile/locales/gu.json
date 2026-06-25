@@ -225,7 +225,13 @@
     "validationRequired": "{{field}} જરૂરી છે",
     "validationNumber": "{{field}} એ હકારાત્મક સંખ્યા હોવી જોઈએ",
     "pastDateError": "તારીખ ભૂતકાળની ન હોઈ શકે",
-    "groupedByPerson": "વ્યક્તિ મુજબ જૂથબદ્ધ માપ"
+    "groupedByPerson": "વ્યક્તિ મુજબ જૂથબદ્ધ માપ",
+    "deleteCustomField": "કસ્ટમ ક્ષેત્ર કાઢો",
+    "deleteCustomFieldConfirmTitle": "\"{{name}}\" કાઢો?",
+    "deleteCustomFieldConfirmMessage_zero": "\"{{name}}\" કાઢી નાખવામાં આવશે. કોઈ જૂના ઓર્ડર તેનો ઉપયોગ કરતા નથી.",
+    "deleteCustomFieldConfirmMessage_other": "\"{{name}}\" કાઢી નાખવામાં આવશે. {{count}} જૂના ઓર્ડર/ઈન્વોઈસ હજી આ મૂલ્ય દર્શાવે છે — ઐતિહાસિક ડેટા સચવાઈ રહેશે.",
+    "deleteCustomFieldCancel": "રદ કરો",
+    "deleteCustomFieldConfirm": "કાઢો"
   },
   "invoices": {
     "title": "ઈન્વોઈસ",
@@ -350,6 +356,7 @@
     "quickActions": "ઝડપી ક્રિયાઓ",
     "addCustomer": "ગ્રાહક ઉમેરો",
     "newInvoice": "નવું ઈન્વોઈસ",
+    "invoiceList": "ઈન્વોઈસ યાદી",
     "pendingInvoice": "{{count}} બાકી ઈન્વોઈસ",
     "pendingInvoicePlural": "{{count}} બાકી ઈન્વોઈસ",
     "awaitingCollection": "{{amount}} સંગ્રહ બાકી",

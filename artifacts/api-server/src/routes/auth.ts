@@ -4,10 +4,16 @@ import { and, desc, eq, gt, or } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { pendingOtps, users } from "@workspace/db/schema";
 import { signToken, authMiddleware } from "../middlewares/auth";
+import { rateLimit } from "../middlewares/rate-limit";
 import { sendOtpEmail, smtpConfigured } from "../lib/email";
 import { z } from "zod";
 
 const router: IRouter = Router();
+
+// Brute-force protection on the login route. 5 attempts per IP per 15 minutes
+// — anything more is rejected with 429. Users that legitimately hit the limit
+// can wait it out (the headers indicate the remaining seconds).
+const loginRateLimit = rateLimit({ limit: 5, windowMs: 15 * 60_000, key: "login" });
 
 const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const OTP_MAX_ATTEMPTS = 5;
@@ -204,7 +210,7 @@ router.post("/verify-otp", async (req: Request, res: Response) => {
 });
 
 // --- POST /api/auth/login -------------------------------------------------
-router.post("/login", async (req: Request, res: Response) => {
+router.post("/login", loginRateLimit, async (req: Request, res: Response) => {
   const body = z
     .object({
       emailOrMobile: z.string().min(1),

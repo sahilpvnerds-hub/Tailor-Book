@@ -215,6 +215,24 @@ async function ensureTables(): Promise<void> {
       INDEX idx_measurement_values_field (field_name)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+  // Admin audit log — one row per admin-initiated mutation on a user
+  // (approve / reject / suspend / unsuspend / patch / delete). Used for
+  // compliance and dispute resolution.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS admin_audit_log (
+      id varchar(36) NOT NULL PRIMARY KEY,
+      admin_id varchar(36) NOT NULL,
+      action enum('approve','reject','suspend','unsuspend','patch','delete') NOT NULL,
+      target_type enum('user') NOT NULL DEFAULT 'user',
+      target_id varchar(36) NOT NULL,
+      before_json json NULL,
+      after_json json NULL,
+      created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_audit_admin (admin_id, created_at),
+      INDEX idx_audit_target (target_id, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
 }
 
 async function ensureDemoUsers(): Promise<void> {

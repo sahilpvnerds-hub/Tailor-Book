@@ -78,6 +78,8 @@ export default function NewOrderScreen() {
     addMeasurement,
     updateMeasurement,
     addFamilyMember,
+    addCustomField,
+    deleteCustomField,
     customFields
   } = useData();
 
@@ -90,6 +92,12 @@ export default function NewOrderScreen() {
   const [deliveryDate, setDeliveryDate] = useState("");
   const [advanceAmount, setAdvanceAmount] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Discount controls — type can be "none" | "fixed" | "percent". Only one
+  // discount applies at a time. The discount is applied to the order
+  // subtotal (sum of item price × quantity) to compute the final amount.
+  const [discountType, setDiscountType] = useState<"none" | "fixed" | "percent">("none");
+  const [discountValue, setDiscountValue] = useState("");
 
   // React to the customerId query param changing — this happens when the
   // user adds a new customer from the inline search / modal picker and the
@@ -284,19 +292,36 @@ export default function NewOrderScreen() {
     return orderItemsList.reduce((sum, item) => sum + item.price * item.quantity, 0);
   }, [orderItemsList]);
 
+  // Discount amount — never negative, capped to the subtotal so the final
+  // amount can't go below 0. For percent, the user enters a number between
+  // 0–100.
+  const discountAmount = useMemo(() => {
+    if (discountType === "none") return 0;
+    const raw = Number(discountValue);
+    if (!Number.isFinite(raw) || raw <= 0) return 0;
+    if (discountType === "percent") {
+      const pct = Math.min(raw, 100);
+      return Math.min(Math.round((totalAmount * pct) / 100), totalAmount);
+    }
+    // fixed
+    return Math.min(Math.round(raw), totalAmount);
+  }, [discountType, discountValue, totalAmount]);
+
+  const finalAmount = useMemo(() => Math.max(0, totalAmount - discountAmount), [totalAmount, discountAmount]);
+
   const advancePaid = useMemo(() => {
     const n = Number(advanceAmount);
-    return isNaN(n) ? 0 : Math.min(n, totalAmount);
-  }, [advanceAmount, totalAmount]);
+    return isNaN(n) ? 0 : Math.min(n, finalAmount);
+  }, [advanceAmount, finalAmount]);
 
-  const balanceDue = useMemo(() => totalAmount - advancePaid, [totalAmount, advancePaid]);
+  const balanceDue = useMemo(() => finalAmount - advancePaid, [finalAmount, advancePaid]);
 
   function addLocalItem() {
     if (productTypes.length === 0) return;
     const pt = productTypes[0];
     const measState = getMeasurementState(selectedCustomerId, null, pt.name);
     setLocalItems((prev) => [
-      ...prev,
+      ...prev.map((it) => ({ ...it, expanded: false })),
       {
         id: Math.random().toString(),
         productTypeId: pt.id,
@@ -373,6 +398,15 @@ export default function NewOrderScreen() {
   const [measDraftPhotos, setMeasDraftPhotos] = useState<string[]>([]);
   const [measDraftNotes, setMeasDraftNotes] = useState("");
   const [savingMeasurement, setSavingMeasurement] = useState(false);
+
+  // "Add Custom Field" sub-modal — opens inside the measurement editor so
+  // the tailor can declare a new master custom field without leaving the
+  // order page. The new field shows up immediately in the Custom
+  // Measurement Fields list and persists to the master record (and the
+  // Masters page) via the data context.
+  const [showAddCustomFieldModal, setShowAddCustomFieldModal] = useState(false);
+  const [newCustomFieldName, setNewCustomFieldName] = useState("");
+  const [savingCustomField, setSavingCustomField] = useState(false);
 
   const [showFamilyModal, setShowFamilyModal] = useState(false);
   const [familyDraftName, setFamilyDraftName] = useState("");
@@ -477,6 +511,68 @@ export default function NewOrderScreen() {
     setMeasDraftPhotos((prev) => prev.filter((_, i) => i !== idx));
   }
 
+  /**
+   * Declare a new custom measurement field while the order is being
+   * created. Persists to the master record (so the new field shows up
+   * in the Masters page, on the Measurements tab, and on every future
+   * order) and the next render of the Custom Measurement Fields list
+   * inside the modal picks it up.
+   */
+  async function handleAddCustomField() {
+    const trimmed = newCustomFieldName.trim();
+    if (!trimmed) {
+      Alert.alert("Field name required", "Please enter a name for the custom measurement field.");
+      return;
+    }
+    setSavingCustomField(true);
+    try {
+      await addCustomField(trimmed);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setNewCustomFieldName("");
+      setShowAddCustomFieldModal(false);
+    } catch (e: any) {
+      Alert.alert("Error", e?.message ?? "Failed to add custom field");
+    } finally {
+      setSavingCustomField(false);
+    }
+  }
+
+  async function handleDeleteCustomField(cfId: string, cfName: string) {
+    Alert.alert(
+      `Delete "${cfName}"?`,
+      `"${cfName}" will be removed from the master list. Historical order and measurement values that used this field will not be affected.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteCustomField(cfId);
+              // Clear draft value for this field
+              setMeasDraftCustom((prev) => {
+                const next = { ...prev };
+                delete next[cfId];
+                return next;
+              });
+              // Remove from every item's customValues so it can't slip into
+              // the order snapshot when the tailor taps Save Order
+              setLocalItems((prev) =>
+                prev.map((it) => {
+                  const { [cfId]: _removed, ...rest } = it.customValues;
+                  return { ...it, customValues: rest };
+                })
+              );
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (e: any) {
+              Alert.alert("Error", e?.message ?? "Failed to delete custom field");
+            }
+          },
+        },
+      ]
+    );
+  }
+
   function openFamilyCreator(idx: number) {
     setFamilyAssignTargetIdx(idx);
     setFamilyDraftName("");
@@ -515,29 +611,71 @@ export default function NewOrderScreen() {
 
   async function handleSave() {
     if (!selectedCustomerId || !selectedCustomer) {
-      Alert.alert("Error", "Please select a customer");
+      Alert.alert("Customer required", "Please select a customer before saving the order.");
       return;
     }
     if (orderItemsList.length === 0) {
-      Alert.alert("Error", "Please include at least one item in the order");
+      Alert.alert("No items", "Please include at least one item in the order.");
       return;
     }
 
-    // Per-item validation — every item needs a product, a non-zero price,
-    // and a positive quantity. We surface the first invalid item so the
-    // user can fix it.
+    // Per-item validation — every item must have a product type, an amount
+    // greater than zero, a quantity of at least 1, an assigned family
+    // member (self counts), and measurement details. We surface the first
+    // invalid item so the user can fix it in place.
     for (let i = 0; i < localItems.length; i++) {
       const it = localItems[i];
       if (!it.productType || !it.productType.trim()) {
-        Alert.alert("Item incomplete", `Item #${i + 1}: please select a product type.`);
+        Alert.alert("Product Type required", `Item #${i + 1}: please select a product type.`);
         return;
       }
       if (!(it.price > 0)) {
-        Alert.alert("Item incomplete", `Item #${i + 1}: price must be greater than 0.`);
+        Alert.alert("Amount required", `Item #${i + 1}: amount must be greater than 0.`);
         return;
       }
       if (!(it.quantity >= 1)) {
-        Alert.alert("Item incomplete", `Item #${i + 1}: quantity must be at least 1.`);
+        Alert.alert("Quantity required", `Item #${i + 1}: quantity must be at least 1.`);
+        return;
+      }
+      // Assignee is always set (null = self), but keep an explicit guard
+      // so an item with no assignee never slips through.
+      if (it.familyMemberId === undefined) {
+        Alert.alert("Assignee required", `Item #${i + 1}: please choose who this item is for.`);
+        return;
+      }
+      // Measurement details — at least one standard or custom value must
+      // be entered (or a saved measurement linked to this item).
+      const hasMeasurementValues = Object.values(it.measurementValues).some(
+        (v) => v && Number(v) > 0
+      );
+      const hasCustomValues = Object.values(it.customValues).some(
+        (v) => v && Number(v) > 0
+      );
+      if (!it.measurementId && !hasMeasurementValues && !hasCustomValues) {
+        Alert.alert(
+          "Measurement required",
+          `Item #${i + 1}: please record measurement details before saving.`
+        );
+        return;
+      }
+    }
+
+    // Discount sanity — if a discount type is selected the value must
+    // parse to a positive number. Empty values are treated as no
+    // discount.
+    if (discountType !== "none") {
+      const n = Number(discountValue);
+      if (!Number.isFinite(n) || n <= 0) {
+        Alert.alert(
+          "Invalid discount",
+          discountType === "percent"
+            ? "Please enter a discount percentage greater than 0."
+            : "Please enter a discount amount greater than 0."
+        );
+        return;
+      }
+      if (discountType === "percent" && n > 100) {
+        Alert.alert("Invalid discount", "Discount percentage cannot exceed 100.");
         return;
       }
     }
@@ -725,15 +863,17 @@ export default function NewOrderScreen() {
               <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>
                 Order Items ({localItems.length})
               </Text>
-              <Pressable
-                onPress={addLocalItem}
-                style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: c.primary + "10", paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20 }}
-              >
-                <MaterialIcons name="add" size={16} color={c.primary} />
-                <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: c.primary }}>
-                  Add Item
-                </Text>
-              </Pressable>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Pressable
+                  onPress={addLocalItem}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: c.primary + "10", paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20 }}
+                >
+                  <MaterialIcons name="add" size={16} color={c.primary} />
+                  <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: c.primary }}>
+                    Add Item
+                  </Text>
+                </Pressable>
+              </View>
             </View>
 
             {localItems.map((item, idx) => {
@@ -1066,49 +1206,49 @@ export default function NewOrderScreen() {
                         </Text>
                         <View
                           style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            justifyContent: "space-between",
                             padding: 12,
                             borderRadius: 10,
                             backgroundColor: c.muted + "30",
                             borderWidth: 1,
                             borderColor: c.border,
+                            gap: 10,
                           }}
                         >
-                          <View style={{ flex: 1, marginRight: 8 }}>
-                            <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: item.measurementId ? c.foreground : c.mutedForeground }}>
-                              {summaryText}
-                            </Text>
-                            {item.photos.length > 0 && (
-                              <View style={{ flexDirection: "row", gap: 6, marginTop: 8 }}>
-                                {item.photos.slice(0, 4).map((p, pIdx) => (
-                                  <Image
-                                    key={pIdx}
-                                    source={{ uri: base64ToDataUri(p) }}
-                                    style={{ width: 32, height: 32, borderRadius: 4, backgroundColor: c.muted }}
-                                  />
-                                ))}
-                              </View>
-                            )}
+                          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                            <View style={{ flex: 1, marginRight: 8 }}>
+                              <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: item.measurementId ? c.foreground : c.mutedForeground }}>
+                                {summaryText}
+                              </Text>
+                              {item.photos.length > 0 && (
+                                <View style={{ flexDirection: "row", gap: 6, marginTop: 8 }}>
+                                  {item.photos.slice(0, 4).map((p, pIdx) => (
+                                    <Image
+                                      key={pIdx}
+                                      source={{ uri: base64ToDataUri(p) }}
+                                      style={{ width: 32, height: 32, borderRadius: 4, backgroundColor: c.muted }}
+                                    />
+                                  ))}
+                                </View>
+                              )}
+                            </View>
+                            <Pressable
+                              onPress={() => openMeasurementEditor(idx)}
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: 4,
+                                backgroundColor: c.primary,
+                                paddingVertical: 6,
+                                paddingHorizontal: 12,
+                                borderRadius: 8,
+                              }}
+                            >
+                              <MaterialIcons name={item.measurementId ? "edit" : "add"} size={16} color="#FFFFFF" />
+                              <Text style={{ fontSize: 12, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>
+                                {item.measurementId ? "Edit" : "Add"}
+                              </Text>
+                            </Pressable>
                           </View>
-                          <Pressable
-                            onPress={() => openMeasurementEditor(idx)}
-                            style={{
-                              flexDirection: "row",
-                              alignItems: "center",
-                              gap: 4,
-                              backgroundColor: c.primary,
-                              paddingVertical: 6,
-                              paddingHorizontal: 12,
-                              borderRadius: 8,
-                            }}
-                          >
-                            <MaterialIcons name={item.measurementId ? "edit" : "add"} size={16} color="#FFFFFF" />
-                            <Text style={{ fontSize: 12, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>
-                              {item.measurementId ? "Edit" : "Add"}
-                            </Text>
-                          </Pressable>
                         </View>
                       </View>
                     </View>
@@ -1175,6 +1315,79 @@ export default function NewOrderScreen() {
               numberOfLines={3}
               maxLength={500}
             />
+
+            {/* Discount controls — type can be "none" | "fixed" | "percent".
+                The discount is applied to the order subtotal to derive
+                the final amount. */}
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                Discount (Optional)
+              </Text>
+              <View style={{ flexDirection: "row", gap: 6 }}>
+                {([
+                  { id: "none", label: "None" },
+                  { id: "fixed", label: "Fixed ₹" },
+                  { id: "percent", label: "% Percent" },
+                ] as { id: "none" | "fixed" | "percent"; label: string }[]).map((opt) => (
+                  <Pressable
+                    key={opt.id}
+                    onPress={() => {
+                      setDiscountType(opt.id);
+                      if (opt.id === "none") setDiscountValue("");
+                    }}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 8,
+                      borderRadius: 8,
+                      alignItems: "center",
+                      backgroundColor: discountType === opt.id ? c.primary : c.muted,
+                      borderWidth: 1,
+                      borderColor: discountType === opt.id ? c.primary : "transparent",
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: discountType === opt.id ? "#FFFFFF" : c.mutedForeground }}>
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              {discountType !== "none" && (
+                <TextInput
+                  keyboardType="decimal-pad"
+                  placeholder={discountType === "percent" ? "e.g. 10 (%)" : "e.g. 100 (₹)"}
+                  placeholderTextColor={c.mutedForeground}
+                  style={{
+                    borderWidth: 1,
+                    borderColor: c.border,
+                    borderRadius: 8,
+                    paddingVertical: 10,
+                    paddingHorizontal: 14,
+                    fontSize: 16,
+                    color: c.foreground,
+                    backgroundColor: c.input,
+                    fontFamily: "Inter_600SemiBold",
+                  }}
+                  value={discountValue}
+                  onChangeText={(v) => {
+                    const clean = v.replace(/[^0-9.]/g, "");
+                    const parts = clean.split(".");
+                    const safe = parts.length > 1 ? parts[0] + "." + parts.slice(1).join("") : clean;
+                    setDiscountValue(safe.slice(0, 6));
+                  }}
+                  maxLength={6}
+                />
+              )}
+              {discountType !== "none" && discountAmount > 0 && (
+                <View style={{ flexDirection: "row", justifyContent: "space-between", backgroundColor: "#FEF3C7", borderRadius: 8, padding: 10 }}>
+                  <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: "#92400E" }}>
+                    Discount applied
+                  </Text>
+                  <Text style={{ fontSize: 13, fontFamily: "Inter_700Bold", color: "#92400E" }}>
+                    -{formatCurrency(discountAmount)}
+                  </Text>
+                </View>
+              )}
+            </View>
           </Card>
         )}
 
@@ -1183,12 +1396,32 @@ export default function NewOrderScreen() {
           <View style={{ gap: 12, marginTop: 8 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 4 }}>
               <Text style={{ fontSize: 16, fontFamily: "Inter_600SemiBold", color: c.mutedForeground }}>
-                Total Order Amount
+                Subtotal
               </Text>
-              <Text style={{ fontSize: 24, fontFamily: "Inter_800ExtraBold", color: c.foreground }}>
+              <Text style={{ fontSize: 20, fontFamily: "Inter_700Bold", color: c.foreground }}>
                 {formatCurrency(totalAmount)}
               </Text>
             </View>
+            {discountAmount > 0 && (
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 4 }}>
+                <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: "#D97706" }}>
+                  Discount{discountType === "percent" ? ` (${Math.round(Number(discountValue) || 0)}%)` : ""}
+                </Text>
+                <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: "#D97706" }}>
+                  -{formatCurrency(discountAmount)}
+                </Text>
+              </View>
+            )}
+            {discountAmount > 0 && (
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 4, borderTopWidth: 1, borderTopColor: c.border, paddingTop: 8 }}>
+                <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>
+                  Final Amount
+                </Text>
+                <Text style={{ fontSize: 22, fontFamily: "Inter_800ExtraBold", color: c.foreground }}>
+                  {formatCurrency(finalAmount)}
+                </Text>
+              </View>
+            )}
             {advancePaid > 0 && (
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 4 }}>
                 <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: "#059669" }}>
@@ -1350,18 +1583,57 @@ export default function NewOrderScreen() {
                 </View>
               </View>
 
-              {/* Custom Fields */}
-              {customFields.length > 0 && (
-                <View style={{ gap: 12, borderTopWidth: 1, borderTopColor: c.border, paddingTop: 16 }}>
+              {/* Custom Fields — always rendered so the tailor can
+                  declare new fields even when none exist yet. New fields
+                  are persisted to the master record (Masters page) via
+                  addCustomField and immediately available for this item
+                  and all future orders. */}
+              <View style={{ gap: 12, borderTopWidth: 1, borderTopColor: c.border, paddingTop: 16 }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                   <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
                     Custom Measurement Fields
                   </Text>
+                  <Pressable
+                    onPress={() => {
+                      setNewCustomFieldName("");
+                      setShowAddCustomFieldModal(true);
+                    }}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 4,
+                      paddingVertical: 4,
+                      paddingHorizontal: 10,
+                      borderRadius: 14,
+                      borderWidth: 1,
+                      borderColor: c.primary,
+                      borderStyle: "dashed",
+                    }}
+                  >
+                    <MaterialIcons name="add" size={12} color={c.primary} />
+                    <Text style={{ fontSize: 11, fontFamily: "Inter_700Bold", color: c.primary }}>
+                      Add Custom Field
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {customFields.length > 0 && (
                   <View style={{ flexDirection: "row", flexWrap: "wrap", marginHorizontal: -6 }}>
                     {customFields.map((cf) => (
                       <View key={cf.id} style={{ width: "50%", paddingHorizontal: 6, marginBottom: 12 }}>
-                        <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: c.foreground, marginBottom: 4 }}>
-                          {cf.fieldName}
-                        </Text>
+                        {/* Label row with delete button */}
+                        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                          <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: c.foreground, flex: 1 }} numberOfLines={1}>
+                            {cf.fieldName}
+                          </Text>
+                          <Pressable
+                            onPress={() => handleDeleteCustomField(cf.id, cf.fieldName)}
+                            hitSlop={8}
+                            style={{ paddingLeft: 4 }}
+                          >
+                            <MaterialIcons name="delete-outline" size={16} color={c.destructive ?? "#EF4444"} />
+                          </Pressable>
+                        </View>
                         <TextInput
                           keyboardType="decimal-pad"
                           placeholder="--"
@@ -1388,8 +1660,24 @@ export default function NewOrderScreen() {
                       </View>
                     ))}
                   </View>
-                </View>
-              )}
+                )}
+
+                {customFields.length === 0 && (
+                  <View
+                    style={{
+                      padding: 12,
+                      borderRadius: 8,
+                      backgroundColor: c.muted + "20",
+                      borderWidth: 1,
+                      borderColor: c.border,
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: c.mutedForeground, textAlign: "center" }}>
+                      No custom fields yet. Tap "Add Custom Field" above to create one.
+                    </Text>
+                  </View>
+                )}
+              </View>
 
               {/* Photos Section */}
               <View style={{ gap: 12, borderTopWidth: 1, borderTopColor: c.border, paddingTop: 16 }}>
@@ -1472,6 +1760,90 @@ export default function NewOrderScreen() {
               </View>
             </ScrollView>
           </View>
+
+          {/* Add Custom Field overlay — rendered inside the parent
+              measurement modal as an absolutely-positioned View rather
+              than a nested native <Modal>. Nesting two native modals
+              causes the inner one to be queued behind the parent's
+              animation, so it only appears after the parent closes/saves.
+              An inline overlay sidesteps the native ModalManager entirely. */}
+          {showAddCustomFieldModal && (
+            <KeyboardAvoidingView
+              behavior={Platform.OS === "ios" ? "padding" : "height"}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                justifyContent: "flex-end",
+                zIndex: 1000,
+                elevation: 1000,
+              }}
+            >
+              <Pressable
+                onPress={() => {
+                  if (!savingCustomField) {
+                    setShowAddCustomFieldModal(false);
+                    setNewCustomFieldName("");
+                  }
+                }}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: "rgba(0,0,0,0.4)",
+                }}
+              />
+              <View
+                style={{
+                  backgroundColor: c.card,
+                  borderTopLeftRadius: 24,
+                  borderTopRightRadius: 24,
+                  padding: 24,
+                  paddingBottom: insets.bottom + 24,
+                  gap: 16,
+                  borderTopWidth: 1,
+                  borderTopColor: c.border,
+                  zIndex: 1001,
+                  elevation: 1001,
+                }}
+              >
+                <Text style={{ fontSize: 18, fontFamily: "Inter_700Bold", color: c.foreground }}>
+                  Add Custom Field
+                </Text>
+                <Input
+                  label="Field Name"
+                  placeholder="e.g. Collar Width, Arm Opening"
+                  value={newCustomFieldName}
+                  onChangeText={(v) => setNewCustomFieldName(v.slice(0, 60))}
+                  icon="straighten"
+                  autoFocus
+                  maxLength={60}
+                />
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <Button
+                    label="Cancel"
+                    onPress={() => {
+                      setShowAddCustomFieldModal(false);
+                      setNewCustomFieldName("");
+                    }}
+                    variant="outline"
+                    style={{ flex: 1 }}
+                    disabled={savingCustomField}
+                  />
+                  <Button
+                    label="Add Field"
+                    onPress={handleAddCustomField}
+                    loading={savingCustomField}
+                    style={{ flex: 1 }}
+                  />
+                </View>
+              </View>
+            </KeyboardAvoidingView>
+          )}
         </Modal>
       )}
 

@@ -225,7 +225,13 @@
     "validationRequired": "{{field}} आवश्यक है",
     "validationNumber": "{{field}} एक धनात्मक संख्या होनी चाहिए",
     "pastDateError": "तारीख पुरानी नहीं हो सकती",
-    "groupedByPerson": "व्यक्ति के अनुसार समूहित माप"
+    "groupedByPerson": "व्यक्ति के अनुसार समूहित माप",
+    "deleteCustomField": "कस्टम फ़ील्ड हटाएं",
+    "deleteCustomFieldConfirmTitle": "\"{{name}}\" हटाएं?",
+    "deleteCustomFieldConfirmMessage_zero": "\"{{name}}\" हटा दिया जाएगा। कोई पुराना ऑर्डर इसका उपयोग नहीं करता।",
+    "deleteCustomFieldConfirmMessage_other": "\"{{name}}\" हटा दिया जाएगा। {{count}} पुराने ऑर्डर/इनवॉइस में यह मान अभी भी दिखेगा — ऐतिहासिक डेटा सुरक्षित रहेगा।",
+    "deleteCustomFieldCancel": "रद्द करें",
+    "deleteCustomFieldConfirm": "हटाएं"
   },
   "invoices": {
     "title": "चालान",
@@ -350,6 +356,7 @@
     "quickActions": "त्वरित क्रियाएं",
     "addCustomer": "ग्राहक जोड़ें",
     "newInvoice": "नया चालान",
+    "invoiceList": "चालान सूची",
     "pendingInvoice": "{{count}} लंबित चालान",
     "pendingInvoicePlural": "{{count}} लंबित चालान",
     "awaitingCollection": "{{amount}} संग्रहण बाकी",

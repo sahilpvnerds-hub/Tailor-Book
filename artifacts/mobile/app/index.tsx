@@ -17,6 +17,11 @@ export default function Index() {
 
   if (!user) return <Redirect href="/(auth)/login" />;
 
+  // Admins go straight to the desktop-style admin dashboard.
+  if (user.role === "admin") {
+    return <Redirect href={"/admin" as any} />;
+  }
+
   // Show onboarding for tailors who haven't completed it
   if (user.role === "tailor" && !user.onboardingComplete) {
     return <Redirect href="/onboarding" />;

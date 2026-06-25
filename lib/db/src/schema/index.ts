@@ -280,6 +280,27 @@ export const pendingOtps = mysqlTable("pending_otps", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Audit log for every admin-initiated mutation (approve/reject/patch/delete/
+// suspend/unsuspend). Used for compliance and dispute resolution. Lightweight:
+// stores IDs and JSON snapshots rather than full row dumps.
+export const adminAuditLog = mysqlTable("admin_audit_log", {
+  id: varchar("id", { length: 36 }).notNull().primaryKey(),
+  adminId: varchar("admin_id", { length: 36 }).notNull(),
+  action: mysqlEnum("action", [
+    "approve",
+    "reject",
+    "suspend",
+    "unsuspend",
+    "patch",
+    "delete",
+  ]).notNull(),
+  targetType: mysqlEnum("target_type", ["user"]).notNull().default("user"),
+  targetId: varchar("target_id", { length: 36 }).notNull(),
+  beforeJson: json("before_json").$type<Record<string, unknown> | null>(),
+  afterJson: json("after_json").$type<Record<string, unknown> | null>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // ---------------------------------------------------------------------------
 // Zod insert schemas for input validation
 // ---------------------------------------------------------------------------

@@ -85,6 +85,19 @@ interface ApiError {
   status: number;
 }
 
+// Re-export common domain types so callers can `import { Order } from "@/utils/api"`.
+export type {
+  User,
+  Customer,
+  Invoice,
+  Order,
+  OrderItem,
+  ProductType,
+  FamilyMember,
+  Measurement,
+  Notification,
+} from "@/types";
+
 // ── Auth API ───────────────────────────────────────────────────────────────
 
 export interface CheckAvailabilityResult {
@@ -267,10 +280,161 @@ export async function rejectUser(token: string, userId: string): Promise<{ ok: b
   return { ok: response.ok };
 }
 
+// ── Admin Dashboard API ────────────────────────────────────────────────────
+
+/** Shape of GET /api/admin/overview — the KPI dashboard payload. */
+export interface AdminOverview {
+  tailors: {
+    total: number;
+    pending: number;
+    approved: number;
+    rejected: number;
+    newThisMonth: number;
+  };
+  customers: { total: number; newThisMonth: number };
+  orders: {
+    total: number;
+    inProgress: number;
+    delivered: number;
+    newThisMonth: number;
+  };
+  invoices: {
+    total: number;
+    paid: number;
+    unpaid: number;
+    revenueThisMonth: number;
+    outstanding: number;
+  };
+  generatedAt: string;
+}
+
+/** Per-tailor activity stats — included on `/admin/users?withStats=true`. */
+export interface AdminUserStats {
+  customers: number;
+  orders: number;
+  invoices: number;
+  revenue: number;
+}
+
+/** Shape of GET /api/admin/users/:id — admin tailor detail with stats. */
+export interface AdminTailorDetail extends User {
+  stats: AdminUserStats;
+}
+
+/** Augment User with the optional stats field returned by the list endpoint. */
+export type AdminUserWithStats = User & { stats?: AdminUserStats };
+
+export async function getAdminOverview(token: string): Promise<AdminOverview> {
+  const response = await fetch(`${API_BASE_URL}/admin/overview`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await parseJson<any>(response, "Failed to fetch overview");
+  if (!response.ok) {
+    throw new Error(data.error ?? "Failed to fetch overview");
+  }
+  return data;
+}
+
+export async function listAdminUsers(
+  token: string,
+  opts?: {
+    status?: "pending" | "approved" | "rejected";
+    q?: string;
+    role?: "admin" | "tailor";
+    withStats?: boolean;
+  },
+): Promise<AdminUserWithStats[]> {
+  const params = new URLSearchParams();
+  if (opts?.status) params.set("status", opts.status);
+  if (opts?.q) params.set("q", opts.q);
+  if (opts?.role) params.set("role", opts.role);
+  if (opts?.withStats) params.set("withStats", "true");
+  const qs = params.toString();
+  const response = await fetch(
+    `${API_BASE_URL}/admin/users${qs ? `?${qs}` : ""}`,
+    { method: "GET", headers: { Authorization: `Bearer ${token}` } },
+  );
+  const data = await parseJson<any>(response, "Failed to fetch users");
+  if (!response.ok) {
+    throw new Error(data.error ?? "Failed to fetch users");
+  }
+  return data;
+}
+
+export async function getAdminUser(token: string, userId: string): Promise<AdminTailorDetail> {
+  const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await parseJson<any>(response, "Failed to fetch user");
+  if (!response.ok) {
+    throw new Error(data.error ?? "Failed to fetch user");
+  }
+  return data;
+}
+
+export interface AdminUserPatch {
+  name?: string;
+  email?: string;
+  mobile?: string;
+  role?: "admin" | "tailor";
+  status?: "pending" | "approved" | "rejected";
+  shopName?: string | null;
+  shopAddress?: string | null;
+  city?: string | null;
+  state?: string | null;
+  avatarUri?: string | null;
+}
+
+export async function patchAdminUser(
+  token: string,
+  userId: string,
+  body: AdminUserPatch,
+): Promise<User> {
+  const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  const data = await parseJson<any>(response, "Failed to update user");
+  if (!response.ok) {
+    throw new Error(data.error ?? "Failed to update user");
+  }
+  return data;
+}
+
+export async function suspendUser(token: string, userId: string): Promise<{ ok: boolean }> {
+  const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/suspend`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return { ok: response.ok };
+}
+
+export async function unsuspendUser(token: string, userId: string): Promise<{ ok: boolean }> {
+  const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/unsuspend`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return { ok: response.ok };
+}
+
+export async function deleteAdminUser(token: string, userId: string): Promise<{ ok: boolean }> {
+  const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return { ok: response.ok };
+}
+
 // ── Customers API ───────────────────────────────────────────────────────────
 
-export async function getCustomers(token: string): Promise<Customer[]> {
-  const response = await fetch(`${API_BASE_URL}/customers`, {
+export async function getCustomers(token: string, opts?: { tailorId?: string }): Promise<Customer[]> {
+  const params = new URLSearchParams();
+  if (opts?.tailorId) params.set("tailorId", opts.tailorId);
+  const qs = params.toString();
+  const response = await fetch(`${API_BASE_URL}/customers${qs ? `?${qs}` : ""}`, {
     method: "GET",
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -413,9 +577,15 @@ export async function deleteMeasurement(token: string, measurementId: string): P
 
 // ── Invoices API ───────────────────────────────────────────────────────────
 
-export async function getInvoices(token: string, customerId?: string): Promise<Invoice[]> {
-  const url = customerId ? `${API_BASE_URL}/invoices?customerId=${customerId}` : `${API_BASE_URL}/invoices`;
-  const response = await fetch(url, {
+export async function getInvoices(
+  token: string,
+  opts?: { customerId?: string; tailorId?: string },
+): Promise<Invoice[]> {
+  const params = new URLSearchParams();
+  if (opts?.customerId) params.set("customerId", opts.customerId);
+  if (opts?.tailorId) params.set("tailorId", opts.tailorId);
+  const qs = params.toString();
+  const response = await fetch(`${API_BASE_URL}/invoices${qs ? `?${qs}` : ""}`, {
     method: "GET",
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -468,9 +638,15 @@ export async function deleteInvoice(token: string, invoiceId: string): Promise<{
 
 // ── Orders API ──────────────────────────────────────────────────────────────
 
-export async function getOrders(token: string, customerId?: string): Promise<Order[]> {
-  const url = customerId ? `${API_BASE_URL}/orders?customerId=${customerId}` : `${API_BASE_URL}/orders`;
-  const response = await fetch(url, {
+export async function getOrders(
+  token: string,
+  opts?: { customerId?: string; tailorId?: string },
+): Promise<Order[]> {
+  const params = new URLSearchParams();
+  if (opts?.customerId) params.set("customerId", opts.customerId);
+  if (opts?.tailorId) params.set("tailorId", opts.tailorId);
+  const qs = params.toString();
+  const response = await fetch(`${API_BASE_URL}/orders${qs ? `?${qs}` : ""}`, {
     method: "GET",
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -521,11 +697,24 @@ export async function deleteOrder(token: string, orderId: string): Promise<{ ok:
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
-  return { ok: response.ok };
+  if (!response.ok) {
+    const data = await parseJson<any>(response, "Failed to delete order");
+    throw new Error(data?.error ?? `Failed to delete order (status ${response.status})`);
+  }
+  return { ok: true };
 }
 
-export async function generateInvoiceFromOrder(token: string, orderId: string, familyMemberId?: string): Promise<Invoice> {
-  const url = familyMemberId ? `${API_BASE_URL}/orders/${orderId}/invoice?familyMemberId=${familyMemberId}` : `${API_BASE_URL}/orders/${orderId}/invoice`;
+export async function generateInvoiceFromOrder(
+  token: string,
+  orderId: string,
+  familyMemberId?: string,
+  itemId?: string,
+): Promise<Invoice> {
+  const params: string[] = [];
+  if (familyMemberId) params.push(`familyMemberId=${familyMemberId}`);
+  if (itemId) params.push(`itemId=${itemId}`);
+  const qs = params.length ? `?${params.join("&")}` : "";
+  const url = `${API_BASE_URL}/orders/${orderId}/invoice${qs}`;
   const response = await fetch(url, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
@@ -660,12 +849,17 @@ export async function addCustomField(token: string, fieldName: string): Promise<
   return data;
 }
 
-export async function deleteCustomField(token: string, fieldId: string): Promise<{ ok: boolean }> {
+export async function deleteCustomField(token: string, fieldId: string): Promise<{ ok: boolean; usageCount: number }> {
   const response = await fetch(`${API_BASE_URL}/custom-fields/${fieldId}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
-  return { ok: response.ok };
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error((data as any).error ?? "Failed to delete custom field");
+  }
+  const data = await response.json().catch(() => ({ ok: true, usageCount: 0 }));
+  return { ok: true, usageCount: Number((data as any).usageCount ?? 0) };
 }
 
 // ── Notifications API ──────────────────────────────────────────────────────
@@ -825,6 +1019,17 @@ export const api = {
     allTailors: getAllTailors,
     approveUser,
     rejectUser,
+  },
+  admin: {
+    getOverview: getAdminOverview,
+    listUsers: listAdminUsers,
+    getUser: getAdminUser,
+    patchUser: patchAdminUser,
+    approveUser,
+    rejectUser,
+    suspendUser,
+    unsuspendUser,
+    deleteUser: deleteAdminUser,
   },
   customers: {
     get: getCustomers,

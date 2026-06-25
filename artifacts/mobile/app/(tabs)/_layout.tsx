@@ -23,7 +23,7 @@ function NativeTabLayout() {
         <Icon sf={{ default: "person.2", selected: "person.2.fill" }} />
         <Label>Customers</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="invoices">
+      <NativeTabs.Trigger name="orders">
         <Icon sf={{ default: "bag", selected: "bag.fill" }} />
         <Label>Orders</Label>
       </NativeTabs.Trigger>
@@ -90,7 +90,7 @@ function ClassicTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="invoices"
+        name="orders"
         options={{
           title: "Orders",
           tabBarIcon: ({ color }) =>

@@ -69,8 +69,25 @@ router.delete("/:id", async (req: Request, res: Response) => {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
+
+  // Count historical measurements that contain this field name in their
+  // custom_measurements JSON. We match by label (field name string) because
+  // snapshots store the human-readable label, not the UUID.
+  // We do a lightweight JSON_SEARCH check; falls back to 0 on any error.
+  let usageCount = 0;
+  try {
+    const [rows] = await (db as any).$client.query(
+      `SELECT COUNT(*) AS cnt FROM measurements
+       WHERE JSON_SEARCH(custom_measurements, 'one', ?, NULL, '$[*].label') IS NOT NULL`,
+      [existing.fieldName],
+    );
+    usageCount = Number((rows as any[])[0]?.cnt ?? 0);
+  } catch {
+    // Non-critical — proceed with deletion even if count fails
+  }
+
   await db.delete(customMeasurementFields).where(eq(customMeasurementFields.id, id));
-  res.json({ ok: true });
+  res.json({ ok: true, usageCount });
 });
 
 export default router;

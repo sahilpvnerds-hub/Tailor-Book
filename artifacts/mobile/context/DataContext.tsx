@@ -14,7 +14,16 @@ import {
   OrderItem,
 } from "@/types";
 import { useAuth } from "./AuthContext";
-import { createOrder as apiCreateOrder, getToken } from "@/utils/api";
+import {
+  api,
+  addCustomField as apiAddCustomField,
+  createOrder as apiCreateOrder,
+  deleteOrder as apiDeleteOrder,
+  deleteCustomField as apiDeleteCustomField,
+  getCustomFields as apiGetCustomFields,
+  getToken,
+  updateOrderStatus as apiUpdateOrderStatus,
+} from "@/utils/api";
 import {
   generateId,
   generateNotifications,
@@ -101,7 +110,11 @@ interface DataContextType {
   }) => Promise<Order>;
   updateOrderStatus: (id: string, status: Order["status"]) => Promise<void>;
   deleteOrder: (id: string) => Promise<void>;
-  generateInvoiceFromOrder: (orderId: string, familyMemberId?: string | null) => Promise<Invoice>;
+  generateInvoiceFromOrder: (
+    orderId: string,
+    familyMemberId?: string | null,
+    itemId?: string,
+  ) => Promise<Invoice>;
   markNotificationRead: (id: string) => Promise<void>;
   markAllRead: () => Promise<void>;
   clearAllNotifications: (options?: { muteTypes?: string[] }) => Promise<void>;
@@ -121,6 +134,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * The API/DB returns decimal columns (price, totalAmount, advanceAmount,
+   * balanceDue) as strings. Coerce them to numbers so UI arithmetic works.
+   */
+  function normalizeOrder(o: any): Order {
+    return {
+      ...o,
+      totalAmount: Number(o.totalAmount ?? 0),
+      advanceAmount: Number(o.advanceAmount ?? 0),
+      balanceDue: Number(o.balanceDue ?? 0),
+      items: (o.items ?? []).map((it: any) => ({
+        ...it,
+        price: Number(it.price ?? 0),
+      })),
+    };
+  }
+
   const refresh = useCallback(async () => {
     if (!user) {
       setCustomers([]); setFamilyMembers([]); setMeasurements([]);
@@ -129,15 +164,55 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     setIsLoading(true);
-    const [c, fm, m, inv, ord, pt, cf] = await Promise.all([
-      getCustomers(user.id),
-      getFamilyMembers(user.id),
-      getMeasurements(user.id),
-      getInvoices(user.id),
-      getOrders(user.id),
-      getProductTypes(user.id),
-      getCustomFields(user.id),
-    ]);
+
+    let token: string | null = null;
+    try {
+      token = await getToken();
+    } catch {
+      // Offline
+    }
+
+    let c = await getCustomers(user.id);
+    let fm = await getFamilyMembers(user.id);
+    let m = await getMeasurements(user.id);
+    let inv = await getInvoices(user.id);
+    let ord = await getOrders(user.id);
+    let pt = await getProductTypes(user.id);
+    let cf = await getCustomFields(user.id);
+
+    if (token) {
+      try {
+        const [apiC, apiFm, apiM, apiInv, apiOrd, apiPt, apiCf] = await Promise.all([
+          api.customers.get(token),
+          api.familyMembers.get(token),
+          api.measurements.get(token),
+          api.invoices.get(token),
+          api.orders.get(token),
+          api.productTypes.get(token),
+          api.customFields.get(token),
+        ]);
+        c = apiC;
+        fm = apiFm;
+        m = apiM;
+        inv = apiInv;
+        ord = (apiOrd as any[]).map(normalizeOrder);
+        pt = apiPt;
+        cf = apiCf;
+
+        await Promise.all([
+          saveAllCustomers(c),
+          saveAllFamilyMembers(fm),
+          saveAllMeasurements(m),
+          saveAllInvoices(inv),
+          saveAllOrders(ord),
+          saveAllProductTypes(pt),
+          saveAllCustomFields(cf),
+        ]);
+      } catch (err) {
+        console.warn("Reconciling with API server failed (using offline AsyncStorage):", err);
+      }
+    }
+
     setCustomers(c.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
     setFamilyMembers(fm);
     setMeasurements(m.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
@@ -145,6 +220,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setOrders(ord.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
     setProductTypes(pt);
     setCustomFields(cf);
+
     // Generate & reload notifications, but skip any type the user has
     // muted so they aren't bothered by reminders they've opted out of.
     await generateNotifications(user.id, m, inv);
@@ -171,9 +247,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   async function addCustomer(data: Omit<Customer, "id" | "tailorId" | "createdAt">) {
     if (!user) throw new Error("Not authenticated");
     const all = await rawGet<Customer>(STORAGE_KEYS.CUSTOMERS);
-    const c: Customer = { id: generateId(), tailorId: user.id, createdAt: new Date().toISOString(), ...data };
+    let c: Customer | null = null;
+    try {
+      const token = await getToken();
+      if (token) {
+        c = await api.customers.add(token, { ...data, tailorId: user.id });
+      }
+    } catch (err) {
+      console.warn("addCustomer API failed, using local save:", err);
+    }
+    if (!c) {
+      c = { id: generateId(), tailorId: user.id, createdAt: new Date().toISOString(), ...data };
+    }
     await saveAllCustomers([...all, c]);
-    setCustomers((prev) => [c, ...prev]);
+    setCustomers((prev) => [c!, ...prev]);
     return c;
   }
 
@@ -181,6 +268,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const all = await rawGet<Customer>(STORAGE_KEYS.CUSTOMERS);
     await saveAllCustomers(all.map((c) => (c.id === id ? { ...c, ...data } : c)));
     setCustomers((prev) => prev.map((c) => (c.id === id ? { ...c, ...data } : c)));
+    try {
+      const token = await getToken();
+      if (token) {
+        await api.customers.update(token, id, data);
+      }
+    } catch (err) {
+      console.warn("updateCustomer API failed:", err);
+    }
   }
 
   async function deleteCustomer(id: string) {
@@ -206,15 +301,34 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setMeasurements((prev) => prev.filter((m) => m.customerId !== id));
     setOrders((prev) => prev.filter((o) => o.customerId !== id));
     setInvoices((prev) => prev.filter((i) => i.customerId !== id));
+    try {
+      const token = await getToken();
+      if (token) {
+        await api.customers.delete(token, id);
+      }
+    } catch (err) {
+      console.warn("deleteCustomer API failed:", err);
+    }
   }
 
   // ── Family Members ────────────────────────────────────────────────────────
   async function addFamilyMember(data: Omit<FamilyMember, "id" | "tailorId" | "createdAt">) {
     if (!user) throw new Error("Not authenticated");
     const all = await rawGet<FamilyMember>(STORAGE_KEYS.FAMILY_MEMBERS);
-    const f: FamilyMember = { id: generateId(), tailorId: user.id, createdAt: new Date().toISOString(), ...data };
+    let f: FamilyMember | null = null;
+    try {
+      const token = await getToken();
+      if (token) {
+        f = await api.familyMembers.add(token, { ...data, tailorId: user.id });
+      }
+    } catch (err) {
+      console.warn("addFamilyMember API failed, using local save:", err);
+    }
+    if (!f) {
+      f = { id: generateId(), tailorId: user.id, createdAt: new Date().toISOString(), ...data };
+    }
     await saveAllFamilyMembers([...all, f]);
-    setFamilyMembers((prev) => [...prev, f]);
+    setFamilyMembers((prev) => [...prev, f!]);
     return f;
   }
 
@@ -254,16 +368,35 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const found = invoicesKept.find((x) => x.id === inv.id);
       return found ?? inv;
     }));
+    try {
+      const token = await getToken();
+      if (token) {
+        await api.familyMembers.delete(token, id);
+      }
+    } catch (err) {
+      console.warn("deleteFamilyMember API failed:", err);
+    }
   }
 
   // ── Product Types ─────────────────────────────────────────────────────────
   async function addProductType(data: { name: string; amount: number; unit?: MeasurementUnit; features?: ProductType["features"] }) {
     if (!user) throw new Error("Not authenticated");
     const all = await rawGet<ProductType>(STORAGE_KEYS.PRODUCT_TYPES);
-    const now = new Date().toISOString();
-    const pt: ProductType = { id: generateId(), tailorId: user.id, createdAt: now, updatedAt: now, ...data };
+    let pt: ProductType | null = null;
+    try {
+      const token = await getToken();
+      if (token) {
+        pt = await api.productTypes.add(token, data);
+      }
+    } catch (err) {
+      console.warn("addProductType API failed, using local save:", err);
+    }
+    if (!pt) {
+      const now = new Date().toISOString();
+      pt = { id: generateId(), tailorId: user.id, createdAt: now, updatedAt: now, ...data };
+    }
     await saveAllProductTypes([...all, pt]);
-    setProductTypes((prev) => [...prev, pt]);
+    setProductTypes((prev) => [...prev, pt!]);
     return pt;
   }
 
@@ -273,12 +406,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     await saveAllProductTypes(updated);
     setProductTypes((prev) => prev.map((p) => (p.id === id ? { ...p, ...data } : p)));
 
-    // If the feature list changed, propagate to every existing record
-    // that references this product master so the new feature set takes
-    // effect everywhere (measurements, order items, invoice items).
-    // Each existing label is kept if it still exists in the new master
-    // (matched by label, falling back to gender+order for renames);
-    // labels that no longer exist are dropped silently.
     if (data.features !== undefined) {
       const newLabels = data.features.map((f) => f.label);
       const previous = all.find((p) => p.id === id);
@@ -287,8 +414,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const previousLabelSet = new Set(previousLabels);
 
       const renamedLabelMap = new Map<string, string>();
-      // Match removed labels to added labels by gender and order for
-      // best-effort rename propagation.
       const removed = previous?.features?.filter((f) => !newLabelSet.has(f.label)) ?? [];
       const added = data.features.filter((f) => !previousLabelSet.has(f.label));
       removed.forEach((r, i) => {
@@ -306,12 +431,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           } else if (renamedLabelMap.has(p)) {
             next.push(renamedLabelMap.get(p)!);
           }
-          // else: dropped silently
         }
         return next.join(", ");
       };
 
-      // Patch measurements
       const allMeasurements = await rawGet<Measurement>(STORAGE_KEYS.MEASUREMENTS);
       const patchedMeasurements = allMeasurements.map((m) => {
         if (m.productTypeId !== id) return m;
@@ -324,7 +447,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setMeasurements(patchedMeasurements);
       }
 
-      // Patch order items
       const allOrders = await rawGet<Order>(STORAGE_KEYS.ORDERS);
       let ordersChanged = false;
       const patchedOrders = allOrders.map((o) => {
@@ -347,7 +469,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setOrders(patchedOrders);
       }
 
-      // Patch invoice items
       const allInvoices = await rawGet<Invoice>(STORAGE_KEYS.INVOICES);
       let invoicesChanged = false;
       const patchedInvoices = allInvoices.map((inv) => {
@@ -370,25 +491,56 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setInvoices(patchedInvoices);
       }
     }
+
+    try {
+      const token = await getToken();
+      if (token) {
+        await api.productTypes.update(token, id, data);
+      }
+    } catch (err) {
+      console.warn("updateProductType API failed:", err);
+    }
   }
 
   async function deleteProductType(id: string) {
     const all = await rawGet<ProductType>(STORAGE_KEYS.PRODUCT_TYPES);
     await saveAllProductTypes(all.filter((p) => p.id !== id));
     setProductTypes((prev) => prev.filter((p) => p.id !== id));
+    try {
+      const token = await getToken();
+      if (token) {
+        await api.productTypes.delete(token, id);
+      }
+    } catch (err) {
+      console.warn("deleteProductType API failed:", err);
+    }
   }
 
   // ── Custom Fields ─────────────────────────────────────────────────────────
   async function addCustomField(fieldName: string) {
     if (!user) throw new Error("Not authenticated");
+    const token = await getToken();
+    // Always persist to server first so the server-assigned UUID is used.
+    // This ensures delete calls later can find the record by ID.
+    let f: CustomMeasurementField;
+    if (token) {
+      f = await apiAddCustomField(token, fieldName);
+    } else {
+      // Offline fallback — local-only ID (delete will soft-fail on next sync)
+      f = { id: generateId(), tailorId: user.id, fieldName, createdAt: new Date().toISOString() };
+    }
     const all = await rawGet<CustomMeasurementField>(STORAGE_KEYS.CUSTOM_FIELDS);
-    const f: CustomMeasurementField = { id: generateId(), tailorId: user.id, fieldName, createdAt: new Date().toISOString() };
     await saveAllCustomFields([...all, f]);
     setCustomFields((prev) => [...prev, f]);
     return f;
   }
 
   async function deleteCustomField(id: string) {
+    const token = await getToken();
+    if (token) {
+      // Call server first; throws on failure so local state is not mutated
+      await apiDeleteCustomField(token, id);
+    }
     const all = await rawGet<CustomMeasurementField>(STORAGE_KEYS.CUSTOM_FIELDS);
     await saveAllCustomFields(all.filter((f) => f.id !== id));
     setCustomFields((prev) => prev.filter((f) => f.id !== id));
@@ -398,15 +550,27 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   async function addMeasurement(data: Omit<Measurement, "id" | "tailorId" | "createdAt">) {
     if (!user) throw new Error("Not authenticated");
     const all = await rawGet<Measurement>(STORAGE_KEYS.MEASUREMENTS);
-    const m: Measurement = {
-      id: generateId(), tailorId: user.id,
-      createdAt: new Date().toISOString(),
-      ...data,
-      customMeasurements: data.customMeasurements ?? [],
-      photos: data.photos ?? [],
-    };
+    let m: Measurement | null = null;
+    try {
+      const token = await getToken();
+      if (token) {
+        m = await api.measurements.add(token, { ...data, tailorId: user.id });
+      }
+    } catch (err) {
+      console.warn("addMeasurement API failed, using local save:", err);
+    }
+    if (!m) {
+      m = {
+        id: generateId(),
+        tailorId: user.id,
+        createdAt: new Date().toISOString(),
+        ...data,
+        customMeasurements: data.customMeasurements ?? [],
+        photos: data.photos ?? [],
+      };
+    }
     await saveAllMeasurements([...all, m]);
-    setMeasurements((prev) => [m, ...prev]);
+    setMeasurements((prev) => [m!, ...prev]);
     return m;
   }
 
@@ -414,19 +578,68 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (!user) throw new Error("Not authenticated");
     if (items.length === 0) throw new Error("At least one product is required");
     const all = await rawGet<Measurement>(STORAGE_KEYS.MEASUREMENTS);
-    const now = new Date().toISOString();
-    const measurementSessionId = generateId();
-    const created: Measurement[] = items.map((data) => ({
-      id: generateId(),
-      tailorId: user.id,
-      createdAt: now,
-      measurementSessionId,
-      ...data,
-      customMeasurements: data.customMeasurements ?? [],
-      photos: data.photos ?? [],
-    }));
+
+    let created: Measurement[] | null = null;
+    try {
+      const token = await getToken();
+      if (token) {
+        const payload = {
+          customerId: items[0].customerId,
+          familyMemberId: items[0].familyMemberId ?? null,
+          measurementDate: items[0].measurementDate,
+          deliveryDate: items[0].deliveryDate ?? undefined,
+          notes: items[0].notes ?? undefined,
+          photos: items[0].photos ?? [],
+          items: items.map((it) => ({
+            productTypeId: it.productTypeId ?? undefined,
+            productType: it.productType,
+            featureLabel: it.featureLabel ?? undefined,
+            values: {
+              chest: it.chest,
+              shoulder: it.shoulder,
+              neck: it.neck,
+              sleeve: it.sleeve,
+              waist: it.waist,
+              length: it.length,
+              hip: it.hip,
+              thigh: it.thigh,
+              pantLength: it.pantLength,
+              bottomWidth: it.bottomWidth,
+              armhole: it.armhole,
+              wrist: it.wrist,
+            },
+            customMeasurements: it.customMeasurements ?? [],
+            notes: it.notes ?? undefined,
+            photos: it.photos ?? [],
+          })),
+        };
+        const apiRes = await api.measurements.addSession(token, payload);
+        if (apiRes && Array.isArray(apiRes.measurements)) {
+          created = apiRes.measurements;
+        } else if (apiRes && apiRes.id) {
+          created = [apiRes];
+        }
+      }
+    } catch (err) {
+      console.warn("addMeasurementSession API failed, using local save:", err);
+    }
+
+    if (!created) {
+      const now = new Date().toISOString();
+      const measurementSessionId = generateId();
+      created = items.map((data) => ({
+        id: generateId(),
+        tailorId: user.id,
+        createdAt: now,
+        measurementSessionId,
+        ...data,
+        customMeasurements: data.customMeasurements ?? [],
+        photos: data.photos ?? [],
+      }));
+    }
+
     await saveAllMeasurements([...all, ...created]);
-    setMeasurements((prev) => [...created, ...prev]);
+    setMeasurements((prev) => [...created!, ...prev]);
     return created;
   }
 
@@ -493,6 +706,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         return found ?? inv;
       }));
     }
+
+    try {
+      const token = await getToken();
+      if (token) {
+        await api.measurements.update(token, id, data);
+      }
+    } catch (err) {
+      console.warn("updateMeasurement API failed:", err);
+    }
   }
 
   /**
@@ -542,6 +764,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const all = await rawGet<Measurement>(STORAGE_KEYS.MEASUREMENTS);
     await saveAllMeasurements(all.filter((m) => m.id !== id));
     setMeasurements((prev) => prev.filter((m) => m.id !== id));
+
+    try {
+      const token = await getToken();
+      if (token) {
+        await api.measurements.delete(token, id);
+      }
+    } catch (err) {
+      console.warn("deleteMeasurement API failed:", err);
+    }
   }
 
   function getCustomerMeasurements(customerId: string) {
@@ -589,10 +820,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }) {
     if (!user) throw new Error("Not authenticated");
     const all = await rawGet<Invoice>(STORAGE_KEYS.INVOICES);
-    const [invoiceNumber, orderLabel] = await Promise.all([
-      getNextInvoiceNumber(),
-      getNextOrderLabel(),
-    ]);
     const subtotal = data.items.reduce((s, it) => s + it.price * it.quantity, 0);
     const customer = customers.find((c) => c.id === data.customerId);
     const items = data.items.map((item) => {
@@ -606,20 +833,59 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         familyMemberName: member?.name ?? item.familyMemberName,
       };
     });
-    const inv: Invoice = {
-      id: generateId(),
-      invoiceNumber,
-      orderLabel,
-      tailorId: user.id,
-      subtotal,
-      total: subtotal,
-      status: "pending",
-      createdAt: new Date().toISOString(),
-      ...data,
-      items,
-    };
+
+    let inv: Invoice | null = null;
+    try {
+      const token = await getToken();
+      if (token) {
+        inv = await api.invoices.create(token, {
+          customerId: data.customerId,
+          customerName: data.customerName,
+          customerMobile: data.customerMobile,
+          subtotal,
+          total: subtotal,
+          status: "pending",
+          deliveryDate: data.deliveryDate ?? undefined,
+          notes: data.notes ?? undefined,
+          items: items.map((it) => ({
+            productTypeId: it.productTypeId ?? undefined,
+            productType: it.productType,
+            featureLabel: it.featureLabel ?? undefined,
+            quantity: it.quantity,
+            price: it.price,
+            measurementId: it.measurementId ?? undefined,
+            familyMemberId: it.familyMemberId ?? undefined,
+            personName: it.personName,
+            relation: it.relation,
+            measurementValues: it.measurementValues ?? undefined,
+          })),
+        } as any);
+      }
+    } catch (err) {
+      console.warn("createInvoice API failed, using local save:", err);
+    }
+
+    if (!inv) {
+      const [invoiceNumber, orderLabel] = await Promise.all([
+        getNextInvoiceNumber(),
+        getNextOrderLabel(),
+      ]);
+      inv = {
+        id: generateId(),
+        invoiceNumber,
+        orderLabel,
+        tailorId: user.id,
+        subtotal,
+        total: subtotal,
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        ...data,
+        items,
+      };
+    }
+
     await saveAllInvoices([...all, inv]);
-    setInvoices((prev) => [inv, ...prev]);
+    setInvoices((prev) => [inv!, ...prev]);
     return inv;
   }
 
@@ -627,6 +893,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const all = await rawGet<Invoice>(STORAGE_KEYS.INVOICES);
     await saveAllInvoices(all.map((i) => (i.id === id ? { ...i, status } : i)));
     setInvoices((prev) => prev.map((i) => (i.id === id ? { ...i, status } : i)));
+    try {
+      const token = await getToken();
+      if (token) {
+        await api.invoices.updateStatus(token, id, status);
+      }
+    } catch (err) {
+      console.warn("updateInvoiceStatus API failed:", err);
+    }
   }
 
   async function deleteInvoice(id: string) {
@@ -650,6 +924,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const found = nextOrders.find((x) => x.id === o.id);
       return found ?? o;
     }));
+    try {
+      const token = await getToken();
+      if (token) {
+        await api.invoices.delete(token, id);
+      }
+    } catch (err) {
+      console.warn("deleteInvoice API failed:", err);
+    }
   }
 
   function getCustomerInvoices(customerId: string) {
@@ -722,9 +1004,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           status: apiOrder.status ?? "pending",
           deliveryDate: data.deliveryDate ?? null,
           notes: data.notes ?? null,
-          totalAmount,
-          advanceAmount: advancePaid,
-          balanceDue,
+          totalAmount: Number(apiOrder.totalAmount ?? totalAmount),
+          advanceAmount: Number(apiOrder.advanceAmount ?? advancePaid),
+          balanceDue: Number(apiOrder.balanceDue ?? balanceDue),
           createdAt: apiOrder.createdAt,
           updatedAt: apiOrder.updatedAt,
           items: (apiOrder.items ?? []).map((it: any) => ({
@@ -734,7 +1016,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             productType: it.productType,
             featureLabel: it.featureLabel ?? null,
             quantity: it.quantity,
-            price: it.price,
+            price: Number(it.price),
             measurementId: it.measurementId ?? null,
             familyMemberId: it.familyMemberId ?? null,
             personName: it.personName ?? null,
@@ -802,29 +1084,66 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setOrders((prev) =>
       prev.map((o) => (o.id === id ? { ...o, status, updatedAt: new Date().toISOString() } : o))
     );
+
+    // Best-effort sync to the server. If the call fails (offline / dev
+    // server not running) we still keep the local change — the next
+    // `refresh()` from the server will reconcile state.
+    try {
+      const token = await getToken();
+      if (token) {
+        await apiUpdateOrderStatus(token, id, status);
+      }
+    } catch (err) {
+      console.warn("updateOrderStatus API sync failed:", err);
+    }
   }
 
   async function deleteOrder(id: string) {
     // Cascading cleanup: when an order is deleted, any invoice whose
     // `orderId` points at it should drop the reference. The invoice
-    // itself stays so the payment record survives.
+    // itself stays so the payment record survives. We also drop the
+    // `invoiceId` link on any of this order's items so the order
+    // appears "uninvoiced" after deletion.
     const [allO, allI] = await Promise.all([
       rawGet<Order>(STORAGE_KEYS.ORDERS),
       rawGet<Invoice>(STORAGE_KEYS.INVOICES),
     ]);
+
+    // Drop the order locally first so the UI can update even if the
+    // server is unreachable. Errors are surfaced by the caller's catch.
     await saveAllOrders(allO.filter((o) => o.id !== id));
-    const nextInvoices = allI.map((inv) =>
-      inv.orderId === id ? { ...inv, orderId: undefined } : inv,
-    );
+    const nextInvoices = allI.map((inv) => {
+      if (inv.orderId !== id) return inv;
+      return { ...inv, orderId: undefined };
+    });
     await saveAllInvoices(nextInvoices);
     setOrders((prev) => prev.filter((o) => o.id !== id));
-    setInvoices((prev) => prev.map((inv) => {
-      const found = nextInvoices.find((x) => x.id === inv.id);
-      return found ?? inv;
-    }));
+    setInvoices((prev) =>
+      prev.map((inv) => {
+        const found = nextInvoices.find((x) => x.id === inv.id);
+        return found ?? inv;
+      })
+    );
+
+    // Best-effort server sync. We log + swallow the error here so the
+    // caller doesn't see a network blip as a hard delete failure; the
+    // local cache is already consistent and a later `refresh()` will
+    // catch up the server-side state.
+    try {
+      const token = await getToken();
+      if (token) {
+        await apiDeleteOrder(token, id);
+      }
+    } catch (err) {
+      console.warn("deleteOrder API sync failed (local delete succeeded):", err);
+    }
   }
 
-  async function generateInvoiceFromOrder(orderId: string, familyMemberId?: string | null) {
+  async function generateInvoiceFromOrder(
+    orderId: string,
+    familyMemberId?: string | null,
+    itemId?: string,
+  ) {
     if (!user) throw new Error("Not authenticated");
 
     const order = orders.find((o) => o.id === orderId);
@@ -836,7 +1155,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     let itemsToInvoice = order.items?.filter((it) => !it.invoiceId) ?? [];
     if (itemsToInvoice.length === 0) throw new Error("No uninvoiced items in this order");
 
-    if (familyMemberId) {
+    if (itemId) {
+      itemsToInvoice = itemsToInvoice.filter((it) => it.id === itemId);
+    } else if (familyMemberId) {
       if (familyMemberId === "self") {
         itemsToInvoice = itemsToInvoice.filter((it) => !it.familyMemberId || it.relation === "self");
       } else {
@@ -845,54 +1166,66 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (itemsToInvoice.length === 0) {
-      throw new Error("No uninvoiced items found for this family member");
+      throw new Error("No uninvoiced items found for this filter");
     }
 
     const subtotal = itemsToInvoice.reduce((s, it) => s + it.price * it.quantity, 0);
-    const invoiceNumber = await getNextInvoiceNumber();
-    const invoiceId = generateId();
 
-    const invoiceItemsList: InvoiceItem[] = itemsToInvoice.map((it) => ({
-      productTypeId: it.productTypeId ?? undefined,
-      productType: it.productType,
-      quantity: it.quantity,
-      price: it.price,
-      measurementId: it.measurementId ?? undefined,
-      familyMemberId: it.familyMemberId,
-      personName: it.personName,
-      relation: it.relation,
-      measurementValues: it.measurementValues ?? undefined,
-      featureLabel: it.featureLabel ?? undefined,
-    }));
+    let inv: Invoice | null = null;
+    try {
+      const token = await getToken();
+      if (token) {
+        inv = await api.orders.generateInvoice(token, orderId, familyMemberId ?? undefined, itemId);
+      }
+    } catch (err) {
+      console.warn("generateInvoiceFromOrder API failed, using local save:", err);
+    }
 
-    const inv: Invoice = {
-      id: invoiceId,
-      invoiceNumber,
-      orderLabel: order.orderNumber,
-      orderId: order.id,
-      tailorId: user.id,
-      customerId: order.customerId,
-      customerName: order.customerName,
-      customerMobile: order.customerMobile,
-      subtotal,
-      total: subtotal,
-      // Carry advance from order proportionally if billing a sub-set of members
-      paidAmount: familyMemberId ? undefined : (order.advanceAmount ?? 0),
-      status: "pending",
-      deliveryDate: order.deliveryDate ?? undefined,
-      notes: order.notes ?? undefined,
-      createdAt: new Date().toISOString(),
-      items: invoiceItemsList,
-    };
+    if (!inv) {
+      const invoiceNumber = await getNextInvoiceNumber();
+      const invoiceId = generateId();
+
+      const invoiceItemsList: InvoiceItem[] = itemsToInvoice.map((it) => ({
+        productTypeId: it.productTypeId ?? undefined,
+        productType: it.productType,
+        quantity: it.quantity,
+        price: it.price,
+        measurementId: it.measurementId ?? undefined,
+        familyMemberId: it.familyMemberId,
+        personName: it.personName,
+        relation: it.relation,
+        measurementValues: it.measurementValues ?? undefined,
+        featureLabel: it.featureLabel ?? undefined,
+      }));
+
+      inv = {
+        id: invoiceId,
+        invoiceNumber,
+        orderLabel: order.orderNumber,
+        orderId: order.id,
+        tailorId: user.id,
+        customerId: order.customerId,
+        customerName: order.customerName,
+        customerMobile: order.customerMobile,
+        subtotal,
+        total: subtotal,
+        paidAmount: familyMemberId ? undefined : (order.advanceAmount ?? 0),
+        status: "pending",
+        deliveryDate: order.deliveryDate ?? undefined,
+        notes: order.notes ?? undefined,
+        createdAt: new Date().toISOString(),
+        items: invoiceItemsList,
+      };
+    }
 
     await saveAllInvoices([...allInvoices, inv]);
-    setInvoices((prev) => [inv, ...prev]);
+    setInvoices((prev) => [inv!, ...prev]);
 
     const updatedOrders = allOrders.map((o) => {
       if (o.id === orderId) {
         const updatedItems = o.items?.map((it) => {
           const matched = itemsToInvoice.some((toInv) => toInv.id === it.id);
-          return matched ? { ...it, invoiceId } : it;
+          return matched ? { ...it, invoiceId: inv!.id } : it;
         }) ?? [];
         return { ...o, items: updatedItems, updatedAt: new Date().toISOString() };
       }
@@ -905,7 +1238,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         if (o.id === orderId) {
           const updatedItems = o.items?.map((it) => {
             const matched = itemsToInvoice.some((toInv) => toInv.id === it.id);
-            return matched ? { ...it, invoiceId } : it;
+            return matched ? { ...it, invoiceId: inv!.id } : it;
           }) ?? [];
           return { ...o, items: updatedItems, updatedAt: new Date().toISOString() };
         }

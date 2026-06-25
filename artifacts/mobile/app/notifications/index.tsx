@@ -138,7 +138,7 @@ export default function NotificationsScreen() {
             if (notif.invoiceId) {
               router.push(`/invoices/${notif.invoiceId}` as any);
             } else {
-              router.push("/(tabs)/invoices" as any);
+              router.push("/invoices" as any);
             }
           },
         },
