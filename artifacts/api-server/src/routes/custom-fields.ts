@@ -31,6 +31,10 @@ router.get("/", async (req: Request, res: Response) => {
 // ---- POST /api/custom-fields --------------------------------------------
 const createSchema = z.object({
   fieldName: z.string().min(1).max(100),
+  customerId: z.string().nullable().optional(),
+  familyMemberId: z.string().nullable().optional(),
+  productTypeId: z.string().nullable().optional(),
+  productType: z.string().nullable().optional(),
 });
 
 router.post("/", async (req: Request, res: Response) => {
@@ -44,6 +48,10 @@ router.post("/", async (req: Request, res: Response) => {
     id,
     tailorId: req.user!.id,
     fieldName: body.data.fieldName,
+    customerId: body.data.customerId ?? null,
+    familyMemberId: body.data.familyMemberId ?? null,
+    productTypeId: body.data.productTypeId ?? null,
+    productType: body.data.productType ?? null,
   });
   const [row] = await db
     .select()

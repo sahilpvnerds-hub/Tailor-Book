@@ -106,6 +106,14 @@ async function ensureColumns(database: string): Promise<void> {
 
   await addColumnIfMissing(database, "order_items", "product_type_id", "`product_type_id` varchar(36) NULL AFTER `order_id`");
   await addIndexIfMissing(database, "order_items", "idx_order_items_product_type", "(`product_type_id`)");
+
+  if (await tableExists(database, "custom_measurement_fields")) {
+    await addColumnIfMissing(database, "custom_measurement_fields", "customer_id", "`customer_id` varchar(36) NULL AFTER `field_name`");
+    await addColumnIfMissing(database, "custom_measurement_fields", "family_member_id", "`family_member_id` varchar(36) NULL AFTER `customer_id`");
+    await addColumnIfMissing(database, "custom_measurement_fields", "product_type_id", "`product_type_id` varchar(36) NULL AFTER `family_member_id`");
+    await addColumnIfMissing(database, "custom_measurement_fields", "product_type", "`product_type` varchar(100) NULL AFTER `product_type_id`");
+    await addIndexIfMissing(database, "custom_measurement_fields", "idx_custom_fields_scope", "(`customer_id`, `family_member_id`, `product_type_id`)");
+  }
 }
 
 async function ensureTables(): Promise<void> {
@@ -141,8 +149,13 @@ async function ensureTables(): Promise<void> {
       id varchar(36) NOT NULL PRIMARY KEY,
       tailor_id varchar(36) NOT NULL,
       field_name varchar(100) NOT NULL,
+      customer_id varchar(36) NULL,
+      family_member_id varchar(36) NULL,
+      product_type_id varchar(36) NULL,
+      product_type varchar(100) NULL,
       created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      INDEX custom_fields_tailor_idx (tailor_id)
+      INDEX custom_fields_tailor_idx (tailor_id),
+      INDEX idx_custom_fields_scope (customer_id, family_member_id, product_type_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 

@@ -219,6 +219,7 @@ router.post("/", async (req: Request, res: Response) => {
         relation: it.relation ?? null,
         measurementValues: it.measurementValues ?? null,
         invoiceId: null,
+        deliveryStatus: "pending" as any,
       });
     }
   });
@@ -230,7 +231,7 @@ router.post("/", async (req: Request, res: Response) => {
 
 // ---- PATCH /api/orders/:id/status -----------------------------------------
 const statusSchema = z.object({
-  status: z.enum(["pending", "completed", "cancelled"]),
+  status: z.enum(["pending", "partially-delivered", "completed", "cancelled"]),
 });
 
 router.patch("/:id/status", async (req: Request, res: Response) => {
@@ -253,7 +254,7 @@ router.patch("/:id/status", async (req: Request, res: Response) => {
     res.status(400).json({ error: "Invalid status" });
     return;
   }
-  await db
+  await (db as any)
     .update(orders)
     .set({ status: body.data.status })
     .where(eq(orders.id, id));
@@ -422,6 +423,88 @@ router.post("/:id/invoice", async (req: Request, res: Response) => {
   const items = await db.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, invoiceId));
 
   res.status(201).json({ ...inv, items: items.sort((a, b) => a.position - b.position) });
+});
+
+// ---- PATCH /api/orders/items/:id/delivery -------------------------------
+// Update delivery status of an order item and auto-calculate order status
+router.patch("/items/:id/delivery", async (req: Request, res: Response) => {
+  const id = getParam(req, "id");
+  const { deliveryStatus } = req.body as { deliveryStatus: "pending" | "delivered" };
+
+  if (deliveryStatus !== "pending" && deliveryStatus !== "delivered") {
+    res.status(400).json({ error: "Invalid delivery status" });
+    return;
+  }
+
+  // Find the order item
+  const [item] = await db
+    .select()
+    .from(orderItems)
+    .where(eq(orderItems.id, id))
+    .limit(1);
+
+  if (!item) {
+    res.status(404).json({ error: "Order item not found" });
+    return;
+  }
+
+  // Check ownership via the order
+  const [order] = await db
+    .select()
+    .from(orders)
+    .where(eq(orders.id, item.orderId))
+    .limit(1);
+
+  if (!order) {
+    res.status(404).json({ error: "Order not found" });
+    return;
+  }
+
+  if (!ensureOwnership(req, order.tailorId)) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  // Update the item's delivery status
+  await (db as any)
+    .update(orderItems)
+    .set({ deliveryStatus })
+    .where(eq(orderItems.id, id));
+
+  // Auto-calculate order status based on item delivery statuses
+  const allItems = await db
+    .select()
+    .from(orderItems)
+    .where(eq(orderItems.orderId, order.id));
+
+  const deliveredCount = allItems.filter((it: any) => it.deliveryStatus === "delivered").length;
+
+  let newStatus: "pending" | "partially-delivered" | "completed" | "cancelled";
+  if (deliveredCount === 0) {
+    newStatus = "pending";
+  } else if (deliveredCount === allItems.length) {
+    newStatus = "completed";
+  } else {
+    newStatus = "partially-delivered";
+  }
+
+  // Update order status
+  await (db as any)
+    .update(orders)
+    .set({ status: newStatus, updatedAt: new Date() })
+    .where(eq(orders.id, order.id));
+
+  // Return updated item and order
+  const [updatedItem] = await db
+    .select()
+    .from(orderItems)
+    .where(eq(orderItems.id, id))
+    .limit(1);
+
+  res.json({
+    item: updatedItem,
+    orderStatus: newStatus
+  });
 });
 
 export default router;

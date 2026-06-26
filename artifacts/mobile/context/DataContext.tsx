@@ -6,12 +6,14 @@ import {
   FamilyMember,
   Invoice,
   InvoiceItem,
+  ItemDeliveryStatus,
   Measurement,
   MeasurementUnit,
   Notification,
-  ProductType,
   Order,
   OrderItem,
+  OrderStatus,
+  ProductType,
 } from "@/types";
 import { useAuth } from "./AuthContext";
 import {
@@ -71,7 +73,15 @@ interface DataContextType {
   addProductType: (data: { name: string; amount: number; unit?: MeasurementUnit; features?: ProductType["features"] }) => Promise<ProductType>;
   updateProductType: (id: string, data: { name?: string; amount?: number; unit?: MeasurementUnit; features?: ProductType["features"] }) => Promise<void>;
   deleteProductType: (id: string) => Promise<void>;
-  addCustomField: (fieldName: string) => Promise<CustomMeasurementField>;
+  addCustomField: (
+    fieldName: string,
+    scope?: {
+      customerId?: string | null;
+      familyMemberId?: string | null;
+      productTypeId?: string | null;
+      productType?: string | null;
+    },
+  ) => Promise<CustomMeasurementField>;
   deleteCustomField: (id: string) => Promise<void>;
   addMeasurement: (data: Omit<Measurement, "id" | "tailorId" | "createdAt">) => Promise<Measurement>;
   addMeasurementSession: (items: Omit<Measurement, "id" | "tailorId" | "createdAt">[]) => Promise<Measurement[]>;
@@ -108,19 +118,36 @@ interface DataContextType {
     deliveryDate?: string;
     advanceAmount?: number;
   }) => Promise<Order>;
-  updateOrderStatus: (id: string, status: Order["status"]) => Promise<void>;
+  updateOrderStatus: (id: string, status?: Order["status"]) => Promise<void>;
   deleteOrder: (id: string) => Promise<void>;
   generateInvoiceFromOrder: (
     orderId: string,
     familyMemberId?: string | null,
     itemId?: string,
   ) => Promise<Invoice>;
+  updateItemDeliveryStatus: (itemId: string, status: ItemDeliveryStatus) => Promise<void>;
   markNotificationRead: (id: string) => Promise<void>;
   markAllRead: () => Promise<void>;
   clearAllNotifications: (options?: { muteTypes?: string[] }) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType>({} as DataContextType);
+
+/**
+ * Calculate order status based on item delivery statuses.
+ * - "pending": No items delivered
+ * - "partially-delivered": Some items delivered, some pending
+ * - "completed": All items delivered
+ */
+function calculateOrderStatus(items?: OrderItem[]): OrderStatus {
+  if (!items || items.length === 0) return "pending";
+
+  const deliveredCount = items.filter(it => it.deliveryStatus === "delivered").length;
+
+  if (deliveredCount === 0) return "pending";
+  if (deliveredCount === items.length) return "completed";
+  return "partially-delivered";
+}
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -154,6 +181,35 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         price: Number(it.price ?? 0),
       })),
     };
+  }
+
+  function normalizeInvoice(inv: any): Invoice {
+    return {
+      ...inv,
+      subtotal: Number(inv.subtotal ?? 0),
+      total: Number(inv.total ?? 0),
+      paidAmount: inv.paidAmount == null ? undefined : Number(inv.paidAmount),
+      items: (inv.items ?? []).map((it: any) => ({
+        ...it,
+        price: Number(it.price ?? 0),
+      })),
+    };
+  }
+
+  function normalizeMeasurement(m: any): Measurement {
+    const next = { ...m };
+    for (const key of [
+      "chest", "shoulder", "neck", "sleeve", "waist", "length",
+      "hip", "thigh", "pantLength", "bottomWidth", "armhole", "wrist",
+    ]) {
+      if (next[key] !== undefined && next[key] !== null && next[key] !== "") {
+        next[key] = Number(next[key]);
+      }
+    }
+    next.date = next.date ?? next.measurementDate ?? next.createdAt;
+    next.customMeasurements = next.customMeasurements ?? [];
+    next.photos = next.photos ?? [];
+    return next;
   }
 
   const refresh = useCallback(async () => {
@@ -193,8 +249,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         ]);
         c = apiC;
         fm = apiFm;
-        m = apiM;
-        inv = apiInv;
+        m = (apiM as any[]).map(normalizeMeasurement);
+        inv = (apiInv as any[]).map(normalizeInvoice);
         ord = (apiOrd as any[]).map(normalizeOrder);
         // Only use API product types if the server returned some.
         // Otherwise keep the locally-seeded defaults (from first-login
@@ -523,17 +579,34 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }
 
   // ── Custom Fields ─────────────────────────────────────────────────────────
-  async function addCustomField(fieldName: string) {
+  async function addCustomField(
+    fieldName: string,
+    scope?: {
+      customerId?: string | null;
+      familyMemberId?: string | null;
+      productTypeId?: string | null;
+      productType?: string | null;
+    },
+  ) {
     if (!user) throw new Error("Not authenticated");
     const token = await getToken();
     // Always persist to server first so the server-assigned UUID is used.
     // This ensures delete calls later can find the record by ID.
     let f: CustomMeasurementField;
     if (token) {
-      f = await apiAddCustomField(token, fieldName);
+      f = await apiAddCustomField(token, fieldName, scope);
     } else {
       // Offline fallback — local-only ID (delete will soft-fail on next sync)
-      f = { id: generateId(), tailorId: user.id, fieldName, createdAt: new Date().toISOString() };
+      f = {
+        id: generateId(),
+        tailorId: user.id,
+        fieldName,
+        customerId: scope?.customerId ?? null,
+        familyMemberId: scope?.familyMemberId ?? null,
+        productTypeId: scope?.productTypeId ?? null,
+        productType: scope?.productType ?? null,
+        createdAt: new Date().toISOString(),
+      };
     }
     const all = await rawGet<CustomMeasurementField>(STORAGE_KEYS.CUSTOM_FIELDS);
     await saveAllCustomFields([...all, f]);
@@ -560,7 +633,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     try {
       const token = await getToken();
       if (token) {
-        m = await api.measurements.add(token, { ...data, tailorId: user.id });
+        m = normalizeMeasurement(await api.measurements.add(token, { ...data, tailorId: user.id }));
       }
     } catch (err) {
       console.warn("addMeasurement API failed, using local save:", err);
@@ -621,9 +694,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         };
         const apiRes = await api.measurements.addSession(token, payload);
         if (apiRes && Array.isArray(apiRes.measurements)) {
-          created = apiRes.measurements;
+          created = apiRes.measurements.map(normalizeMeasurement);
         } else if (apiRes && apiRes.id) {
-          created = [apiRes];
+          created = [normalizeMeasurement(apiRes)];
         }
       }
     } catch (err) {
@@ -844,7 +917,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     try {
       const token = await getToken();
       if (token) {
-        inv = await api.invoices.create(token, {
+        inv = normalizeInvoice(await api.invoices.create(token, {
           customerId: data.customerId,
           customerName: data.customerName,
           customerMobile: data.customerMobile,
@@ -865,7 +938,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             relation: it.relation,
             measurementValues: it.measurementValues ?? undefined,
           })),
-        } as any);
+        } as any));
       }
     } catch (err) {
       console.warn("createInvoice API failed, using local save:", err);
@@ -1028,6 +1101,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             personName: it.personName ?? null,
             relation: it.relation ?? null,
             measurementValues: it.measurementValues ?? null,
+            deliveryStatus: it.deliveryStatus ?? "pending",
             invoiceId: it.invoiceId ?? null,
             createdAt: it.createdAt,
           })),
@@ -1055,6 +1129,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         personName: e.personName ?? null,
         relation: e.relation ?? null,
         measurementValues: e.measurementValues ?? undefined,
+        deliveryStatus: "pending",
         invoiceId: null,
       }));
       ord = {
@@ -1081,14 +1156,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return ord;
   }
 
-  async function updateOrderStatus(id: string, status: Order["status"]) {
+  async function updateOrderStatus(id: string, status?: Order["status"]) {
     const all = await rawGet<Order>(STORAGE_KEYS.ORDERS);
+    const order = all.find((o) => o.id === id);
+    if (!order) return;
+
+    // If status is provided (explicit update), use it. Otherwise, auto-calculate
+    // based on item delivery statuses.
+    const finalStatus = status ?? calculateOrderStatus(order.items);
+
     const updated = all.map((o) =>
-      o.id === id ? { ...o, status, updatedAt: new Date().toISOString() } : o
+      o.id === id ? { ...o, status: finalStatus, updatedAt: new Date().toISOString() } : o
     );
     await saveAllOrders(updated);
     setOrders((prev) =>
-      prev.map((o) => (o.id === id ? { ...o, status, updatedAt: new Date().toISOString() } : o))
+      prev.map((o) => (o.id === id ? { ...o, status: finalStatus, updatedAt: new Date().toISOString() } : o))
     );
 
     // Best-effort sync to the server. If the call fails (offline / dev
@@ -1096,7 +1178,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     // `refresh()` from the server will reconcile state.
     try {
       const token = await getToken();
-      if (token) {
+      if (token && status) { // Only sync explicit status updates, not auto-calculated ones
         await apiUpdateOrderStatus(token, id, status);
       }
     } catch (err) {
@@ -1104,7 +1186,44 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  async function deleteOrder(id: string) {
+  /**
+ * Update delivery status of a single item and auto-calculate order status
+ */
+async function updateItemDeliveryStatus(itemId: string, status: ItemDeliveryStatus) {
+  const allOrders = await rawGet<Order>(STORAGE_KEYS.ORDERS);
+  const all = [...allOrders];
+
+  for (let i = 0; i < all.length; i++) {
+    const order = all[i];
+    if (!order.items) continue;
+
+    const itemIndex = order.items.findIndex(it => it.id === itemId);
+    if (itemIndex === -1) continue;
+
+    // Update item's delivery status
+    const updatedItem = { ...order.items[itemIndex], deliveryStatus: status };
+    const updatedItems = [...order.items];
+    updatedItems[itemIndex] = updatedItem;
+
+    // Auto-calculate and update order status
+    const newOrderStatus = calculateOrderStatus(updatedItems);
+
+    all[i] = {
+      ...order,
+      items: updatedItems,
+      status: newOrderStatus,
+      updatedAt: new Date().toISOString()
+    };
+  }
+
+  await saveAllOrders(all);
+  setOrders(prev => prev.map(order => {
+    const updatedOrder = all.find(o => o.id === order.id);
+    return updatedOrder ? { ...updatedOrder } : order;
+  }));
+}
+
+async function deleteOrder(id: string) {
     // Cascading cleanup: when an order is deleted, any invoice whose
     // `orderId` points at it should drop the reference. The invoice
     // itself stays so the payment record survives. We also drop the
@@ -1152,7 +1271,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   ) {
     if (!user) throw new Error("Not authenticated");
 
-    const order = orders.find((o) => o.id === orderId);
+    let order = orders.find((o) => o.id === orderId);
+    if (!order) {
+      // Try to get from storage if not in state
+      const allOrders = await rawGet<Order>(STORAGE_KEYS.ORDERS);
+      order = allOrders.find((o) => o.id === orderId);
+    }
     if (!order) throw new Error("Order not found");
 
     const allInvoices = await rawGet<Invoice>(STORAGE_KEYS.INVOICES);
@@ -1181,7 +1305,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     try {
       const token = await getToken();
       if (token) {
-        inv = await api.orders.generateInvoice(token, orderId, familyMemberId ?? undefined, itemId);
+        inv = normalizeInvoice(await api.orders.generateInvoice(token, orderId, familyMemberId ?? undefined, itemId));
       }
     } catch (err) {
       console.warn("generateInvoiceFromOrder API failed, using local save:", err);
@@ -1298,6 +1422,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       getCustomerMeasurementsByProduct, getCustomerProducts,
       createInvoice, updateInvoiceStatus, deleteInvoice, getCustomerInvoices,
       addOrder, updateOrderStatus, deleteOrder, generateInvoiceFromOrder,
+      updateItemDeliveryStatus,
       markNotificationRead, markAllRead, clearAllNotifications,
     }}>
       {children}

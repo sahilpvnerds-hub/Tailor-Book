@@ -37,6 +37,12 @@ const statusConfig = {
     bg: "#FEF3C7",
     variant: "warning" as const,
   },
+  "partially-delivered": {
+    label: "Partially Delivered",
+    color: "#7C3AED",
+    bg: "#EDE9FE",
+    variant: "warning" as const,
+  },
   completed: {
     label: "Completed",
     color: "#059669",
@@ -70,13 +76,13 @@ export default function OrderDetailScreen() {
     invoices,
     measurements,
     updateOrderStatus,
+    updateItemDeliveryStatus,
     deleteOrder,
     generateInvoiceFromOrder,
     refresh,
   } = useData();
 
   const [invoiceLoading, setInvoiceLoading] = useState(false);
-  const [itemInvoiceLoadingId, setItemInvoiceLoadingId] = useState<string | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
@@ -90,58 +96,7 @@ export default function OrderDetailScreen() {
 
   const order = orders.find((o) => o.id === id);
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
-  function deliveryDaysLeft(dateStr?: string | null): number | null {
-    if (!dateStr) return null;
-    const diff = new Date(dateStr).getTime() - Date.now();
-    return Math.ceil(diff / (1000 * 60 * 60 * 24));
-  }
-
-  function buildOrderShareText(o: Order): string {
-    const items = o.items ?? [];
-    const lines = [
-      `TAILOR BOOK — ORDER`,
-      `==========================`,
-      `Order #: ${o.orderNumber}`,
-      `Customer: ${o.customerName}`,
-      `Mobile: ${o.customerMobile}`,
-      o.deliveryDate ? `Delivery Date: ${formatDate(o.deliveryDate)}` : ``,
-      ``,
-      `ITEMS`,
-      ...items.map((it) =>
-        `- ${it.productType}${it.featureLabel ? ` (${it.featureLabel})` : ""} x${it.quantity} — ${it.personName ?? o.customerName} — ${formatCurrency(Number(it.price) * it.quantity)}`
-      ),
-      ``,
-      `Total: ${formatCurrency(Number(o.totalAmount))}`,
-      o.advanceAmount ? `Advance Paid: ${formatCurrency(o.advanceAmount)}` : ``,
-      o.balanceDue ? `Balance Due: ${formatCurrency(o.balanceDue)}` : ``,
-      o.notes ? `Notes: ${o.notes}` : ``,
-      `==========================`,
-      `Thank you for choosing us!`,
-    ]
-      .filter(Boolean)
-      .join("\n");
-    return lines;
-  }
-
-  // Initialise / refresh per-item delivery map whenever the order changes.
-  // We treat the order-level status as the source of truth for the bulk:
-  // when the order is "completed", every item is delivered; otherwise each
-  // item is independent (defaults to "pending").
-  useEffect(() => {
-    if (!order) return;
-    setItemDelivery((prev) => {
-      const next: Record<string, ItemDeliveryStatus> = {};
-      (order.items ?? []).forEach((it) => {
-        next[it.id] =
-          order.status === "completed"
-            ? "delivered"
-            : prev[it.id] ?? "pending";
-      });
-      return next;
-    });
-  }, [order?.id, order?.status, order?.items?.length]);
-
+  // ── Handle loading/no order case first ──────────────────────────────────────
   if (!order) {
     return (
       <View
@@ -186,6 +141,53 @@ export default function OrderDetailScreen() {
 
   const currentOrder = order;
 
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  function deliveryDaysLeft(dateStr?: string | null): number | null {
+    if (!dateStr) return null;
+    const diff = new Date(dateStr).getTime() - Date.now();
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  }
+
+  function buildOrderShareText(o: Order): string {
+    const items = o.items ?? [];
+    const lines = [
+      `TAILOR BOOK — ORDER`,
+      `==========================`,
+      `Order #: ${o.orderNumber}`,
+      `Customer: ${o.customerName}`,
+      `Mobile: ${o.customerMobile}`,
+      o.deliveryDate ? `Delivery Date: ${formatDate(o.deliveryDate)}` : ``,
+      ``,
+      `ITEMS`,
+      ...items.map((it) =>
+        `- ${it.productType}${it.featureLabel ? ` (${it.featureLabel})` : ""} x${it.quantity} — ${it.personName ?? o.customerName} — ${formatCurrency(Number(it.price) * it.quantity)}`
+      ),
+      ``,
+      `Total: ${formatCurrency(Number(o.totalAmount))}`,
+      o.advanceAmount ? `Advance Paid: ${formatCurrency(o.advanceAmount)}` : ``,
+      o.balanceDue ? `Balance Due: ${formatCurrency(o.balanceDue)}` : ``,
+      o.notes ? `Notes: ${o.notes}` : ``,
+      `==========================`,
+      `Thank you for choosing us!`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+    return lines;
+  }
+
+  // Initialise / refresh per-item delivery map whenever the order changes.
+  // Source of truth is the persisted deliveryStatus on each item.
+  useEffect(() => {
+    setItemDelivery((prev) => {
+      const next: Record<string, ItemDeliveryStatus> = {};
+      (currentOrder.items ?? []).forEach((it) => {
+        // Use persisted deliveryStatus if available, fall back to order status for legacy data
+        next[it.id] = it.deliveryStatus ?? (currentOrder.status === "completed" ? "delivered" : "pending");
+      });
+      return next;
+    });
+  }, [currentOrder?.id, currentOrder?.status, currentOrder?.items?.length]);
+
   // Group items by family member / assignee
   const groupedItems = useMemo(() => {
     const groups: Record<
@@ -210,6 +212,7 @@ export default function OrderDetailScreen() {
     return Object.values(groups);
   }, [currentOrder.items]);
 
+  // Whether all items are delivered (order is completed)
   const allItemsDelivered = useMemo(
     () =>
       (currentOrder.items ?? []).every(
@@ -222,24 +225,24 @@ export default function OrderDetailScreen() {
   // per-item delivery toggles, and the mark-all banner all become no-ops.
   const isOrderLocked = currentOrder.status === "completed";
 
-  // Invoices that belong to any item in this order — used by the
-  // "Generate / View invoice for this Order" button after Total.
-  const allInvoicesForItems = useMemo(() => {
-    const ids = new Set<string>();
-    for (const it of currentOrder.items ?? []) {
-      if (it.invoiceId) ids.add(it.invoiceId);
-    }
-    return invoices.filter((i) => ids.has(i.id));
-  }, [currentOrder.items, invoices]);
-  const hasAnyItemInvoiced = allInvoicesForItems.length > 0;
+  // Find the single invoice for this order (one invoice per order)
+  const orderInvoice = useMemo(() => {
+    return invoices.find((inv) => inv.orderId === currentOrder.id);
+  }, [invoices, currentOrder.id]);
 
-  // ── Generate invoice (whole order or per-member) ────────────────────────
-  async function handleGenerateInvoice(memberId?: string | null) {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  // ── Generate single invoice for the whole order (all uninvoiced items) ──
+  async function generateSingleInvoice() {
     setInvoiceLoading(true);
     try {
-      const filterId = memberId === undefined ? undefined : memberId === null ? "self" : memberId;
-      const invoice = await generateInvoiceFromOrder(currentOrder.id, filterId);
+      // Check if order already has an invoice
+      const existingInvoice = invoices.find(
+        (inv) => inv.orderId === currentOrder.id,
+      );
+      if (existingInvoice) {
+        Alert.alert("Invoice Ready", `Invoice ${existingInvoice.invoiceNumber} is already generated.`);
+        return;
+      }
+      const invoice = await generateInvoiceFromOrder(currentOrder.id);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert(
         "Invoice Generated",
@@ -257,60 +260,16 @@ export default function OrderDetailScreen() {
   }
 
   // ── Per-item delivery with confirmation ────────────────────────────────
-  // When the user taps "Mark as Delivered" on a garment, we ask whether they
-  // also want a separate invoice generated for that single item. If yes, we
-  // invoice the item only (via `?itemId=...`) and mark it delivered in the
-  // same flow. If no, we just toggle the local delivery state.
+  // Toggle item delivery status and auto-calculate order status.
+  // No separate invoicing — a single invoice is generated only when ALL
+  // items are delivered.
   function confirmMarkItemDelivered(itemId: string) {
     if (isOrderLocked) return;
     const item = (currentOrder.items ?? []).find((it) => it.id === itemId);
     if (!item) return;
     const nextStatus: ItemDeliveryStatus =
       (itemDelivery[itemId] ?? "pending") === "delivered" ? "pending" : "delivered";
-    // Only ask the bill-separate question when (a) we're marking delivered
-    // (not reverting to pending) and (b) the item is not already invoiced.
-    if (nextStatus === "delivered" && !item.invoiceId) {
-      Alert.alert(
-        "Mark as Delivered",
-        "Are you want bill seperate invoice for this items",
-        [
-          { text: "No", style: "cancel" },
-          {
-            text: "Yes",
-            onPress: async () => {
-              setMarkingDelivered(itemId);
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setItemDelivery((prev) => ({ ...prev, [itemId]: nextStatus }));
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              // Generate a separate invoice for this single item
-              try {
-                setItemInvoiceLoadingId(itemId);
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                const inv = await generateInvoiceFromOrder(
-                  currentOrder.id,
-                  undefined,
-                  itemId,
-                );
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                Alert.alert(
-                  "Invoice Generated",
-                  `Invoice ${inv.invoiceNumber} created for this item.`,
-                  [{ text: "OK" }],
-                );
-              } catch (e: any) {
-                Alert.alert("Error", e?.message ?? "Failed to generate invoice");
-              } finally {
-                setItemInvoiceLoadingId(null);
-                setMarkingDelivered(null);
-              }
-            },
-          },
-        ],
-      );
-      return;
-    }
 
-    // Plain toggle (already-invoiced items, or revert to pending)
     Alert.alert(
       nextStatus === "delivered" ? "Mark as Delivered" : "Mark as Pending",
       nextStatus === "delivered"
@@ -325,8 +284,22 @@ export default function OrderDetailScreen() {
           onPress: async () => {
             setMarkingDelivered(itemId);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setItemDelivery((prev) => ({ ...prev, [itemId]: nextStatus }));
+            // Persist delivery status to storage and auto-calculate order status
+            await updateItemDeliveryStatus(itemId, nextStatus);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            // Check if this was the last item delivered — if so, generate invoice
+            if (nextStatus === "delivered") {
+              // Refresh order data to check if all items are now delivered
+              const latestOrder = orders.find((o) => o.id === currentOrder.id);
+              const updatedItems = { ...itemDelivery, [itemId]: "delivered" };
+              const allNowDelivered = (latestOrder?.items ?? []).every(
+                (it) => (updatedItems[it.id] ?? "pending") === "delivered",
+              );
+              if (allNowDelivered) {
+                // All items delivered — generate single invoice for the order
+                await generateSingleInvoice();
+              }
+            }
             setMarkingDelivered(null);
           },
         },
@@ -347,7 +320,7 @@ export default function OrderDetailScreen() {
     }
     Alert.alert(
       "Mark All Items Delivered?",
-      `This will mark all ${currentOrder.items.length} item(s) as delivered and set the order status to "Completed". Continue?`,
+      `This will mark all ${currentOrder.items.length} item(s) as delivered and generate a single invoice for the entire order. Continue?`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -356,13 +329,12 @@ export default function OrderDetailScreen() {
             setMarkingDelivered("__all__");
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             try {
-              const next: Record<string, ItemDeliveryStatus> = {};
-              (currentOrder.items ?? []).forEach((it) => {
-                next[it.id] = "delivered";
-              });
-              setItemDelivery(next);
-              await updateOrderStatus(currentOrder.id, "completed");
+              // Mark all items as delivered
+              for (const it of currentOrder.items ?? []) {
+                await updateItemDeliveryStatus(it.id, "delivered");
+              }
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              // Let the next refresh get updated data and auto-generate invoice
             } catch (e: any) {
               Alert.alert("Error", e?.message ?? "Failed to update status");
             } finally {
@@ -860,7 +832,7 @@ export default function OrderDetailScreen() {
                       : null;
                     const itemPhotos: string[] = (sourceMeas?.photos as string[] | undefined) ?? [];
                     const delivered = (itemDelivery[it.id] ?? "pending") === "delivered";
-                    const busy = markingDelivered === it.id || itemInvoiceLoadingId === it.id;
+                    const busy = markingDelivered === it.id;
 
                     return (
                       <View
@@ -1142,16 +1114,16 @@ export default function OrderDetailScreen() {
           )}
         </Card>
 
-        {/* ── Generate / View invoice for this Order ──────────────── */}
-        {allItemsDelivered && (
+        {/* ── View / Generate Invoice ─────────────────────────────── */}
+        {/* Invoice button is only visible when order is "completed" (all items
+            delivered) or when a single invoice has already been generated */}
+        {(currentOrder.status === "completed" || orderInvoice) && (
           <Card style={{ padding: 14, gap: 8, backgroundColor: c.card }}>
-            {hasAnyItemInvoiced ? (
+            {orderInvoice ? (
               <Pressable
                 onPress={() => {
-                  const first = allInvoicesForItems[0];
-                  if (!first) return;
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push(`/invoices/${first.id}` as any);
+                  router.push(`/invoices/${orderInvoice.id}` as any);
                 }}
                 style={({ pressed }) => ({
                   flexDirection: "row",
@@ -1164,24 +1136,14 @@ export default function OrderDetailScreen() {
                   opacity: pressed ? 0.85 : 1,
                 })}
               >
-                <MaterialIcons name="receipt-long" size={18} color={c.primary} />
-                <Text
-                  style={{
-                    fontSize: 13,
-                    fontFamily: "Inter_700Bold",
-                    color: c.primary,
-                  }}
-                >
-                  {allInvoicesForItems.length === 1
-                    ? `View invoice ${allInvoicesForItems[0].invoiceNumber}`
-                    : `View invoice ${allInvoicesForItems
-                        .map((i) => i.invoiceNumber)
-                        .join(", ")}`}
+                <MaterialIcons name="visibility" size={18} color={c.primary} />
+                <Text style={{ fontSize: 13, fontFamily: "Inter_700Bold", color: c.primary }}>
+                  View Invoice {orderInvoice.invoiceNumber}
                 </Text>
               </Pressable>
             ) : (
               <Pressable
-                onPress={() => handleGenerateInvoice(undefined)}
+                onPress={generateSingleInvoice}
                 disabled={invoiceLoading}
                 style={({ pressed }) => ({
                   flexDirection: "row",
@@ -1199,14 +1161,8 @@ export default function OrderDetailScreen() {
                 ) : (
                   <MaterialIcons name="receipt-long" size={18} color="#FFFFFF" />
                 )}
-                <Text
-                  style={{
-                    color: "#FFFFFF",
-                    fontSize: 13,
-                    fontFamily: "Inter_700Bold",
-                  }}
-                >
-                  Generate invoice for this Order
+                <Text style={{ color: "#FFFFFF", fontSize: 13, fontFamily: "Inter_700Bold" }}>
+                  Generate Invoice
                 </Text>
               </Pressable>
             )}

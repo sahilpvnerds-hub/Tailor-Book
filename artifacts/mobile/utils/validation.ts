@@ -3,11 +3,12 @@ export interface ValidationResult {
   errors: Record<string, string>;
 }
 
-// Mobile: exactly 10 digits, numbers only
+// Mobile: exactly 10 digits, numbers only, must start with 6, 7, 8, or 9
 export function validateMobile(value: string): string | undefined {
   if (!value.trim()) return "Mobile number is required";
   if (!/^\d+$/.test(value.trim())) return "Only numbers allowed";
   if (value.trim().length !== 10) return "Must be exactly 10 digits";
+  if (!/^[6789]\d{9}$/.test(value.trim())) return "Must start with 6, 7, 8, or 9";
   return undefined;
 }
 

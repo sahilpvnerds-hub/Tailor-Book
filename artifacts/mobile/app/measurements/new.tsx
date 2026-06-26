@@ -21,7 +21,7 @@ import { DatePicker } from "@/components/DatePicker";
 import { MEASUREMENT_FIELDS, getFieldsForProduct } from "@/constants/products";
 import { MeasurementKey } from "@/constants/measurementFields";
 import colors from "@/constants/colors";
-import type { Measurement } from "@/types";
+import type { CustomMeasurementField, Measurement } from "@/types";
 
 type MeasurementValues = Partial<Record<MeasurementKey, string>>;
 
@@ -54,6 +54,34 @@ function isValidMeasurement(value: string): boolean {
 
 function titleCase(value: string) {
   return value ? value[0].toUpperCase() + value.slice(1) : value;
+}
+
+function latestMeasurementKey(measurement: Measurement) {
+  return measurement.measurementDate ?? measurement.date ?? measurement.createdAt;
+}
+
+function customFieldMatchesScope(
+  field: CustomMeasurementField,
+  customerId: string,
+  familyMemberId: string | null,
+  productTypeId: string,
+  productType: string,
+) {
+  const hasPersonScope = !!field.customerId || field.familyMemberId !== undefined;
+  const hasProductScope = !!field.productTypeId || !!field.productType;
+
+  if (!hasPersonScope && !hasProductScope) return true;
+
+  if (field.customerId && field.customerId !== customerId) return false;
+  if (field.customerId && (field.familyMemberId ?? null) !== (familyMemberId ?? null)) return false;
+  if (!field.customerId && field.familyMemberId && field.familyMemberId !== familyMemberId) return false;
+
+  if (field.productTypeId && field.productTypeId !== productTypeId) return false;
+  if (!field.productTypeId && field.productType) {
+    return field.productType.toLowerCase() === productType.toLowerCase();
+  }
+
+  return true;
 }
 
 export default function NewMeasurementScreen() {
@@ -115,13 +143,26 @@ export default function NewMeasurementScreen() {
     ? `${selectedFamilyMember.name} (${titleCase(selectedFamilyMember.relation)})`
     : `${selectedCustomer?.name ?? params.customerName ?? "Customer"} (Self)`;
 
-  function latestPreviousMeasurement(productName: string, personId: string) {
+  function latestPreviousMeasurement(productId: string, productName: string, personId: string) {
     return measurements
       .filter((m) => {
         const samePerson = personId === SELF_PERSON_ID ? !m.familyMemberId : m.familyMemberId === personId;
-        return m.customerId === selectedCustomerId && samePerson && m.productType === productName;
+        const sameProduct =
+          (productId && m.productTypeId === productId) ||
+          m.productType.toLowerCase() === productName.toLowerCase();
+        return m.customerId === selectedCustomerId && samePerson && sameProduct;
       })
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+      .sort((a, b) =>
+        latestMeasurementKey(b).localeCompare(latestMeasurementKey(a)) ||
+        b.createdAt.localeCompare(a.createdAt)
+      )[0];
+  }
+
+  function customFieldsForProduct(productId: string, productName: string) {
+    const familyMemberId = selectedPersonId === SELF_PERSON_ID ? null : selectedPersonId;
+    return customFields.filter((field) =>
+      customFieldMatchesScope(field, selectedCustomerId, familyMemberId, productId, productName)
+    );
   }
 
   function buildDraft(productId: string, expanded = true): ProductDraft {
@@ -135,7 +176,7 @@ export default function NewMeasurementScreen() {
     };
     if (!product || !selectedCustomerId) return draft;
 
-    const latest = latestPreviousMeasurement(product.name, selectedPersonId);
+    const latest = latestPreviousMeasurement(product.id, product.name, selectedPersonId);
     if (!latest) return draft;
 
     for (const fieldKey of getFieldsForProduct(product.name)) {
@@ -146,7 +187,8 @@ export default function NewMeasurementScreen() {
     }
 
     for (const cm of latest.customMeasurements ?? []) {
-      const match = customFields.find((cf) => cf.fieldName.toLowerCase() === cm.label.toLowerCase());
+      const match = customFieldsForProduct(product.id, product.name)
+        .find((cf) => cf.fieldName.toLowerCase() === cm.label.toLowerCase());
       if (match) draft.customValues[match.id] = String(cm.value);
     }
 
@@ -256,7 +298,17 @@ export default function NewMeasurementScreen() {
       Alert.alert("Validation", "Field name must be at least 2 characters");
       return;
     }
-    await addCustomField(trimmed);
+    const product = productTypes.find((p) => p.id === activeProductId) ?? productTypes.find((p) => selectedProductIds.includes(p.id));
+    if (!selectedCustomerId || !product) {
+      Alert.alert("Product required", "Please select a customer and product before adding a custom field.");
+      return;
+    }
+    await addCustomField(trimmed, {
+      customerId: selectedCustomerId,
+      familyMemberId: selectedPersonId === SELF_PERSON_ID ? null : selectedPersonId,
+      productTypeId: product.id,
+      productType: product.name,
+    });
     setNewFieldName("");
     setShowCustomModal(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -324,7 +376,7 @@ export default function NewMeasurementScreen() {
         productTypeId: product.id,
         featureLabel:
           draft.selectedFeatures.length > 0 ? draft.selectedFeatures.join(", ") : undefined,
-        customMeasurements: customFields
+        customMeasurements: customFieldsForProduct(product.id, product.name)
           .map((cf) => ({ label: cf.fieldName, value: parseFloat(draft.customValues[cf.id] || "0") }))
           .filter((cm) => cm.value > 0),
         notes: notes.trim(),
@@ -559,6 +611,7 @@ export default function NewMeasurementScreen() {
               if (!personGender || personGender === "unisex") return true;
               return f.gender === personGender;
             });
+            const productCustomFields = customFieldsForProduct(product.id, product.name);
             const expanded = draft.expanded;
             const productErrorCount = Object.keys(draft.fieldErrors).length;
 
@@ -680,12 +733,12 @@ export default function NewMeasurementScreen() {
                       </View>
                     )}
 
-                    {customFields.length > 0 && (
+                    {productCustomFields.length > 0 && (
                       <View style={{ borderTopWidth: 1, borderTopColor: c.border }}>
                         <Text style={{ paddingHorizontal: 16, paddingTop: 12, fontSize: 11, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
                           Custom
                         </Text>
-                        {customFields.map((cf, idx) => (
+                        {productCustomFields.map((cf, idx) => (
                           <View key={cf.id}>
                             <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 11 }}>
                               <View style={{ width: 106 }}>
@@ -702,7 +755,7 @@ export default function NewMeasurementScreen() {
                               />
                               <Text style={{ marginLeft: 6, fontSize: 13, color: c.mutedForeground, width: 14 }}>"</Text>
                             </View>
-                            {idx < customFields.length - 1 && <View style={{ height: 1, backgroundColor: c.border, marginLeft: 16 }} />}
+                            {idx < productCustomFields.length - 1 && <View style={{ height: 1, backgroundColor: c.border, marginLeft: 16 }} />}
                           </View>
                         ))}
                       </View>

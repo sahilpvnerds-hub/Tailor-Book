@@ -124,6 +124,11 @@ export interface CustomMeasurementField {
   id: string;
   tailorId: string;
   fieldName: string;
+  /** Scope for fields created for one customer/person/product. Null/undefined means legacy global field. */
+  customerId?: string | null;
+  familyMemberId?: string | null;
+  productTypeId?: string | null;
+  productType?: string | null;
   createdAt: string;
 }
 
@@ -227,7 +232,9 @@ export interface PendingOtp {
 }
 
 // ── Orders ─────────────────────────────────────────────────────────────
-export type OrderStatus = "pending" | "completed" | "cancelled";
+export type OrderStatus = "pending" | "partially-delivered" | "completed" | "cancelled";
+
+export type ItemDeliveryStatus = "pending" | "delivered";
 
 export interface OrderItem {
   id: string;
@@ -243,6 +250,7 @@ export interface OrderItem {
   relation?: string | null;
   measurementValues?: Record<string, string> | null;
   invoiceId?: string | null;
+  deliveryStatus?: ItemDeliveryStatus;
   createdAt: string;
 }
 

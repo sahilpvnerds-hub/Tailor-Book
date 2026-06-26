@@ -833,14 +833,23 @@ export async function getCustomFields(token: string): Promise<CustomMeasurementF
   return data;
 }
 
-export async function addCustomField(token: string, fieldName: string): Promise<CustomMeasurementField> {
+export async function addCustomField(
+  token: string,
+  fieldName: string,
+  scope?: {
+    customerId?: string | null;
+    familyMemberId?: string | null;
+    productTypeId?: string | null;
+    productType?: string | null;
+  },
+): Promise<CustomMeasurementField> {
   const response = await fetch(`${API_BASE_URL}/custom-fields`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`
     },
-    body: JSON.stringify({ fieldName }),
+    body: JSON.stringify({ fieldName, ...(scope ?? {}) }),
   });
   const data = await parseJson<any>(response, "Failed to add custom field");
   if (!response.ok) {

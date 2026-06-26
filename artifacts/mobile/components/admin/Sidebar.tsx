@@ -9,8 +9,6 @@ interface NavItem {
   label: string;
   href: string;
   icon: keyof typeof MaterialIcons.glyphMap;
-  /** When set, a small badge is shown in the sidebar (e.g. pending approvals). */
-  badge?: number;
   /** Optional sub-section title rendered above the item. */
   section?: string;
 }
@@ -18,30 +16,25 @@ interface NavItem {
 interface SidebarProps {
   userName: string;
   userEmail: string;
-  pendingCount: number;
   onLogout: () => void;
 }
 
 const NAV: NavItem[] = [
   { label: "Overview", href: "/admin", icon: "dashboard", section: "GENERAL" },
   { label: "Tailors", href: "/admin/tailors", icon: "store", section: "OPERATIONS" },
-  { label: "Pending Approvals", href: "/admin/tailors/pending", icon: "pending-actions", badge: 0 /* filled in by parent */ },
   { label: "Products", href: "/admin/products", icon: "local-offer", section: "CATALOG" },
   { label: "Customers", href: "/admin/customers", icon: "people", section: "CATALOG" },
   { label: "Orders", href: "/admin/orders", icon: "shopping-bag" },
   { label: "Invoices", href: "/admin/invoices", icon: "receipt-long" },
 ];
 
-export function Sidebar({ userName, userEmail, pendingCount, onLogout }: SidebarProps) {
+export function Sidebar({ userName, userEmail, onLogout }: SidebarProps) {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const pathname = usePathname() ?? "";
 
-  // Inject the live pending badge
-  const items: NavItem[] = NAV.map((n) =>
-    n.href === "/admin/tailors/pending" ? { ...n, badge: pendingCount } : n,
-  );
+  const items = NAV;
 
   return (
     <View
@@ -151,29 +144,6 @@ export function Sidebar({ userName, userEmail, pendingCount, onLogout }: Sidebar
                   >
                     {item.label}
                   </Text>
-                  {item.badge && item.badge > 0 ? (
-                    <View
-                      style={{
-                        minWidth: 20,
-                        height: 20,
-                        borderRadius: 10,
-                        paddingHorizontal: 6,
-                        backgroundColor: isActive ? c.primaryForeground : c.warning,
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <Text
-                        style={{
-                          color: isActive ? c.primary : c.warningForeground,
-                          fontSize: 10,
-                          fontWeight: "800",
-                        }}
-                      >
-                        {item.badge}
-                      </Text>
-                    </View>
-                  ) : null}
                 </Pressable>
               </View>
             );

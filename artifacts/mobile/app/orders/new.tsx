@@ -19,7 +19,7 @@ import { useColors } from "@/hooks/useColors";
 import { useData } from "@/context/DataContext";
 import { Button, Card, Input } from "@/components/ui";
 import { DatePicker } from "@/components/DatePicker";
-import { OrderItem, Relation, Measurement, ProductType, Gender } from "@/types";
+import { OrderItem, Relation, Measurement, ProductType, Gender, CustomMeasurementField } from "@/types";
 import { formatCurrency } from "@/utils/storage";
 import { getFieldsForProduct, MEASUREMENT_FIELDS } from "@/constants/products";
 import { MeasurementKey } from "@/constants/measurementFields";
@@ -37,10 +37,38 @@ function titleCase(value: string) {
   return value ? value[0].toUpperCase() + value.slice(1) : value;
 }
 
+function latestMeasurementKey(measurement: Measurement) {
+  return measurement.measurementDate ?? measurement.date ?? measurement.createdAt;
+}
+
 function featureMatchesGender(featureGender: "male" | "female" | "both" | undefined, assigneeGender?: Gender) {
   if (!featureGender || featureGender === "both") return true;
   if (!assigneeGender || assigneeGender === "unisex") return true;
   return featureGender === assigneeGender;
+}
+
+function customFieldMatchesScope(
+  field: CustomMeasurementField,
+  customerId: string,
+  familyMemberId: string | null,
+  productTypeId: string,
+  productType: string,
+) {
+  const hasPersonScope = !!field.customerId || field.familyMemberId !== undefined;
+  const hasProductScope = !!field.productTypeId || !!field.productType;
+
+  if (!hasPersonScope && !hasProductScope) return true;
+
+  if (field.customerId && field.customerId !== customerId) return false;
+  if (field.customerId && (field.familyMemberId ?? null) !== (familyMemberId ?? null)) return false;
+  if (!field.customerId && field.familyMemberId && field.familyMemberId !== familyMemberId) return false;
+
+  if (field.productTypeId && field.productTypeId !== productTypeId) return false;
+  if (!field.productTypeId && field.productType) {
+    return field.productType.toLowerCase() === productType.toLowerCase();
+  }
+
+  return true;
 }
 
 interface LocalItem {
@@ -135,19 +163,45 @@ export default function NewOrderScreen() {
   const [localItems, setLocalItems] = useState<LocalItem[]>([]);
 
   // Find latest measurement for a person and product type
-  function findLatestMeasurement(customerId: string, familyMemberId: string | null, productTypeName: string): Measurement | null {
+  function findLatestMeasurement(
+    customerId: string,
+    familyMemberId: string | null,
+    productTypeId: string,
+    productTypeName: string,
+  ): Measurement | null {
     if (!customerId) return null;
     return measurements
       .filter((m) => {
         const samePerson = familyMemberId === null ? !m.familyMemberId : m.familyMemberId === familyMemberId;
-        return m.customerId === customerId && samePerson && m.productType.toLowerCase() === productTypeName.toLowerCase();
+        const sameProduct =
+          (productTypeId && m.productTypeId === productTypeId) ||
+          m.productType.toLowerCase() === productTypeName.toLowerCase();
+        return m.customerId === customerId && samePerson && sameProduct;
       })
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] || null;
+      .sort((a, b) =>
+        latestMeasurementKey(b).localeCompare(latestMeasurementKey(a)) ||
+        b.createdAt.localeCompare(a.createdAt)
+      )[0] || null;
+  }
+
+  function getCustomFieldsForScope(
+    customerId: string,
+    familyMemberId: string | null,
+    productTypeId: string,
+    productTypeName: string,
+  ) {
+    return customFields.filter((field) =>
+      customFieldMatchesScope(field, customerId, familyMemberId, productTypeId, productTypeName)
+    );
+  }
+
+  function getCustomFieldsForItem(item: LocalItem) {
+    return getCustomFieldsForScope(selectedCustomerId, item.familyMemberId, item.productTypeId, item.productType);
   }
 
   // Pre-fill or build measurement details
-  function getMeasurementState(customerId: string, familyMemberId: string | null, productTypeName: string) {
-    const latest = findLatestMeasurement(customerId, familyMemberId, productTypeName);
+  function getMeasurementState(customerId: string, familyMemberId: string | null, productTypeId: string, productTypeName: string) {
+    const latest = findLatestMeasurement(customerId, familyMemberId, productTypeId, productTypeName);
     if (!latest) {
       return {
         measurementId: null,
@@ -161,12 +215,14 @@ export default function NewOrderScreen() {
     const mVals: Record<string, string> = {};
     MEASUREMENT_KEYS.forEach((k) => {
       const v = (latest as any)[k];
-      if (typeof v === "number" && v > 0) mVals[k] = String(v);
+      const n = Number(v);
+      if (Number.isFinite(n) && n > 0) mVals[k] = String(n);
     });
 
     const cVals: Record<string, string> = {};
+    const scopedFields = getCustomFieldsForScope(customerId, familyMemberId, productTypeId, productTypeName);
     latest.customMeasurements?.forEach((cm) => {
-      const match = customFields.find((cf) => cf.fieldName.toLowerCase() === cm.label.toLowerCase());
+      const match = scopedFields.find((cf) => cf.fieldName.toLowerCase() === cm.label.toLowerCase());
       if (match) cVals[match.id] = String(cm.value);
     });
 
@@ -212,7 +268,7 @@ export default function NewOrderScreen() {
   useEffect(() => {
     if (selectedCustomerId && localItems.length === 0 && productTypes.length > 0) {
       const pt = productTypes[0];
-      const measState = getMeasurementState(selectedCustomerId, null, pt.name);
+      const measState = getMeasurementState(selectedCustomerId, null, pt.id, pt.name);
       setLocalItems([
         {
           id: Math.random().toString(),
@@ -319,7 +375,7 @@ export default function NewOrderScreen() {
   function addLocalItem() {
     if (productTypes.length === 0) return;
     const pt = productTypes[0];
-    const measState = getMeasurementState(selectedCustomerId, null, pt.name);
+    const measState = getMeasurementState(selectedCustomerId, null, pt.id, pt.name);
     setLocalItems((prev) => [
       ...prev.map((it) => ({ ...it, expanded: false })),
       {
@@ -346,7 +402,7 @@ export default function NewOrderScreen() {
     setLocalItems((prev) => {
       const updated = [...prev];
       const item = updated[idx];
-      const measState = getMeasurementState(selectedCustomerId, item.familyMemberId, pt.name);
+      const measState = getMeasurementState(selectedCustomerId, item.familyMemberId, pt.id, pt.name);
       updated[idx] = {
         ...item,
         productTypeId,
@@ -363,7 +419,7 @@ export default function NewOrderScreen() {
     setLocalItems((prev) => {
       const updated = [...prev];
       const item = updated[idx];
-      const measState = getMeasurementState(selectedCustomerId, familyMemberId, item.productType);
+      const measState = getMeasurementState(selectedCustomerId, familyMemberId, item.productTypeId, item.productType);
       const nextItem = { ...item, familyMemberId };
       updated[idx] = {
         ...nextItem,
@@ -439,7 +495,7 @@ export default function NewOrderScreen() {
         if (Number.isFinite(n) && n > 0) valuesToSave[k] = n;
       });
 
-      const customToSave = customFields
+      const customToSave = getCustomFieldsForItem(item)
         .map((cf) => {
           const raw = measDraftCustom[cf.id] || "";
           const n = parseFloat(raw);
@@ -526,7 +582,17 @@ export default function NewOrderScreen() {
     }
     setSavingCustomField(true);
     try {
-      await addCustomField(trimmed);
+      const item = activeItemIndex === null ? null : localItems[activeItemIndex];
+      if (!item) {
+        Alert.alert("No item selected", "Please select an order item before adding a custom field.");
+        return;
+      }
+      await addCustomField(trimmed, {
+        customerId: selectedCustomerId,
+        familyMemberId: item.familyMemberId,
+        productTypeId: item.productTypeId,
+        productType: item.productType,
+      });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setNewCustomFieldName("");
       setShowAddCustomFieldModal(false);
@@ -704,6 +770,8 @@ export default function NewOrderScreen() {
   }
 
   const topPad = Platform.OS === "web" ? 67 : 0;
+  const activeItem = activeItemIndex === null ? null : localItems[activeItemIndex] ?? null;
+  const activeCustomFields = activeItem ? getCustomFieldsForItem(activeItem) : [];
 
   return (
     <KeyboardAvoidingView
@@ -1617,9 +1685,9 @@ export default function NewOrderScreen() {
                   </Pressable>
                 </View>
 
-                {customFields.length > 0 && (
+                {activeCustomFields.length > 0 && (
                   <View style={{ flexDirection: "row", flexWrap: "wrap", marginHorizontal: -6 }}>
-                    {customFields.map((cf) => (
+                    {activeCustomFields.map((cf) => (
                       <View key={cf.id} style={{ width: "50%", paddingHorizontal: 6, marginBottom: 12 }}>
                         {/* Label row with delete button */}
                         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
@@ -1662,7 +1730,7 @@ export default function NewOrderScreen() {
                   </View>
                 )}
 
-                {customFields.length === 0 && (
+                {activeCustomFields.length === 0 && (
                   <View
                     style={{
                       padding: 12,

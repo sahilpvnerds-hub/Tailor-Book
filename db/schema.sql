@@ -126,12 +126,17 @@ CREATE TABLE IF NOT EXISTS product_types (
 -- Per-tailor extra measurement field names (e.g. "Cuff", "Bicep").
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS custom_measurement_fields (
-  id         VARCHAR(36)  NOT NULL PRIMARY KEY,
-  tailor_id  VARCHAR(36)  NOT NULL,
-  field_name VARCHAR(100) NOT NULL,
-  created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  id               VARCHAR(36)  NOT NULL PRIMARY KEY,
+  tailor_id        VARCHAR(36)  NOT NULL,
+  field_name       VARCHAR(100) NOT NULL,
+  customer_id      VARCHAR(36)  NULL,
+  family_member_id VARCHAR(36)  NULL,
+  product_type_id  VARCHAR(36)  NULL,
+  product_type     VARCHAR(100) NULL,
+  created_at       TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-  INDEX idx_custom_fields_tailor (tailor_id)
+  INDEX idx_custom_fields_tailor (tailor_id),
+  INDEX idx_custom_fields_scope (customer_id, family_member_id, product_type_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 

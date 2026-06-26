@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -14,7 +14,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAdminGuard } from "@/hooks/useAdminGuard";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
-import { getToken } from "@/utils/api";
 import { Sidebar } from "@/components/admin/Sidebar";
 import { PageHeader, type Crumb } from "@/components/admin/PageHeader";
 
@@ -36,33 +35,7 @@ export default function AdminLayout() {
   const { width } = useWindowDimensions();
   const isWide = width >= 900;
 
-  const [pendingCount, setPendingCount] = useState(0);
   const auth = useAuth();
-
-  // Fetch the pending-approvals count once on mount + when the pathname
-  // changes (so the badge updates after a user is approved on /tailors/pending).
-  useEffect(() => {
-    if (!ready) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const token = await getToken();
-        if (!token) return;
-        const res = await fetch(
-          (process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:4000") + "/api/admin/users?status=pending",
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-        if (!res.ok) return;
-        const rows = (await res.json()) as unknown[];
-        if (!cancelled) setPendingCount(Array.isArray(rows) ? rows.length : 0);
-      } catch {
-        // Non-fatal — the badge just won't show.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [ready, pathname]);
 
   const handleLogout = useCallback(async () => {
     await auth.logout();
@@ -85,7 +58,6 @@ export default function AdminLayout() {
         <Sidebar
           userName={user?.name ?? "Admin"}
           userEmail={user?.email ?? ""}
-          pendingCount={pendingCount}
           onLogout={handleLogout}
         />
       ) : null}
@@ -119,23 +91,6 @@ export default function AdminLayout() {
             >
               {meta.title}
             </Text>
-            {pendingCount > 0 ? (
-              <Pressable
-                onPress={() => router.push("/admin/tailors/pending" as any)}
-                style={({ pressed }) => ({
-                  flexDirection: "row",
-                  alignItems: "center",
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  borderRadius: 8,
-                  backgroundColor: pressed ? c.secondary : c.warning,
-                })}
-              >
-                <Text style={{ color: c.warningForeground, fontSize: 11, fontWeight: "700" }}>
-                  {pendingCount} pending
-                </Text>
-              </Pressable>
-            ) : null}
           </View>
         ) : null}
 
@@ -186,7 +141,7 @@ export default function AdminLayout() {
               title={meta.title}
               subtitle={meta.subtitle}
               crumbs={meta.crumbs}
-              actions={meta.actions(router, pendingCount, handleLogout)}
+              actions={meta.actions(router, handleLogout)}
             />
           </View>
         ) : null}
@@ -223,7 +178,6 @@ interface PageMeta {
   crumbs: Crumb[];
   actions: (
     router: ReturnType<typeof useRouter>,
-    pendingCount: number,
     onLogout: () => void,
   ) => import("@/components/admin/PageHeader").PageAction[];
 }
@@ -241,6 +195,16 @@ function pageMeta(pathname: string, userName?: string): PageMeta {
       title: "Overview",
       subtitle: `Welcome back${userName ? `, ${userName.split(" ")[0]}` : ""}. Here's the state of your platform today.`,
       crumbs: [{ label: "Admin", href: "/admin" }, { label: "Overview" }],
+      actions: () => [],
+    };
+  }
+
+  // Tailors
+  if (pathname === "/admin/tailors") {
+    return {
+      title: "Tailors",
+      subtitle: "All registered tailors on the platform",
+      crumbs: [...rootCrumbs, { label: "Tailors" }],
       actions: () => [],
     };
   }

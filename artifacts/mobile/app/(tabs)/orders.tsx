@@ -20,10 +20,11 @@ export default function OrdersScreen() {
   const insets = useSafeAreaInsets();
   const { orders } = useData();
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | "pending" | "completed" | "cancelled">("all");
+  const [filter, setFilter] = useState<"all" | "pending" | "partially-delivered" | "completed" | "cancelled">("all");
 
   const statusConfig = {
     pending: { label: "Pending", color: "#D97706", bg: "#FEF3C7", variant: "warning" as const },
+    "partially-delivered": { label: "Partially Delivered", color: "#7C3AED", bg: "#EDE9FE", variant: "warning" as const },
     completed: { label: "Completed", color: "#059669", bg: "#D1FAE5", variant: "success" as const },
     cancelled: { label: "Cancelled", color: "#DC2626", bg: "#FEE2E2", variant: "destructive" as const },
   };
@@ -105,7 +106,7 @@ export default function OrdersScreen() {
 
         {/* Filter pills */}
         <View style={{ flexDirection: "row", gap: 8 }}>
-          {(["all", "pending", "completed", "cancelled"] as const).map((f) => (
+          {(["all", "pending", "partially-delivered", "completed", "cancelled"] as const).map((f) => (
             <Pressable
               key={f}
               onPress={() => setFilter(f)}
@@ -123,7 +124,7 @@ export default function OrdersScreen() {
                   color: filter === f ? c.primaryForeground : c.mutedForeground,
                 }}
               >
-                {f === "all" ? "All" : statusConfig[f].label}
+                {f === "all" ? "All" : f === "partially-delivered" ? "Partial" : statusConfig[f].label}
               </Text>
             </Pressable>
           ))}

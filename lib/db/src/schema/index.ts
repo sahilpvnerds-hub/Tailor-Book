@@ -100,6 +100,10 @@ export const customMeasurementFields = mysqlTable("custom_measurement_fields", {
   id: varchar("id", { length: 36 }).notNull().primaryKey(),
   tailorId: varchar("tailor_id", { length: 36 }).notNull(),
   fieldName: varchar("field_name", { length: 100 }).notNull(),
+  customerId: varchar("customer_id", { length: 36 }),
+  familyMemberId: varchar("family_member_id", { length: 36 }),
+  productTypeId: varchar("product_type_id", { length: 36 }),
+  productType: varchar("product_type", { length: 100 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -184,7 +188,7 @@ export const invoices = mysqlTable("invoices", {
   total: decimal("total", { precision: 12, scale: 2 }).notNull().default("0"),
   /** Advance / deposit already received — carried over from the parent order. */
   paidAmount: decimal("paid_amount", { precision: 12, scale: 2 }).notNull().default("0"),
-  status: mysqlEnum("status", ["pending", "completed", "cancelled"]).notNull().default("pending"),
+  status: mysqlEnum("status", ["pending", "partially-delivered", "completed", "cancelled"]).notNull().default("pending"),
   deliveryDate: date("delivery_date"),
   notes: text("notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -224,6 +228,7 @@ export const orderItems = mysqlTable("order_items", {
   relation: varchar("relation", { length: 50 }),
   measurementValues: json("measurement_values").$type<Record<string, string>>(),
   invoiceId: varchar("invoice_id", { length: 36 }),
+  deliveryStatus: mysqlEnum("delivery_status", ["pending", "delivered"]).notNull().default("pending"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
