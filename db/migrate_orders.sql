@@ -79,4 +79,60 @@ ALTER TABLE orders
 ALTER TABLE invoices
   ADD COLUMN paid_amount DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER total;
 
+-- 7. Add delivery_status column to order_items (for tracking per-item delivery)
+-- Check if column exists first
+SET @column_exists = (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'order_items'
+  AND COLUMN_NAME = 'delivery_status'
+);
+SET @sql = IF(@column_exists = 0,
+  'ALTER TABLE order_items ADD COLUMN delivery_status ENUM(''pending'', ''delivered'') NOT NULL DEFAULT ''pending''',
+  'SELECT ''Column delivery_status already exists'' AS status'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- 8. Update orders.status enum to include 'partially-delivered'
+ALTER TABLE orders
+  MODIFY COLUMN status ENUM('pending', 'partially-delivered', 'completed', 'cancelled') NOT NULL DEFAULT 'pending';
+
+-- 9. Add product_type_id column to order_items (for linking to product types)
+SET @column_exists = (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'order_items'
+  AND COLUMN_NAME = 'product_type_id'
+);
+SET @sql = IF(@column_exists = 0,
+  'ALTER TABLE order_items ADD COLUMN product_type_id VARCHAR(36) NULL AFTER order_id',
+  'SELECT ''Column product_type_id already exists'' AS status'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- 10. Create index for delivery status queries (skip if exists)
+SET @index_exists = (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'order_items'
+  AND INDEX_NAME = 'idx_order_items_delivery_status'
+);
+SET @sql = IF(@index_exists = 0,
+  'CREATE INDEX idx_order_items_delivery_status ON order_items(delivery_status)',
+  'SELECT ''Index already exists'' AS status'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- 11. Update existing completed orders' items to delivered status
+UPDATE order_items oi
+INNER JOIN orders o ON oi.order_id = o.id
+SET oi.delivery_status = 'delivered'
+WHERE o.status = 'completed' AND oi.delivery_status = 'pending';
+
 SELECT 'Orders migration applied successfully' AS status;

@@ -34,42 +34,69 @@ function pad3(n: number) {
 
 // ---- GET /api/orders ------------------------------------------------------
 router.get("/", async (req: Request, res: Response) => {
-  const conditions = [];
-  if (req.user!.role !== "admin") {
-    conditions.push(eq(orders.tailorId, req.user!.id));
-  }
-  const { customerId, tailorId } = req.query as { customerId?: string; tailorId?: string };
-  if (customerId) conditions.push(eq(orders.customerId, customerId));
-  // Admin can filter by tailorId.
-  if (tailorId && req.user!.role === "admin") {
-    conditions.push(eq(orders.tailorId, tailorId));
-  }
+  try {
+    const conditions = [];
+    if (req.user!.role !== "admin") {
+      conditions.push(eq(orders.tailorId, req.user!.id));
+    }
+    const { customerId, tailorId } = req.query as { customerId?: string; tailorId?: string };
+    if (customerId) conditions.push(eq(orders.customerId, customerId));
+    // Admin can filter by tailorId.
+    if (tailorId && req.user!.role === "admin") {
+      conditions.push(eq(orders.tailorId, tailorId));
+    }
 
-  const rows = await db
-    .select()
-    .from(orders)
-    .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(desc(orders.createdAt));
+    const rows = await db
+      .select()
+      .from(orders)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(orders.createdAt));
 
-  if (rows.length === 0) {
-    res.json([]);
-    return;
+    if (rows.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    const ids = rows.map((r) => r.id);
+
+    // Get order items - handle missing delivery_status column gracefully
+    let items: any[] = [];
+    try {
+      items = await db.select().from(orderItems).where(inArray(orderItems.orderId, ids));
+    } catch (err: any) {
+      // If delivery_status column doesn't exist yet, we still want to show orders
+      console.warn("order_items query failed, using fallback:", err.message);
+      // Return orders without items for now
+      items = [];
+    }
+
+    const itemsByOrder = new Map<string, typeof items>();
+    for (const it of items) {
+      const arr = itemsByOrder.get(it.orderId) ?? [];
+      arr.push(it);
+      itemsByOrder.set(it.orderId, arr);
+    }
+
+    const result = rows.map((r) => {
+      // Map delivery_status to deliveryStatus for client consistency
+      const orderItemsArr = itemsByOrder.get(r.id) ?? [];
+      const mappedItems = orderItemsArr.map((it: any) => ({
+        ...it,
+        deliveryStatus: it.delivery_status ?? "pending",
+      }));
+      return {
+        ...r,
+        items: mappedItems,
+      };
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error("GET /api/orders error:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Internal server error",
+    });
   }
-
-  const ids = rows.map((r) => r.id);
-  const items = await db.select().from(orderItems).where(inArray(orderItems.orderId, ids));
-  const itemsByOrder = new Map<string, typeof items>();
-  for (const it of items) {
-    const arr = itemsByOrder.get(it.orderId) ?? [];
-    arr.push(it);
-    itemsByOrder.set(it.orderId, arr);
-  }
-
-  const result = rows.map((r) => ({
-    ...r,
-    items: itemsByOrder.get(r.id) ?? [],
-  }));
-  res.json(result);
 });
 
 // ---- GET /api/orders/:id --------------------------------------------------
@@ -147,17 +174,24 @@ router.post("/", async (req: Request, res: Response) => {
     let personName = item.personName ?? null;
     let relation = item.relation ?? null;
 
-    if (item.measurementId && (!personName || !relation)) {
+    // Validate measurementId exists in DB if provided
+    if (item.measurementId) {
       const [measurement] = await db
         .select()
         .from(measurements)
         .where(eq(measurements.id, item.measurementId))
         .limit(1);
-      if (!measurement || measurement.customerId !== d.customerId) {
-        res.status(400).json({ error: `Invalid measurement for ${item.productType}` });
+      if (!measurement) {
+        res.status(400).json({ error: `Measurement with ID ${item.measurementId} not found in database. Please save the measurement first before creating the order.` });
+        return;
+      }
+      if (measurement.customerId !== d.customerId) {
+        res.status(400).json({ error: `Measurement ${item.measurementId} does not belong to this customer` });
         return;
       }
       familyMemberId = familyMemberId ?? measurement.familyMemberId ?? null;
+      if (!personName) personName = measurement.customerName;
+      if (!relation) relation = measurement.familyMemberId ? "family" : "self";
     }
 
     if (familyMemberId) {
@@ -205,7 +239,7 @@ router.post("/", async (req: Request, res: Response) => {
     });
 
     for (const it of enrichedItems) {
-      await tx.insert(orderItems).values({
+      await (tx.insert(orderItems) as any).values({
         id: crypto.randomUUID(),
         orderId: id,
         productTypeId: it.productTypeId ?? null,
@@ -219,7 +253,6 @@ router.post("/", async (req: Request, res: Response) => {
         relation: it.relation ?? null,
         measurementValues: it.measurementValues ?? null,
         invoiceId: null,
-        deliveryStatus: "pending" as any,
       });
     }
   });

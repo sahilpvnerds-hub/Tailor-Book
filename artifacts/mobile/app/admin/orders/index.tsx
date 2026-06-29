@@ -13,11 +13,12 @@ import { StatusPill } from "@/components/admin/StatusPill";
 import { api, getToken } from "@/utils/api";
 import type { Order } from "@/types";
 
-type Filter = "all" | "pending" | "completed" | "cancelled";
+type Filter = "all" | "pending" | "partially-delivered" | "completed" | "cancelled";
 
 const FILTERS: { value: Filter; label: string }[] = [
   { value: "all", label: "All" },
-  { value: "pending", label: "In progress" },
+  { value: "pending", label: "Pending" },
+  { value: "partially-delivered", label: "Partial" },
   { value: "completed", label: "Completed" },
   { value: "cancelled", label: "Cancelled" },
 ];
@@ -36,10 +37,16 @@ export default function AdminOrdersScreen() {
   const load = useCallback(async () => {
     try {
       const token = await getToken();
-      if (!token) return;
+      if (!token) {
+        console.log("Admin Orders: No token available");
+        return;
+      }
+      console.log("Admin Orders: Fetching orders...");
       const rows = await api.orders.get(token);
+      console.log("Admin Orders: Got", rows.length, "orders");
       setList(rows);
-    } catch {
+    } catch (e: any) {
+      console.error("Admin Orders: Error fetching orders:", e.message);
       // empty state
     } finally {
       setLoading(false);
@@ -60,6 +67,7 @@ export default function AdminOrdersScreen() {
   const counts = {
     all: list.length,
     pending: list.filter((o) => o.status === "pending").length,
+    "partially-delivered": list.filter((o) => o.status === "partially-delivered").length,
     completed: list.filter((o) => o.status === "completed").length,
     cancelled: list.filter((o) => o.status === "cancelled").length,
   };

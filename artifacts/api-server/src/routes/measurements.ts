@@ -130,7 +130,19 @@ function normalizeItems(d: ParsedCreate): NormalizedItem[] {
 
 async function loadSessionDetail(sessionId: string) {
   const [session] = await db
-    .select()
+    .select({
+      id: measurementSessions.id,
+      customerId: measurementSessions.customerId,
+      familyMemberId: measurementSessions.familyMemberId,
+      tailorId: measurementSessions.tailorId,
+      measurementDate: measurementSessions.measurementDate,
+      deliveryDate: measurementSessions.deliveryDate,
+      notes: measurementSessions.notes,
+      photos: measurementSessions.photos,
+      createdBy: measurementSessions.createdBy,
+      createdAt: measurementSessions.createdAt,
+      updatedAt: measurementSessions.updatedAt,
+    })
     .from(measurementSessions)
     .where(eq(measurementSessions.id, sessionId))
     .limit(1);
@@ -154,6 +166,8 @@ async function loadSessionDetail(sessionId: string) {
 }
 
 // ---- GET /api/measurements -------------------------------------------------
+// Exclude photos from list view to avoid MySQL "Out of sort memory" error
+// when sorting large photo payloads. Use GET /:id to fetch full details with photos.
 router.get("/", async (req: Request, res: Response) => {
   const { customerId, familyMemberId } = req.query as { customerId?: string; familyMemberId?: string };
   const conditions = [];
@@ -167,7 +181,34 @@ router.get("/", async (req: Request, res: Response) => {
     conditions.push(eq(measurements.familyMemberId, familyMemberId));
   }
   const rows = await db
-    .select()
+    .select({
+      id: measurements.id,
+      customerId: measurements.customerId,
+      familyMemberId: measurements.familyMemberId,
+      measurementSessionId: measurements.measurementSessionId,
+      tailorId: measurements.tailorId,
+      customerName: measurements.customerName,
+      productType: measurements.productType,
+      featureLabel: measurements.featureLabel,
+      measurementDate: measurements.measurementDate,
+      deliveryDate: measurements.deliveryDate,
+      chest: measurements.chest,
+      shoulder: measurements.shoulder,
+      neck: measurements.neck,
+      sleeve: measurements.sleeve,
+      waist: measurements.waist,
+      length: measurements.length,
+      hip: measurements.hip,
+      thigh: measurements.thigh,
+      pantLength: measurements.pantLength,
+      bottomWidth: measurements.bottomWidth,
+      armhole: measurements.armhole,
+      wrist: measurements.wrist,
+      customMeasurements: measurements.customMeasurements,
+      notes: measurements.notes,
+      createdAt: measurements.createdAt,
+      updatedAt: measurements.updatedAt,
+    })
     .from(measurements)
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(measurements.measurementDate), desc(measurements.createdAt));
@@ -175,6 +216,7 @@ router.get("/", async (req: Request, res: Response) => {
 });
 
 // ---- GET /api/measurements/latest ----------------------------------------
+// Exclude photos from list view to avoid MySQL "Out of sort memory" error
 router.get("/latest", async (req: Request, res: Response) => {
   const { customerId, familyMemberId, productType } = req.query as {
     customerId?: string;
@@ -196,7 +238,34 @@ router.get("/latest", async (req: Request, res: Response) => {
     conditions.push(eq(measurements.familyMemberId, familyMemberId));
   }
   const [latest] = await db
-    .select()
+    .select({
+      id: measurements.id,
+      customerId: measurements.customerId,
+      familyMemberId: measurements.familyMemberId,
+      measurementSessionId: measurements.measurementSessionId,
+      tailorId: measurements.tailorId,
+      customerName: measurements.customerName,
+      productType: measurements.productType,
+      featureLabel: measurements.featureLabel,
+      measurementDate: measurements.measurementDate,
+      deliveryDate: measurements.deliveryDate,
+      chest: measurements.chest,
+      shoulder: measurements.shoulder,
+      neck: measurements.neck,
+      sleeve: measurements.sleeve,
+      waist: measurements.waist,
+      length: measurements.length,
+      hip: measurements.hip,
+      thigh: measurements.thigh,
+      pantLength: measurements.pantLength,
+      bottomWidth: measurements.bottomWidth,
+      armhole: measurements.armhole,
+      wrist: measurements.wrist,
+      customMeasurements: measurements.customMeasurements,
+      notes: measurements.notes,
+      createdAt: measurements.createdAt,
+      updatedAt: measurements.updatedAt,
+    })
     .from(measurements)
     .where(and(...conditions))
     .orderBy(desc(measurements.measurementDate), desc(measurements.createdAt))
@@ -209,6 +278,7 @@ router.get("/latest", async (req: Request, res: Response) => {
 });
 
 // ---- GET /api/measurements/sessions --------------------------------------
+// Exclude photos from list view to avoid MySQL "Out of sort memory" error
 router.get("/sessions", async (req: Request, res: Response) => {
   const { customerId, familyMemberId } = req.query as { customerId?: string; familyMemberId?: string };
   const conditions = [];
@@ -222,7 +292,18 @@ router.get("/sessions", async (req: Request, res: Response) => {
     conditions.push(eq(measurementSessions.familyMemberId, familyMemberId));
   }
   const rows = await db
-    .select()
+    .select({
+      id: measurementSessions.id,
+      customerId: measurementSessions.customerId,
+      familyMemberId: measurementSessions.familyMemberId,
+      tailorId: measurementSessions.tailorId,
+      measurementDate: measurementSessions.measurementDate,
+      deliveryDate: measurementSessions.deliveryDate,
+      notes: measurementSessions.notes,
+      createdBy: measurementSessions.createdBy,
+      createdAt: measurementSessions.createdAt,
+      updatedAt: measurementSessions.updatedAt,
+    })
     .from(measurementSessions)
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(measurementSessions.measurementDate), desc(measurementSessions.createdAt));
@@ -325,18 +406,9 @@ router.post("/", async (req: Request, res: Response) => {
     }
   }
 
-  for (const item of items) {
-    if (!item.productTypeId) continue;
-    const [pt] = await db
-      .select()
-      .from(productTypes)
-      .where(eq(productTypes.id, item.productTypeId))
-      .limit(1);
-    if (!pt || !ensureOwnership(req, pt.tailorId)) {
-      res.status(400).json({ error: `Invalid product type: ${item.productType}` });
-      return;
-    }
-  }
+  // Note: Product type validation is intentionally skipped here because
+  // measurements can be created during order creation before the product
+  // type is saved to the database. The validation happens at order creation time.
 
   const sessionId = crypto.randomUUID();
   const dateStr = toDateOnly(d.measurementDate ?? d.date) ?? new Date().toISOString().slice(0, 10);

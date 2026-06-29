@@ -202,7 +202,7 @@ export const orders = mysqlTable("orders", {
   customerId: varchar("customer_id", { length: 36 }).notNull(),
   customerName: varchar("customer_name", { length: 100 }).notNull(),
   customerMobile: varchar("customer_mobile", { length: 20 }).notNull(),
-  status: mysqlEnum("status", ["pending", "completed", "cancelled"]).notNull().default("pending"),
+  status: mysqlEnum("status", ["pending", "partially-delivered", "completed", "cancelled"]).notNull().default("pending"),
   deliveryDate: date("delivery_date"),
   notes: text("notes"),
   totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull().default("0"),
@@ -228,7 +228,7 @@ export const orderItems = mysqlTable("order_items", {
   relation: varchar("relation", { length: 50 }),
   measurementValues: json("measurement_values").$type<Record<string, string>>(),
   invoiceId: varchar("invoice_id", { length: 36 }),
-  deliveryStatus: mysqlEnum("delivery_status", ["pending", "delivered"]).notNull().default("pending"),
+  deliveryStatus: mysqlEnum("delivery_status", ["pending", "delivered"]).default("pending"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

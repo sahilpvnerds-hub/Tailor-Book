@@ -287,19 +287,7 @@ export default function OrderDetailScreen() {
             // Persist delivery status to storage and auto-calculate order status
             await updateItemDeliveryStatus(itemId, nextStatus);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            // Check if this was the last item delivered — if so, generate invoice
-            if (nextStatus === "delivered") {
-              // Refresh order data to check if all items are now delivered
-              const latestOrder = orders.find((o) => o.id === currentOrder.id);
-              const updatedItems = { ...itemDelivery, [itemId]: "delivered" };
-              const allNowDelivered = (latestOrder?.items ?? []).every(
-                (it) => (updatedItems[it.id] ?? "pending") === "delivered",
-              );
-              if (allNowDelivered) {
-                // All items delivered — generate single invoice for the order
-                await generateSingleInvoice();
-              }
-            }
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             setMarkingDelivered(null);
           },
         },
@@ -320,7 +308,7 @@ export default function OrderDetailScreen() {
     }
     Alert.alert(
       "Mark All Items Delivered?",
-      `This will mark all ${currentOrder.items.length} item(s) as delivered and generate a single invoice for the entire order. Continue?`,
+      `This will mark all ${currentOrder.items.length} item(s) as delivered. Continue?`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -334,7 +322,8 @@ export default function OrderDetailScreen() {
                 await updateItemDeliveryStatus(it.id, "delivered");
               }
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              // Let the next refresh get updated data and auto-generate invoice
+              // Refresh to sync with API and get updated state
+              await refresh();
             } catch (e: any) {
               Alert.alert("Error", e?.message ?? "Failed to update status");
             } finally {

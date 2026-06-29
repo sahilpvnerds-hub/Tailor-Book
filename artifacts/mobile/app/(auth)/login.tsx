@@ -67,6 +67,8 @@ export default function LoginScreen() {
       } else {
         if (result.user?.role === "tailor" && !result.user?.onboardingComplete) {
           router.replace("/onboarding");
+        } else if (result.user?.role === "admin") {
+          router.replace("/admin");
         } else {
           router.replace("/(tabs)");
         }

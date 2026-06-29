@@ -3,7 +3,7 @@ import { Text, View, ViewStyle } from "react-native";
 import { useColors } from "@/hooks/useColors";
 
 export type AdminStatus = "approved" | "pending" | "rejected" | "suspended";
-export type OrderStatus = "pending" | "completed" | "cancelled";
+export type OrderStatus = "pending" | "partially-delivered" | "completed" | "cancelled";
 
 interface PillConfig {
   bg: string;
@@ -21,6 +21,8 @@ function configFor(status: string, c: ReturnType<typeof useColors>): PillConfig 
       return { bg: c.success, fg: c.successForeground, label: status === "completed" ? "Paid" : "Approved", dot: c.success };
     case "pending":
       return { bg: c.warning, fg: c.warningForeground, label: "Pending", dot: c.warning };
+    case "partially-delivered":
+      return { bg: "#EDE9FE", fg: "#7C3AED", label: "Partial", dot: "#7C3AED" };
     case "rejected":
     case "cancelled":
       return { bg: c.destructive, fg: c.destructiveForeground, label: status === "cancelled" ? "Cancelled" : "Rejected", dot: c.destructive };

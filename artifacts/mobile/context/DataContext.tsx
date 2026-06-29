@@ -228,6 +228,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       // Offline
     }
 
+    // Start with current local data as the base
     let c = await getCustomers(user.id);
     let fm = await getFamilyMembers(user.id);
     let m = await getMeasurements(user.id);
@@ -247,11 +248,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           api.productTypes.get(token),
           api.customFields.get(token),
         ]);
-        c = apiC;
-        fm = apiFm;
+
+        // Merge API data with local data - use API as source of truth
+        // but keep any local-only records that haven't been synced yet
+        c = mergeById(c, apiC);
+        fm = mergeById(fm, apiFm);
         m = (apiM as any[]).map(normalizeMeasurement);
-        inv = (apiInv as any[]).map(normalizeInvoice);
-        ord = (apiOrd as any[]).map(normalizeOrder);
+        inv = mergeById(inv, (apiInv as any[]).map(normalizeInvoice));
+        ord = mergeById(ord, (apiOrd as any[]).map(normalizeOrder));
+
         // Only use API product types if the server returned some.
         // Otherwise keep the locally-seeded defaults (from first-login
         // or earlier seeds) — that way a new tailor always sees
@@ -259,7 +264,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         if ((apiPt as any[])?.length > 0) {
           pt = apiPt as any;
         }
-        cf = apiCf;
+        cf = mergeById(cf, apiCf);
 
         await Promise.all([
           saveAllCustomers(c),
@@ -295,6 +300,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setNotifications(visibleNotifs);
     setIsLoading(false);
   }, [user]);
+
+  // Helper to merge local and API data - prefer API data, keep local-only records
+  function mergeById<T extends { id: string }>(local: T[], api: T[]): T[] {
+    const apiMap = new Map(api.map(item => [item.id, item]));
+    const result = [...api];
+
+    // Add any local-only records (created offline, not yet synced to server)
+    for (const localItem of local) {
+      if (!apiMap.has(localItem.id)) {
+        result.push(localItem);
+      }
+    }
+
+    return result;
+  }
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -1221,6 +1241,15 @@ async function updateItemDeliveryStatus(itemId: string, status: ItemDeliveryStat
     const updatedOrder = all.find(o => o.id === order.id);
     return updatedOrder ? { ...updatedOrder } : order;
   }));
+
+  // Sync the updated order status to the server
+  const token = await getToken();
+  if (token) {
+    const order = all.find(o => o.items.some((it: any) => it.id === itemId));
+    if (order) {
+      await apiUpdateOrderStatus(token, order.id, order.status);
+    }
+  }
 }
 
 async function deleteOrder(id: string) {
