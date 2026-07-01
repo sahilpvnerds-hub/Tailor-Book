@@ -26,40 +26,41 @@ import type {
 // - On a physical device: the user must override via EXPO_PUBLIC_API_URL
 //   or by editing this constant.
 function resolveApiBaseUrl(): string {
-  // Check for EXPO_PUBLIC_API_URL first (this will be injected at build time)
-  const override =
-    typeof process !== "undefined" &&
-    (process as any).env?.EXPO_PUBLIC_API_URL;
-  if (override) {
-    // Strip trailing slash first, then ensure exactly one /api suffix.
-    // This makes the env var forgiving: both
-    //   https://api.admin-tailorbook.yiion.com      → https://api.admin-tailorbook.yiion.com/api
-    //   https://api.admin-tailorbook.yiion.com/api  → https://api.admin-tailorbook.yiion.com/api
-    // work correctly.
-    const base = override.replace(/\/+$/, "");
-    return base.endsWith("/api") ? base : `${base}/api`;
-  }
-
-  // Fallback for development only
+  // ── Path 1: Web browser — use runtime auto-detection ──────────────────────
+  // In a browser we can read window.location and make an informed decision
+  // regardless of what was baked into the bundle at build time. This prevents
+  // a stale localhost/LAN EXPO_PUBLIC_API_URL from breaking the live site.
   if (typeof window !== "undefined" && window.location) {
     const { protocol, hostname, host, port } = window.location;
-    // If the dev server is on a port other than 4000, the API is on
-    // port 4000 of the same hostname. If the dev server IS on 4000
-    // (production-like deployment), the API is at the same origin.
     if (hostname) {
       // Production: admin panel and API live on different sub-domains.
       // Any *-tailorbook.yiion.com origin routes to api-tailorbook.yiion.com.
       if (hostname.endsWith("-tailorbook.yiion.com")) {
         return "https://api-tailorbook.yiion.com/api";
       }
+      // Same-origin deployment: frontend and API share the same host.
       if (!port || port === "80" || port === "443") {
         return `${protocol}//${host}/api`;
       }
+      // Local development: dev server runs on a non-standard port; the API
+      // is on port 4000 of the same hostname.
       return `${protocol}//${hostname}:4000/api`;
     }
   }
 
-  // Final fallback for local development
+  // ── Path 2: React Native or Node — use EXPO_PUBLIC_API_URL ────────────────
+  // On mobile there is no window.location, so we rely on the env var that
+  // was inlined at build time. The caller (build script / .env) is
+  // responsible for setting the right value per environment.
+  const override =
+    typeof process !== "undefined" &&
+    (process as any).env?.EXPO_PUBLIC_API_URL;
+  if (override) {
+    const base = override.replace(/\/+$/, "");
+    return base.endsWith("/api") ? base : `${base}/api`;
+  }
+
+  // ── Fallback: local Node.js development ───────────────────────────────────
   return "http://localhost:4000/api";
 }
 
