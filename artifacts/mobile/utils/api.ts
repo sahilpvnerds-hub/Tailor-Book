@@ -26,19 +26,21 @@ import type {
 // - On a physical device: the user must override via EXPO_PUBLIC_API_URL
 //   or by editing this constant.
 function resolveApiBaseUrl(): string {
+  // Check for EXPO_PUBLIC_API_URL first (this will be injected at build time)
   const override =
     typeof process !== "undefined" &&
     (process as any).env?.EXPO_PUBLIC_API_URL;
   if (override) {
     // Strip trailing slash first, then ensure exactly one /api suffix.
     // This makes the env var forgiving: both
-    //   http://192.168.0.89:4000      → http://192.168.0.89:4000/api
-    //   http://192.168.0.89:4000/api  → http://192.168.0.89:4000/api
+    //   https://api.admin-tailorbook.yiion.com      → https://api.admin-tailorbook.yiion.com/api
+    //   https://api.admin-tailorbook.yiion.com/api  → https://api.admin-tailorbook.yiion.com/api
     // work correctly.
     const base = override.replace(/\/+$/, "");
     return base.endsWith("/api") ? base : `${base}/api`;
   }
 
+  // Fallback for development only
   if (typeof window !== "undefined" && window.location) {
     const { protocol, hostname, host, port } = window.location;
     // If the dev server is on a port other than 4000, the API is on
@@ -53,11 +55,11 @@ function resolveApiBaseUrl(): string {
       if (!port || port === "80" || port === "443") {
         return `${protocol}//${host}/api`;
       }
-      // Default: assume API is on port 4000
       return `${protocol}//${hostname}:4000/api`;
     }
   }
 
+  // Final fallback for local development
   return "http://localhost:4000/api";
 }
 
