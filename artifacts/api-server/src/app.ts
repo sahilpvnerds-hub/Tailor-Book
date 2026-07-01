@@ -6,6 +6,7 @@ import compression from "compression";
 import rateLimit from "express-rate-limit";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { CustomError, errorHandler, errorConverter } from "./middlewares/error-handling";
 
 const app: Express = express();
 
@@ -103,9 +104,16 @@ app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 
 app.use("/api", router);
 
+// 404 handler — must come before the general error handler
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (req.path === "/favicon.ico") return res.status(204).end();
+  const err = new CustomError(`Can't find ${req.originalUrl} on this server!`, 404);
+  next(err);
+});
+
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
-  req.log?.error({ err }, "Unhandled API error");
-  res.status(500).json({ error: "Internal server error" });
+  const apiErr = errorConverter(err);
+  errorHandler(apiErr, req, res, _next);
 });
 
 export default app;

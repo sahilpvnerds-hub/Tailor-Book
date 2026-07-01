@@ -104,8 +104,10 @@ export default function MeasurementDetailScreen() {
     }
     setEditFieldValues(fieldValues);
     const customValues: Record<string, string> = {};
-    for (const cm of measurement!.customMeasurements ?? []) {
-      customValues[cm.label] = String(cm.value);
+    if (Array.isArray(measurement!.customMeasurements)) {
+      for (const cm of measurement!.customMeasurements) {
+        customValues[cm.label] = String(cm.value);
+      }
     }
     setEditCustomValues(customValues);
     setEditing(true);
@@ -137,7 +139,7 @@ export default function MeasurementDetailScreen() {
     }
     // Persist edited custom measurements too — keep the existing
     // label/value shape, just with the updated number.
-    const existingCustom = measurement!.customMeasurements ?? [];
+    const existingCustom = Array.isArray(measurement!.customMeasurements) ? measurement!.customMeasurements : [];
     const updatedCustom = existingCustom.map((cm) => {
       const next = editCustomValues[cm.label];
       if (next === undefined) return cm;
@@ -345,7 +347,7 @@ export default function MeasurementDetailScreen() {
         </Card>
 
         {/* Custom measurements */}
-        {measurement.customMeasurements?.length > 0 && (
+        {Array.isArray(measurement.customMeasurements) && measurement.customMeasurements.length > 0 && (
           <Card>
             <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 12 }}>
               Custom

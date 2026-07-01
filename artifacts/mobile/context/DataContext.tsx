@@ -234,7 +234,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     }
     next.date = next.date ?? next.measurementDate ?? next.createdAt;
-    next.customMeasurements = next.customMeasurements ?? [];
+    
+    if (typeof next.customMeasurements === "string") {
+      try {
+        next.customMeasurements = JSON.parse(next.customMeasurements);
+      } catch (e) {
+        next.customMeasurements = [];
+      }
+    }
+    if (!Array.isArray(next.customMeasurements)) {
+      next.customMeasurements = [];
+    }
+
     next.photos = next.photos ?? [];
     return next;
   }

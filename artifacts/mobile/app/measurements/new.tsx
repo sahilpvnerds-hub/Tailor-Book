@@ -189,10 +189,12 @@ export default function NewMeasurementScreen() {
       }
     }
 
-    for (const cm of latest.customMeasurements ?? []) {
-      const match = customFieldsForProduct(product.id, product.name)
-        .find((cf) => cf.fieldName.toLowerCase() === cm.label.toLowerCase());
-      if (match) draft.customValues[match.id] = String(cm.value);
+    if (Array.isArray(latest.customMeasurements)) {
+      for (const cm of latest.customMeasurements) {
+        const match = customFieldsForProduct(product.id, product.name)
+          .find((cf) => cf.fieldName.toLowerCase() === cm.label.toLowerCase());
+        if (match) draft.customValues[match.id] = String(cm.value);
+      }
     }
 
     if (latest.featureLabel) {

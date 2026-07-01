@@ -10,6 +10,7 @@ import productTypesRouter from "./product-types";
 import familyMembersRouter from "./family-members";
 import customFieldsRouter from "./custom-fields";
 import notificationsRouter from "./notifications";
+import diagnosticsRouter from "./diagnostics";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use("/product-types", productTypesRouter);
 router.use("/family-members", familyMembersRouter);
 router.use("/custom-fields", customFieldsRouter);
 router.use("/notifications", notificationsRouter);
+router.use("/diagnostics", diagnosticsRouter);
 
 export default router;

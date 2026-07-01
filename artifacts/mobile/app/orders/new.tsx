@@ -223,10 +223,13 @@ export default function NewOrderScreen() {
 
     const cVals: Record<string, string> = {};
     const scopedFields = getCustomFieldsForScope(customerId, familyMemberId, productTypeId, productTypeName);
-    latest.customMeasurements?.forEach((cm) => {
-      const match = scopedFields.find((cf) => cf.fieldName.toLowerCase() === cm.label.toLowerCase());
-      if (match) cVals[match.id] = String(cm.value);
-    });
+    
+    if (Array.isArray(latest.customMeasurements)) {
+      latest.customMeasurements.forEach((cm) => {
+        const match = scopedFields.find((cf) => cf.fieldName.toLowerCase() === cm.label.toLowerCase());
+        if (match) cVals[match.id] = String(cm.value);
+      });
+    }
 
     return {
       measurementId: latest.id,

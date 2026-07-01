@@ -1,4 +1,5 @@
 import { type Request } from "express";
+import { CustomError } from "../middlewares/error-handling";
 
 /**
  * Express 5 types `req.params[key]` as `string | string[] | undefined`. In
@@ -7,7 +8,7 @@ import { type Request } from "express";
  */
 export function getParam(req: Request, name: string): string {
   const v = (req.params as Record<string, string | string[] | undefined>)[name];
-  if (v === undefined) throw new Error(`Missing required param: ${name}`);
+  if (v === undefined) throw new CustomError(`Missing required param: ${name}`, 400);
   if (Array.isArray(v)) return v[0] ?? "";
   return v;
 }

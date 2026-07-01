@@ -87,10 +87,12 @@ async function parseJson<T>(res: Response, fallbackError: string): Promise<T> {
   }
 }
 
-interface ApiError {
+// Structured error object returned by API calls when the response is not ok
+export interface ApiErrorResponse {
   ok: false;
   error: string;
   status: number;
+  code?: string;
 }
 
 // Re-export common domain types so callers can `import { Order } from "@/utils/api"`.
@@ -170,7 +172,7 @@ export async function verifyOtp(email: string, otp: string): Promise<{ ok: boole
   };
 }
 
-export async function login(emailOrMobile: string, password: string): Promise<{ ok: true; token: string; user: User } | ApiError> {
+export async function login(emailOrMobile: string, password: string): Promise<{ ok: true; token: string; user: User } | ApiErrorResponse> {
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -182,6 +184,7 @@ export async function login(emailOrMobile: string, password: string): Promise<{ 
       ok: false,
       error: data.error ?? "Login failed",
       status: response.status,
+      code: data.code,
     };
   }
   return {
