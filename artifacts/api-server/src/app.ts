@@ -26,34 +26,55 @@ app.use(
   }),
 );
 
-// CORS — allow Expo dev server, React Native, and the local web client.
-// In dev we want to be permissive; in prod you'd lock this down to your
-// known domains.
+const allowedOrigins = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+// CORS — allow all origins in development, lock down in production
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. curl, server-to-server, native fetch)
+      // Allow requests without Origin (Postman, curl, mobile apps)
       if (!origin) return callback(null, true);
 
-      // Allow localhost on any port, http or https (web dev / preview)
+      // Check if in development mode - be more permissive
+      if (process.env.NODE_ENV === 'development') {
+        // Allow localhost on any port
+        if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return callback(null, true);
+        if (/^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) return callback(null, true);
+
+        // Allow all yiion.com domains
+        if (origin.includes('yiion.com')) return callback(null, true);
+
+        // Allow LAN IPs for development
+        if (/^https?:\/\/192\.168\.\d+\.\d+(:\d+)?$/.test(origin)) return callback(null, true);
+        if (/^https?:\/\/10\.\d+\.\d+\.\d+(:\d+)?$/.test(origin)) return callback(null, true);
+        if (/^https?:\/\/172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+(:\d+)?$/.test(origin)) return callback(null, true);
+
+        // Allow in production for domains in .env
+        if (allowedOrigins.includes(origin)) {
+          return callback(null, true);
+        }
+
+        // In development, allow everything else (for easier testing)
+        return callback(null, true);
+      }
+
+      // In production - strict mode
+      // Allow localhost for testing
       if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return callback(null, true);
       if (/^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) return callback(null, true);
 
-      // Allow Expo dev server (expo.dev, replit, etc.)
-      if (/^https?:\/\/.*\.expo\.dev$/.test(origin)) return callback(null, true);
-      // Replit deployment domains (covers *.repl.co, *.replit.dev,
-      // *.id.repl.co, and any other *.replit.* subdomain)
-      if (/^https?:\/\/.*\.repl\.co$/.test(origin)) return callback(null, true);
-      if (/^https?:\/\/.*\.replit\.dev$/.test(origin)) return callback(null, true);
-      if (/^https?:\/\/.*\.replit\.app$/.test(origin)) return callback(null, true);
-      if (/^https?:\/\/.*\.repl\.com$/.test(origin)) return callback(null, true);
+      // Allow allowed origins from .env
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
 
-      // Allow LAN IPs (for physical devices connecting to dev server)
-      if (/^https?:\/\/192\.168\.\d+\.\d+(:\d+)?$/.test(origin)) return callback(null, true);
-      if (/^https?:\/\/10\.\d+\.\d+\.\d+(:\d+)?$/.test(origin)) return callback(null, true);
-      if (/^https?:\/\/172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+(:\d+)?$/.test(origin)) return callback(null, true);
+      // Allow yiion.com domains
+      if (origin.includes('yiion.com')) return callback(null, true);
 
-      // Lock down everything else
+      // Otherwise deny
       callback(new Error(`CORS: origin ${origin} not allowed`));
     },
     credentials: true,

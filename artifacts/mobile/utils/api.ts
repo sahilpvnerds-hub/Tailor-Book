@@ -45,6 +45,11 @@ function resolveApiBaseUrl(): string {
     // port 4000 of the same hostname. If the dev server IS on 4000
     // (production-like deployment), the API is at the same origin.
     if (hostname) {
+      // Production: admin panel and API live on different sub-domains.
+      // Any *-tailorbook.yiion.com origin routes to api-tailorbook.yiion.com.
+      if (hostname.endsWith("-tailorbook.yiion.com")) {
+        return "https://api-tailorbook.yiion.com/api";
+      }
       if (!port || port === "80" || port === "443") {
         return `${protocol}//${host}/api`;
       }

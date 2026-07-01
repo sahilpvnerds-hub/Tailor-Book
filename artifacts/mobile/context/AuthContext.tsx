@@ -59,10 +59,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setIsLoading(false);
           return;
         } catch {
-          // Token invalid or server down — fall back to cached user
+          // Token invalid or server down — clear the invalid token so
+          // subsequent API calls don't keep sending a bad Bearer token
+          // (which would cause 401 on every request).
+          await setToken(null);
         }
       }
-      setUser(cached);
+      if (cached) {
+        setUser(cached);
+      }
     } finally {
       setIsLoading(false);
     }
