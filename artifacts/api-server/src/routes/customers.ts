@@ -93,7 +93,7 @@ router.post("/", async (req: Request, res: Response) => {
     profilePicture: body.data.profilePicture ?? null,
   });
   const [c] = await db.select().from(customers).where(eq(customers.id, id)).limit(1);
-  res.status(201).json(c);
+  res.status(200).json(c);
 });
 
 // ---- PATCH /api/customers/:id --------------------------------------------

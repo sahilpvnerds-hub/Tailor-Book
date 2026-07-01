@@ -259,7 +259,7 @@ router.post("/", async (req: Request, res: Response) => {
 
   const [createdOrder] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
   const items = await db.select().from(orderItems).where(eq(orderItems.orderId, id));
-  res.status(201).json({ ...createdOrder, items });
+  res.status(200).json({ ...createdOrder, items });
 });
 
 // ---- PATCH /api/orders/:id/status -----------------------------------------
@@ -455,7 +455,7 @@ router.post("/:id/invoice", async (req: Request, res: Response) => {
   const [inv] = await db.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
   const items = await db.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, invoiceId));
 
-  res.status(201).json({ ...inv, items: items.sort((a, b) => a.position - b.position) });
+  res.status(200).json({ ...inv, items: items.sort((a, b) => a.position - b.position) });
 });
 
 // ---- PATCH /api/orders/items/:id/delivery -------------------------------

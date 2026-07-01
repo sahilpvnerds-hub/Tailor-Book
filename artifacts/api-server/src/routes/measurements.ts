@@ -510,12 +510,12 @@ router.post("/", async (req: Request, res: Response) => {
     .where(eq(measurements.measurementSessionId, sessionId));
 
   if (!d.items || createdMeasurementIds.length === 1) {
-    res.status(201).json(created[0]);
+    res.status(200).json(created[0]);
     return;
   }
 
   const session = await loadSessionDetail(sessionId);
-  res.status(201).json({ ...session, measurements: created });
+  res.status(200).json({ ...session, measurements: created });
 });
 
 // ---- PATCH /api/measurements/:id -----------------------------------------

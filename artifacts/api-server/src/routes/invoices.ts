@@ -235,7 +235,7 @@ router.post("/", async (req: Request, res: Response) => {
     .select()
     .from(invoiceItems)
     .where(eq(invoiceItems.invoiceId, id));
-  res.status(201).json({ ...inv, items: items.sort((a, b) => a.position - b.position) });
+  res.status(200).json({ ...inv, items: items.sort((a, b) => a.position - b.position) });
 });
 
 // ---- PATCH /api/invoices/:id/status --------------------------------------

@@ -359,7 +359,7 @@ router.post("/register", async (req: Request, res: Response) => {
     longitude,
   });
 
-  res.status(201).json({
+  res.status(200).json({
     id,
     message: "Account created — you can now log in",
     status: "approved",

@@ -1,10 +1,25 @@
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
+import helmet from "helmet";
+import compression from "compression";
+import rateLimit from "express-rate-limit";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
+
+app.use(helmet());
+app.use(compression());
+
+// Global rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 500, // Limit each IP to 500 requests per `window` (here, per 15 minutes).
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+app.use(limiter);
 
 app.use(
   pinoHttp({
@@ -45,7 +60,8 @@ app.use(
         if (/^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) return callback(null, true);
 
         // Allow all yiion.com domains
-        if (origin.includes('yiion.com')) return callback(null, true);
+        // Allow all yiion.com domains safely
+        if (origin.endsWith('.yiion.com') || origin === 'https://yiion.com') return callback(null, true);
 
         // Allow LAN IPs for development
         if (/^https?:\/\/192\.168\.\d+\.\d+(:\d+)?$/.test(origin)) return callback(null, true);
@@ -71,8 +87,8 @@ app.use(
         return callback(null, true);
       }
 
-      // Allow yiion.com domains
-      if (origin.includes('yiion.com')) return callback(null, true);
+      // Allow yiion.com domains safely
+      if (origin.endsWith('.yiion.com') || origin === 'https://yiion.com') return callback(null, true);
 
       // Otherwise deny
       callback(new Error(`CORS: origin ${origin} not allowed`));

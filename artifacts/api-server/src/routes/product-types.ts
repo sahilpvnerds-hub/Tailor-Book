@@ -101,7 +101,7 @@ router.post("/", async (req: Request, res: Response) => {
     .from(productTypes)
     .where(eq(productTypes.id, id))
     .limit(1);
-  res.status(201).json({ ...row, features: parseFeatures(row.features) });
+  res.status(200).json({ ...row, features: parseFeatures(row.features) });
 });
 
 // ---- PATCH /api/product-types/:id ---------------------------------------

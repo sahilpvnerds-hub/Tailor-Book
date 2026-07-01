@@ -63,7 +63,7 @@ router.post("/", async (req: Request, res: Response) => {
     .from(notifications)
     .where(eq(notifications.id, id))
     .limit(1);
-  res.status(201).json(row);
+  res.status(200).json(row);
 });
 
 // ---- POST /api/notifications/dispatch-delivery --------------------------

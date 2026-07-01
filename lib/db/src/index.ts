@@ -40,6 +40,10 @@ function getConnectionConfig() {
   if (process.env.DATABASE_URL && process.env.DATABASE_URL.length > 0) {
     return process.env.DATABASE_URL;
   }
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("Missing DATABASE_URL environment variable in production. Falling back to local dev credentials is not permitted.");
+  }
+  
   const host = process.env.MYSQL_HOST ?? "localhost";
   const port = Number(process.env.MYSQL_PORT ?? 3306);
   const user = process.env.MYSQL_USER ?? "root";

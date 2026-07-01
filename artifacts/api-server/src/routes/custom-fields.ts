@@ -58,7 +58,7 @@ router.post("/", async (req: Request, res: Response) => {
     .from(customMeasurementFields)
     .where(eq(customMeasurementFields.id, id))
     .limit(1);
-  res.status(201).json(row);
+  res.status(200).json(row);
 });
 
 // ---- DELETE /api/custom-fields/:id --------------------------------------
