@@ -13,6 +13,21 @@ import {
 import { authMiddleware } from "../middlewares/auth";
 import { getParam } from "../lib/params";
 
+// Helper: parse a features value that may come back from MySQL longtext as a
+// JSON string (e.g. "[{...}]") or as an already-parsed array.
+function parseFeatures(features: unknown): unknown[] {
+  if (Array.isArray(features)) return features;
+  if (typeof features === "string") {
+    try {
+      const parsed = JSON.parse(features);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 const router: IRouter = Router();
 router.use(authMiddleware);
 
@@ -53,7 +68,9 @@ router.get("/", async (req: Request, res: Response) => {
     .where(visibleFilter(req))
     .leftJoin(users, eq(users.id, productTypes.tailorId))
     .orderBy(desc(productTypes.createdAt));
-  res.json(rows);
+  // Parse features from JSON string to real array before sending
+  const result = rows.map((row) => ({ ...row, features: parseFeatures(row.features) }));
+  res.json(result);
 });
 
 // ---- POST /api/product-types --------------------------------------------
@@ -84,7 +101,7 @@ router.post("/", async (req: Request, res: Response) => {
     .from(productTypes)
     .where(eq(productTypes.id, id))
     .limit(1);
-  res.status(201).json(row);
+  res.status(201).json({ ...row, features: parseFeatures(row.features) });
 });
 
 // ---- PATCH /api/product-types/:id ---------------------------------------
@@ -117,13 +134,14 @@ router.patch("/:id", async (req: Request, res: Response) => {
   // takes effect everywhere — see also the same logic in
   // artifacts/mobile/context/DataContext.tsx for the offline flow.
   if (body.data.features !== undefined) {
+    const prevFeatures = parseFeatures(existing.features);
     const newLabels = body.data.features.map((f) => f.label);
     const newLabelSet = new Set(newLabels);
-    const previousLabels = (existing.features ?? []).map((f: any) => f.label);
+    const previousLabels = prevFeatures.map((f: any) => f.label);
     const previousLabelSet = new Set(previousLabels);
 
     const renamedLabelMap = new Map<string, string>();
-    const removed = (existing.features ?? []).filter((f: any) => !newLabelSet.has(f.label));
+    const removed = prevFeatures.filter((f: any) => !newLabelSet.has(f.label));
     const added = body.data.features.filter((f) => !previousLabelSet.has(f.label));
     removed.forEach((r: any, i: number) => {
       const candidate = added[i] ?? added.find((a) => a.gender === r.gender);
@@ -208,7 +226,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
     .from(productTypes)
     .where(eq(productTypes.id, id))
     .limit(1);
-  res.json(updated);
+  res.json({ ...updated, features: parseFeatures(updated.features) });
 });
 
 // ---- DELETE /api/product-types/:id -------------------------------------

@@ -183,6 +183,33 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     };
   }
 
+  /**
+   * Normalize product type data. The backend stores `features` as a JSON
+   * string in a longtext column — parse it back to a real array so the UI
+   * can safely call `.map()` / `.length` on it.
+   */
+  function normalizeProductType(p: any): ProductType {
+    const features = (p as any).features;
+    let normalizedFeatures: ProductType["features"];
+    if (Array.isArray(features)) {
+      normalizedFeatures = features;
+    } else if (typeof features === "string") {
+      try {
+        const parsed = JSON.parse(features);
+        normalizedFeatures = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        normalizedFeatures = [];
+      }
+    } else {
+      normalizedFeatures = [];
+    }
+    return {
+      ...p,
+      amount: Number(p.amount ?? 0),
+      features: normalizedFeatures,
+    };
+  }
+
   function normalizeInvoice(inv: any): Invoice {
     return {
       ...inv,
@@ -262,7 +289,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         // or earlier seeds) — that way a new tailor always sees
         // default products even when the server has none yet.
         if ((apiPt as any[])?.length > 0) {
-          pt = apiPt as any;
+          pt = (apiPt as any[]).map(normalizeProductType);
         }
         cf = mergeById(cf, apiCf);
 
@@ -1210,6 +1237,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
  * Update delivery status of a single item and auto-calculate order status
  */
 async function updateItemDeliveryStatus(itemId: string, status: ItemDeliveryStatus) {
+  // Update locally first so the UI is snappy, then sync to the server.
   const allOrders = await rawGet<Order>(STORAGE_KEYS.ORDERS);
   const all = [...allOrders];
 
@@ -1242,9 +1270,15 @@ async function updateItemDeliveryStatus(itemId: string, status: ItemDeliveryStat
     return updatedOrder ? { ...updatedOrder } : order;
   }));
 
-  // Sync the updated order status to the server
+  // Sync the delivery status to the server
   const token = await getToken();
   if (token) {
+    try {
+      await api.orders.updateItemDelivery(token, itemId, status);
+    } catch (err) {
+      console.warn("Failed to sync item delivery status:", err);
+    }
+    // Sync the updated order status
     const order = all.find(o => o.items.some((it: any) => it.id === itemId));
     if (order) {
       await apiUpdateOrderStatus(token, order.id, order.status);
@@ -1311,7 +1345,7 @@ async function deleteOrder(id: string) {
     const allInvoices = await rawGet<Invoice>(STORAGE_KEYS.INVOICES);
     const allOrders = await rawGet<Order>(STORAGE_KEYS.ORDERS);
 
-    let itemsToInvoice = order.items?.filter((it) => !it.invoiceId) ?? [];
+    let itemsToInvoice = (order.items ?? []).filter((it): it is NonNullable<typeof it> => it != null && !it.invoiceId);
     if (itemsToInvoice.length === 0) throw new Error("No uninvoiced items in this order");
 
     if (itemId) {

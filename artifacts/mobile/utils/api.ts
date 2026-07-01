@@ -712,6 +712,26 @@ export async function deleteOrder(token: string, orderId: string): Promise<{ ok:
   return { ok: true };
 }
 
+export async function updateItemDelivery(
+  token: string,
+  itemId: string,
+  deliveryStatus: "pending" | "delivered"
+): Promise<{ item: any; orderStatus: string }> {
+  const response = await fetch(`${API_BASE_URL}/orders/items/${itemId}/delivery`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ deliveryStatus }),
+  });
+  const data = await parseJson<any>(response, "Failed to update item delivery status");
+  if (!response.ok) {
+    throw new Error(data.error ?? "Failed to update item delivery status");
+  }
+  return data;
+}
+
 export async function generateInvoiceFromOrder(
   token: string,
   orderId: string,
@@ -1071,6 +1091,7 @@ export const api = {
     get: getOrders,
     create: createOrder,
     updateStatus: updateOrderStatus,
+    updateItemDelivery,
     delete: deleteOrder,
     generateInvoice: generateInvoiceFromOrder,
   },
