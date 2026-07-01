@@ -16,6 +16,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
+import { MeasurementKey } from "@/constants/measurementFields";
+import { useWebModalBlur } from "@/hooks/useWebModalBlur";
 import { useData } from "@/context/DataContext";
 import { Button, Card, Input } from "@/components/ui";
 import { DatePicker } from "@/components/DatePicker";
@@ -52,6 +54,7 @@ export default function NewInvoiceScreen() {
   const [selectedCustomerId, setSelectedCustomerId] = useState(params.customerId ?? "");
   const [showCustomerList, setShowCustomerList] = useState(!params.customerId);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
+  useWebModalBlur(showCustomerModal);
   const [modalSearch, setModalSearch] = useState("");
   const [notes, setNotes] = useState("");
   const [deliveryDate, setDeliveryDate] = useState(

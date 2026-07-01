@@ -13,6 +13,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
+import { useWebModalBlur } from "@/hooks/useWebModalBlur";
 
 export type ErrorFallbackProps = {
   error: Error;
@@ -24,6 +25,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
   const insets = useSafeAreaInsets();
 
   const [isModalVisible, setIsModalVisible] = useState(false);
+  useWebModalBlur(isModalVisible);
 
   const handleRestart = async () => {
     try {

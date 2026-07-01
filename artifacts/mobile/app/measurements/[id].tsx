@@ -23,6 +23,7 @@ import { MEASUREMENT_FIELDS, getFieldsForProduct } from "@/constants/products";
 import { MeasurementKey } from "@/constants/measurementFields";
 import { formatDate } from "@/utils/storage";
 import { base64ToDataUri, pickMeasurementPhotos } from "@/utils/photos";
+import { useWebModalBlur } from "@/hooks/useWebModalBlur";
 import colors from "@/constants/colors";
 
 function titleCase(value: string) {
@@ -37,6 +38,7 @@ export default function MeasurementDetailScreen() {
   const measurement = measurements.find((m) => m.id === id);
 
   const [editing, setEditing] = useState(false);
+  useWebModalBlur(editing);
   const [editPhotos, setEditPhotos] = useState<string[]>(measurement?.photos ?? []);
   const [editNotes, setEditNotes] = useState(measurement?.notes ?? "");
   const [editDeliveryDate, setEditDeliveryDate] = useState(measurement?.deliveryDate?.split("T")[0] ?? "");
@@ -48,6 +50,7 @@ export default function MeasurementDetailScreen() {
   const [editCustomValues, setEditCustomValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [photoView, setPhotoView] = useState<string | null>(null);
+  useWebModalBlur(!!photoView);
 
   const topPad = Platform.OS === "web" ? 67 : 0;
 

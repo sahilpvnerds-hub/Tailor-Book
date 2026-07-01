@@ -18,6 +18,7 @@ import { useData } from "@/context/DataContext";
 import { formatCurrency } from "@/utils/storage";
 import { Button, EmptyState, Input } from "@/components/ui";
 import { useTranslation } from "@/utils/i18n";
+import { useWebModalBlur } from "@/hooks/useWebModalBlur";
 import colors from "@/constants/colors";
 import { MeasurementUnit, ProductFeature, ProductType } from "@/types";
 import {
@@ -353,7 +354,9 @@ export default function ProductsScreen() {
 
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
+  useWebModalBlur(showModal);
   const [editTarget, setEditTarget] = useState<ProductType | null>(null);
+  useWebModalBlur(!!editTarget);
   const [loading, setLoading] = useState(false);
 
   const filtered = productTypes.filter((p) =>

@@ -10,6 +10,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import colors from "@/constants/colors";
+import { useWebModalBlur } from "@/hooks/useWebModalBlur";
 
 interface DatePickerProps {
   value: string; // YYYY-MM-DD
@@ -91,6 +92,7 @@ function buildMonthGrid(year: number, month: number): (Date | null)[] {
 export function DatePicker({ value, onChange, label, placeholder = "Select date" }: DatePickerProps) {
   const c = useColors();
   const [open, setOpen] = useState(false);
+  useWebModalBlur(open);
 
   const initial = useMemo(() => parseYMD(value) ?? new Date(), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [view, setView] = useState<{ year: number; month: number }>({

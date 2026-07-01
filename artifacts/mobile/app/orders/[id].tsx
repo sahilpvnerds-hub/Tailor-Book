@@ -24,6 +24,7 @@ import { Button, Card, Badge, Divider, Input } from "@/components/ui";
 import { DatePicker } from "@/components/DatePicker";
 import { formatCurrency, formatDate } from "@/utils/storage";
 import { Order } from "@/types";
+import { useWebModalBlur } from "@/hooks/useWebModalBlur";
 
 function titleCase(value: string | null | undefined) {
   if (!value) return "";
@@ -403,6 +404,7 @@ export default function OrderDetailScreen() {
 
   // ── Edit modal (status, delivery date, discount, notes) ────────────────
   const [showEditModal, setShowEditModal] = useState(false);
+  useWebModalBlur(showEditModal);
   const [editDraft, setEditDraft] = useState<EditDraft>({
     status: currentOrder.status,
     deliveryDate: currentOrder.deliveryDate ?? "",

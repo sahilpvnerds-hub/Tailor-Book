@@ -20,6 +20,7 @@ import { Button, Input } from "@/components/ui";
 import { DatePicker } from "@/components/DatePicker";
 import { MEASUREMENT_FIELDS, getFieldsForProduct } from "@/constants/products";
 import { MeasurementKey } from "@/constants/measurementFields";
+import { useWebModalBlur } from "@/hooks/useWebModalBlur";
 import colors from "@/constants/colors";
 import type { CustomMeasurementField, Measurement } from "@/types";
 
@@ -118,7 +119,9 @@ export default function NewMeasurementScreen() {
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
+  useWebModalBlur(showProductModal);
   const [showCustomModal, setShowCustomModal] = useState(false);
+  useWebModalBlur(showCustomModal);
   const [newFieldName, setNewFieldName] = useState("");
 
   const selectedCustomer = customers.find((cu) => cu.id === selectedCustomerId);

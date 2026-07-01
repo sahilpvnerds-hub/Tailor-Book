@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
+import { useWebModalBlur } from "@/hooks/useWebModalBlur";
 import { useData } from "@/context/DataContext";
 import { EmptyState, SectionHeader } from "@/components/ui";
 import { formatDate } from "@/utils/storage";
@@ -40,6 +41,7 @@ function AddFamilyMemberModal({
   const [relation, setRelation] = useState<Relation>("son");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  useWebModalBlur(visible);
 
   async function handleSave() {
     const errs = runValidation([

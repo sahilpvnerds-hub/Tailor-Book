@@ -23,6 +23,7 @@ import { OrderItem, Relation, Measurement, ProductType, Gender, CustomMeasuremen
 import { formatCurrency } from "@/utils/storage";
 import { getFieldsForProduct, MEASUREMENT_FIELDS } from "@/constants/products";
 import { MeasurementKey } from "@/constants/measurementFields";
+import { useWebModalBlur } from "@/hooks/useWebModalBlur";
 import { base64ToDataUri, pickMeasurementPhotos } from "@/utils/photos";
 import colors from "@/constants/colors";
 
@@ -115,6 +116,7 @@ export default function NewOrderScreen() {
   const [selectedCustomerId, setSelectedCustomerId] = useState(params.customerId ?? "");
   const [showCustomerList, setShowCustomerList] = useState(!params.customerId);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
+  useWebModalBlur(showCustomerModal);
   const [modalSearch, setModalSearch] = useState("");
   const [notes, setNotes] = useState("");
   const [deliveryDate, setDeliveryDate] = useState("");
@@ -449,6 +451,7 @@ export default function NewOrderScreen() {
   // Modals States
   const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null);
   const [showMeasModal, setShowMeasModal] = useState(false);
+  useWebModalBlur(showMeasModal);
   const [measDraftValues, setMeasDraftValues] = useState<Record<string, string>>({});
   const [measDraftCustom, setMeasDraftCustom] = useState<Record<string, string>>({});
   const [measDraftPhotos, setMeasDraftPhotos] = useState<string[]>([]);
@@ -461,10 +464,12 @@ export default function NewOrderScreen() {
   // Measurement Fields list and persists to the master record (and the
   // Masters page) via the data context.
   const [showAddCustomFieldModal, setShowAddCustomFieldModal] = useState(false);
+  useWebModalBlur(showAddCustomFieldModal);
   const [newCustomFieldName, setNewCustomFieldName] = useState("");
   const [savingCustomField, setSavingCustomField] = useState(false);
 
   const [showFamilyModal, setShowFamilyModal] = useState(false);
+  useWebModalBlur(showFamilyModal);
   const [familyDraftName, setFamilyDraftName] = useState("");
   const [familyDraftRelation, setFamilyDraftRelation] = useState<Relation>("other");
   const [savingFamily, setSavingFamily] = useState(false);

@@ -10,6 +10,7 @@ import { Badge, Button, Card, Divider } from "@/components/ui";
 import { displayOrderLabel, formatCurrency, formatDate } from "@/utils/storage";
 import { base64ToDataUri } from "@/utils/photos";
 import { Invoice } from "@/types";
+import { useWebModalBlur } from "@/hooks/useWebModalBlur";
 import colors from "@/constants/colors";
 
 function titleCase(value?: string | null) {
@@ -81,7 +82,9 @@ export default function InvoiceDetailScreen() {
     .filter((m): m is NonNullable<typeof m> => !!m);
   const allLinkedPhotos = linkedMeasurements.flatMap((m) => m.photos ?? []);
   const [photoView, setPhotoView] = useState<string | null>(null);
+  useWebModalBlur(!!photoView);
   const [labelModalOpen, setLabelModalOpen] = useState(false);
+  useWebModalBlur(labelModalOpen);
 
   const topPad = Platform.OS === "web" ? 67 : 0;
 
