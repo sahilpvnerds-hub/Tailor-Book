@@ -108,7 +108,8 @@ export default function NewOrderScreen() {
     addFamilyMember,
     addCustomField,
     deleteCustomField,
-    customFields
+    customFields,
+    updateProductType,
   } = useData();
 
   const [customerSearch, setCustomerSearch] = useState("");
@@ -120,6 +121,8 @@ export default function NewOrderScreen() {
   const [deliveryDate, setDeliveryDate] = useState("");
   const [advanceAmount, setAdvanceAmount] = useState("");
   const [loading, setLoading] = useState(false);
+  // Order-level product reference photos (shown above Delivery Date)
+  const [orderPhotos, setOrderPhotos] = useState<string[]>([]);
 
   // Discount controls — type can be "none" | "fixed" | "percent". Only one
   // discount applies at a time. The discount is applied to the order
@@ -470,6 +473,16 @@ export default function NewOrderScreen() {
   const [savingFamily, setSavingFamily] = useState(false);
   const [familyAssignTargetIdx, setFamilyAssignTargetIdx] = useState<number | null>(null);
 
+  // "Add Custom Feature" modal — inline input row in Features/Sub-types
+  // section. Opens a popup to confirm, then saves feature to Product
+  // Master and auto-selects it for the current item.
+  const [showCustomFeatureModal, setShowCustomFeatureModal] = useState(false);
+  const [customFeatureInput, setCustomFeatureInput] = useState("");
+  const [customFeatureTargetIdx, setCustomFeatureTargetIdx] = useState<number | null>(null);
+  const [savingCustomFeature, setSavingCustomFeature] = useState(false);
+  // Per-item inline input text (shown in the input box before opening popup)
+  const [itemCustomFeatureText, setItemCustomFeatureText] = useState<Record<string, string>>({});
+
   function openMeasurementEditor(idx: number) {
     const item = localItems[idx];
     setActiveItemIndex(idx);
@@ -556,15 +569,16 @@ export default function NewOrderScreen() {
     }
   }
 
-  async function handleAddPhotos() {
-    const picked = await pickMeasurementPhotos(measDraftPhotos.length);
+  // Order-level product photo handlers
+  async function handleAddOrderPhoto() {
+    const picked = await pickMeasurementPhotos(orderPhotos.length);
     if (picked.length === 0) return;
-    setMeasDraftPhotos((prev) => [...prev, ...picked.map((p) => p.base64).filter(Boolean)]);
+    setOrderPhotos((prev) => [...prev, ...picked.map((p) => p.base64).filter(Boolean)]);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }
 
-  function handleRemovePhoto(idx: number) {
-    setMeasDraftPhotos((prev) => prev.filter((_, i) => i !== idx));
+  function handleRemoveOrderPhoto(idx: number) {
+    setOrderPhotos((prev) => prev.filter((_, i) => i !== idx));
   }
 
   /**
@@ -637,6 +651,87 @@ export default function NewOrderScreen() {
         },
       ]
     );
+  }
+
+  /**
+   * Opens the custom feature confirmation popup for a given item index.
+   * The tailor types the feature name in the inline input, then taps +
+   * which opens this popup to confirm.
+   */
+  function openCustomFeatureModal(idx: number) {
+    const item = localItems[idx];
+    const text = (itemCustomFeatureText[item.id] ?? "").trim();
+    if (!text) return;
+    setCustomFeatureTargetIdx(idx);
+    setCustomFeatureInput(text);
+    setShowCustomFeatureModal(true);
+  }
+
+  /**
+   * Confirms and saves the custom feature:
+   * 1. Appends it to the product master's features list (persisted via
+   *    updateProductType so it shows in Masters and all future orders).
+   * 2. Auto-selects the new feature for the current item.
+   */
+  async function handleAddCustomFeature() {
+    if (customFeatureTargetIdx === null) return;
+    const label = customFeatureInput.trim();
+    if (!label || label.length < 2) {
+      Alert.alert("Validation", "Feature name must be at least 2 characters.");
+      return;
+    }
+    const item = localItems[customFeatureTargetIdx];
+    const pt = getProductForItem(item);
+    if (!pt) {
+      Alert.alert("Error", "Product type not found.");
+      return;
+    }
+    // Prevent duplicates (case-insensitive)
+    const existing = (pt.features ?? []).find(
+      (f) => f.label.toLowerCase() === label.toLowerCase()
+    );
+    if (existing) {
+      // Feature already exists — just select it and close
+      setLocalItems((prev) => {
+        const updated = [...prev];
+        const it = updated[customFeatureTargetIdx];
+        if (!it.selectedFeatures.includes(existing.label)) {
+          updated[customFeatureTargetIdx] = {
+            ...it,
+            selectedFeatures: [...it.selectedFeatures, existing.label],
+          };
+        }
+        return updated;
+      });
+      setItemCustomFeatureText((prev) => ({ ...prev, [item.id]: "" }));
+      setShowCustomFeatureModal(false);
+      return;
+    }
+    setSavingCustomFeature(true);
+    try {
+      const newFeature = { label, gender: "both" as const };
+      const updatedFeatures = [...(pt.features ?? []), newFeature];
+      // Persist to Product Master
+      await updateProductType(pt.id, { features: updatedFeatures });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Auto-select the new feature for the current item
+      setLocalItems((prev) => {
+        const updated = [...prev];
+        const it = updated[customFeatureTargetIdx];
+        updated[customFeatureTargetIdx] = {
+          ...it,
+          selectedFeatures: [...it.selectedFeatures, label],
+        };
+        return updated;
+      });
+      // Clear inline input
+      setItemCustomFeatureText((prev) => ({ ...prev, [item.id]: "" }));
+      setShowCustomFeatureModal(false);
+    } catch (e: any) {
+      Alert.alert("Error", e?.message ?? "Failed to add feature");
+    } finally {
+      setSavingCustomFeature(false);
+    }
   }
 
   function openFamilyCreator(idx: number) {
@@ -1222,10 +1317,12 @@ export default function NewOrderScreen() {
                       </View>
 
                       {/* Subtypes/Features Checklist */}
-                      <View style={{ gap: 6 }}>
+                      <View style={{ gap: 8 }}>
                         <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
                           Features / Sub-types
                         </Text>
+
+                        {/* Existing features as checkboxes */}
                         {matchingFeatures.length > 0 ? (
                           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
                             {matchingFeatures.map((feat) => {
@@ -1261,10 +1358,56 @@ export default function NewOrderScreen() {
                         ) : (
                           <View style={{ padding: 10, borderRadius: 8, backgroundColor: c.muted + "20", borderWidth: 1, borderColor: c.border }}>
                             <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: c.mutedForeground }}>
-                              {pt?.features?.length ? "No sub-types match this assignee" : "No sub-types added in Product Master"}
+                              {pt?.features?.length ? "No sub-types match this assignee" : "No sub-types added yet. Add one below!"}
                             </Text>
                           </View>
                         )}
+
+                        {/* Inline "Add Custom Feature" input row (like 2nd image) */}
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            borderWidth: 1,
+                            borderColor: c.border,
+                            borderRadius: 10,
+                            backgroundColor: c.input,
+                            overflow: "hidden",
+                            marginTop: 2,
+                          }}
+                        >
+                          <TextInput
+                            style={{
+                              flex: 1,
+                              fontSize: 13,
+                              fontFamily: "Inter_400Regular",
+                              color: c.foreground,
+                              paddingHorizontal: 12,
+                              paddingVertical: 9,
+                            }}
+                            placeholder="e.g. Half Sleeve, V-Neck"
+                            placeholderTextColor={c.mutedForeground}
+                            value={itemCustomFeatureText[item.id] ?? ""}
+                            onChangeText={(v) =>
+                              setItemCustomFeatureText((prev) => ({ ...prev, [item.id]: v.slice(0, 60) }))
+                            }
+                            onSubmitEditing={() => openCustomFeatureModal(idx)}
+                            returnKeyType="done"
+                            maxLength={60}
+                          />
+                          <Pressable
+                            onPress={() => openCustomFeatureModal(idx)}
+                            style={{
+                              backgroundColor: c.primary,
+                              paddingHorizontal: 14,
+                              paddingVertical: 9,
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <MaterialIcons name="add" size={18} color="#FFFFFF" />
+                          </Pressable>
+                        </View>
                       </View>
 
                       {/* Measurement Box with Add/Edit Measurement */}
@@ -1330,6 +1473,95 @@ export default function NewOrderScreen() {
         {/* Order Meta Info */}
         {selectedCustomerId && (
           <Card style={{ padding: 16, gap: 14 }}>
+
+            {/* Product Photos — order-level reference photos */}
+            <View style={{ gap: 10 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                <View style={{ gap: 2 }}>
+                  <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    Product Photos ({orderPhotos.length}/4)
+                  </Text>
+                  <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
+                    Reference images for this order
+                  </Text>
+                </View>
+                {orderPhotos.length < 4 && (
+                  <Pressable
+                    onPress={handleAddOrderPhoto}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 4,
+                      backgroundColor: c.primary + "12",
+                      paddingVertical: 6,
+                      paddingHorizontal: 12,
+                      borderRadius: 20,
+                      borderWidth: 1,
+                      borderColor: c.primary + "40",
+                    }}
+                  >
+                    <MaterialIcons name="add-a-photo" size={14} color={c.primary} />
+                    <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.primary }}>
+                      Add Photo
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+
+              {orderPhotos.length > 0 ? (
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+                  {orderPhotos.map((p, pIdx) => (
+                    <View key={pIdx} style={{ position: "relative" }}>
+                      <Image
+                        source={{ uri: base64ToDataUri(p) }}
+                        style={{ width: 80, height: 80, borderRadius: 10, backgroundColor: c.muted }}
+                        resizeMode="cover"
+                      />
+                      <Pressable
+                        onPress={() => handleRemoveOrderPhoto(pIdx)}
+                        style={{
+                          position: "absolute",
+                          top: -6,
+                          right: -6,
+                          backgroundColor: "#EF4444",
+                          width: 22,
+                          height: 22,
+                          borderRadius: 11,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          borderWidth: 2,
+                          borderColor: c.card,
+                        }}
+                      >
+                        <MaterialIcons name="close" size={12} color="#FFFFFF" />
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Pressable
+                  onPress={handleAddOrderPhoto}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    borderWidth: 1,
+                    borderColor: c.border,
+                    borderStyle: "dashed",
+                    borderRadius: 10,
+                    paddingVertical: 16,
+                    backgroundColor: c.muted + "20",
+                  }}
+                >
+                  <MaterialIcons name="add-a-photo" size={20} color={c.mutedForeground} />
+                  <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: c.mutedForeground }}>
+                    Tap to add product photos
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+
             <DatePicker
               label="Delivery Date (Optional)"
               value={deliveryDate}
@@ -1747,59 +1979,6 @@ export default function NewOrderScreen() {
                 )}
               </View>
 
-              {/* Photos Section */}
-              <View style={{ gap: 12, borderTopWidth: 1, borderTopColor: c.border, paddingTop: 16 }}>
-                <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                  Photos ({measDraftPhotos.length}/4)
-                </Text>
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
-                  {measDraftPhotos.map((p, pIdx) => (
-                    <View key={pIdx} style={{ position: "relative" }}>
-                      <Image
-                        source={{ uri: base64ToDataUri(p) }}
-                        style={{ width: 80, height: 80, borderRadius: 10, backgroundColor: c.muted }}
-                        resizeMode="cover"
-                      />
-                      <Pressable
-                        onPress={() => handleRemovePhoto(pIdx)}
-                        style={{
-                          position: "absolute",
-                          top: -6,
-                          right: -6,
-                          backgroundColor: "#EF4444",
-                          width: 22,
-                          height: 22,
-                          borderRadius: 11,
-                          alignItems: "center",
-                          justifyContent: "center",
-                          borderWidth: 2,
-                          borderColor: c.card
-                        }}
-                      >
-                        <MaterialIcons name="close" size={12} color="#FFFFFF" />
-                      </Pressable>
-                    </View>
-                  ))}
-                  {measDraftPhotos.length < 4 && (
-                    <Pressable
-                      onPress={handleAddPhotos}
-                      style={{
-                        width: 80,
-                        height: 80,
-                        borderRadius: 10,
-                        borderWidth: 1,
-                        borderColor: c.primary,
-                        borderStyle: "dashed",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        backgroundColor: c.primary + "06"
-                      }}
-                    >
-                      <MaterialIcons name="add-a-photo" size={24} color={c.primary} />
-                    </Pressable>
-                  )}
-                </View>
-              </View>
 
               {/* Notes */}
               <View style={{ gap: 6, borderTopWidth: 1, borderTopColor: c.border, paddingTop: 16 }}>
@@ -1914,6 +2093,150 @@ export default function NewOrderScreen() {
           )}
         </Modal>
       )}
+
+      {/* Add Custom Feature Modal — confirms new feature before saving to Product Master */}
+      <Modal
+        visible={showCustomFeatureModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!savingCustomFeature) setShowCustomFeatureModal(false);
+        }}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1, justifyContent: "center", padding: 20, backgroundColor: "rgba(0,0,0,0.5)" }}
+        >
+          <Pressable
+            onPress={() => { if (!savingCustomFeature) setShowCustomFeatureModal(false); }}
+            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+          />
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: c.card,
+              borderRadius: 16,
+              padding: 20,
+              gap: 16,
+              borderWidth: 1,
+              borderColor: c.border,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: 0.15,
+              shadowRadius: 16,
+              elevation: 12,
+            }}
+          >
+            {/* Header */}
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: c.primary + "15", alignItems: "center", justifyContent: "center" }}>
+                  <MaterialIcons name="label" size={16} color={c.primary} />
+                </View>
+                <Text style={{ fontSize: 17, fontFamily: "Inter_700Bold", color: c.foreground }}>
+                  Add Custom Feature
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => { if (!savingCustomFeature) setShowCustomFeatureModal(false); }}
+                style={{ padding: 4 }}
+              >
+                <MaterialIcons name="close" size={20} color={c.mutedForeground} />
+              </Pressable>
+            </View>
+
+            {/* Info note */}
+            <View style={{ backgroundColor: c.primary + "0D", borderRadius: 8, padding: 10, flexDirection: "row", gap: 8, alignItems: "flex-start" }}>
+              <MaterialIcons name="info-outline" size={14} color={c.primary} style={{ marginTop: 1 }} />
+              <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.primary, flex: 1 }}>
+                This feature will be saved to the Product Master and appear in future orders too.
+              </Text>
+            </View>
+
+            {/* Input */}
+            <View style={{ gap: 6 }}>
+              <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                Feature Name
+              </Text>
+              <TextInput
+                value={customFeatureInput}
+                onChangeText={(v) => setCustomFeatureInput(v.slice(0, 60))}
+                placeholder="e.g. Half Sleeve, V-Neck, Regular Fit"
+                placeholderTextColor={c.mutedForeground}
+                autoFocus
+                maxLength={60}
+                style={{
+                  borderWidth: 1,
+                  borderColor: c.primary,
+                  borderRadius: 10,
+                  paddingVertical: 11,
+                  paddingHorizontal: 14,
+                  fontSize: 15,
+                  color: c.foreground,
+                  backgroundColor: c.input,
+                  fontFamily: "Inter_500Medium",
+                }}
+              />
+            </View>
+
+            {/* After adding — the new feature appears as a checked checkbox below others */}
+            <View style={{ backgroundColor: c.muted + "30", borderRadius: 8, padding: 10, gap: 6 }}>
+              <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: c.mutedForeground }}>
+                PREVIEW — will appear as:
+              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <MaterialIcons name="check-box" size={16} color={c.primary} />
+                <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: customFeatureInput.trim() ? c.foreground : c.mutedForeground }}>
+                  {customFeatureInput.trim() || "Feature name"}
+                </Text>
+              </View>
+            </View>
+
+            {/* Action Buttons */}
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <Pressable
+                onPress={() => { if (!savingCustomFeature) setShowCustomFeatureModal(false); }}
+                style={{
+                  flex: 1,
+                  paddingVertical: 12,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: c.border,
+                  alignItems: "center",
+                }}
+                disabled={savingCustomFeature}
+              >
+                <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.mutedForeground }}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleAddCustomFeature}
+                disabled={savingCustomFeature || !customFeatureInput.trim()}
+                style={{
+                  flex: 1,
+                  paddingVertical: 12,
+                  borderRadius: 10,
+                  backgroundColor: customFeatureInput.trim() ? c.primary : c.muted,
+                  alignItems: "center",
+                  flexDirection: "row",
+                  justifyContent: "center",
+                  gap: 6,
+                }}
+              >
+                {savingCustomFeature ? (
+                  <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#FFFFFF" }}>Saving...</Text>
+                ) : (
+                  <>
+                    <MaterialIcons name="add" size={16} color={customFeatureInput.trim() ? "#FFFFFF" : c.mutedForeground} />
+                    <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: customFeatureInput.trim() ? "#FFFFFF" : c.mutedForeground }}>
+                      Add Feature
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Add Family Member Modal */}
       <Modal visible={showFamilyModal} transparent animationType="fade">

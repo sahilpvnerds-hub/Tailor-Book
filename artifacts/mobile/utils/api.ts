@@ -170,6 +170,68 @@ export async function verifyOtp(email: string, otp: string): Promise<{ ok: boole
   };
 }
 
+/**
+ * Request a password reset OTP for the given email.
+ * Always succeeds - returns success even if email doesn't exist (security).
+ * delivered=false means the OTP was NOT sent via email (SMTP down / not configured).
+ */
+export async function forgotPassword(email: string): Promise<{ message: string; delivered: boolean }> {
+  const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  const data = await parseJson<any>(response, "Failed to request password reset");
+  if (!response.ok) {
+    throw new Error(data.error ?? "Failed to request password reset");
+  }
+  return {
+    message: data.message ?? "Password reset instructions have been sent to your email.",
+    delivered: data.delivered ?? false,
+  };
+}
+
+/**
+ * Verify a reset password OTP (separate from verifyOtp for registration).
+ */
+export async function verifyResetOtp(email: string, otp: string): Promise<{ ok: boolean; verifiedAt: string }> {
+  const response = await fetch(`${API_BASE_URL}/auth/verify-reset-otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, otp }),
+  });
+  const data = await parseJson<any>(response, "OTP verification failed");
+  if (!response.ok) {
+    throw new Error(data.error ?? "OTP verification failed");
+  }
+  return {
+    ok: true,
+    verifiedAt: data.verifiedAt,
+  };
+}
+
+/**
+ * Reset password after OTP has been verified.
+ */
+export async function resetPassword(
+  email: string,
+  newPassword: string
+): Promise<{ success: boolean; message: string }> {
+  const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, newPassword }),
+  });
+  const data = await parseJson<any>(response, "Failed to reset password");
+  if (!response.ok) {
+    throw new Error(data.error ?? "Failed to reset password");
+  }
+  return {
+    success: true,
+    message: data.message ?? "Password has been reset successfully.",
+  };
+}
+
 export async function login(emailOrMobile: string, password: string): Promise<{ ok: true; token: string; user: User } | ApiError> {
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
     method: "POST",
@@ -620,14 +682,14 @@ export async function createInvoice(token: string, invoice: Omit<Invoice, "id" |
   return data;
 }
 
-export async function updateInvoiceStatus(token: string, invoiceId: string, status: Invoice["status"]): Promise<Invoice> {
+export async function updateInvoiceStatus(token: string, invoiceId: string, status: Invoice["status"], paidAmount?: number): Promise<Invoice> {
   const response = await fetch(`${API_BASE_URL}/invoices/${invoiceId}/status`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`
     },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, paidAmount }),
   });
   const data = await parseJson<any>(response, "Failed to update invoice status");
   if (!response.ok) {
@@ -1047,6 +1109,9 @@ export const api = {
     checkAvailability,
     sendOtp,
     verifyOtp,
+    verifyResetOtp,
+    forgotPassword,
+    resetPassword,
     login,
     register,
     me,

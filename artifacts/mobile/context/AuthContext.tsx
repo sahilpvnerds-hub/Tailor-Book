@@ -18,6 +18,20 @@ interface AuthContextType {
   updateOnboardingComplete: () => Promise<void>;
   updateProfile: (data: UpdateProfileData) => Promise<void>;
   /**
+   * Request a password reset OTP for the given email.
+   * Returns success even if email doesn't exist (for security).
+   * delivered=true means email was sent via SMTP, delivered=false means only stored in DB.
+   */
+  forgotPassword: (email: string) => Promise<{ success: boolean; error?: string; message?: string; delivered?: boolean }>;
+  /**
+   * Verify the reset password OTP sent to the user's email.
+   */
+  verifyResetOtp: (email: string, otp: string) => Promise<{ success: boolean; error?: string }>;
+  /**
+   * Reset password after OTP has been verified.
+   */
+  resetPassword: (email: string, newPassword: string) => Promise<{ success: boolean; error?: string; message?: string }>;
+  /**
    * Update the user's preferred language both locally (i18next) and on the
    * server (users.preferredLanguage). The next app launch will load in
    * this language.
@@ -102,6 +116,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function forgotPassword(email: string) {
+    try {
+      const result = await api.auth.forgotPassword(email);
+      return { success: true, message: result.message, delivered: result.delivered };
+    } catch (e) {
+      return { success: false, error: (e as Error).message };
+    }
+  }
+
+  async function verifyResetOtp(email: string, otp: string) {
+    try {
+      await api.auth.verifyResetOtp(email, otp);
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: (e as Error).message };
+    }
+  }
+
+  async function resetPassword(email: string, newPassword: string) {
+    try {
+      const result = await api.auth.resetPassword(email, newPassword);
+      return { success: true, message: result.message };
+    } catch (e) {
+      return { success: false, error: (e as Error).message };
+    }
+  }
+
   async function logout() {
     const token = await getToken();
     if (token) {
@@ -179,6 +220,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         updateOnboardingComplete,
         updateProfile,
+        forgotPassword,
+        verifyResetOtp,
+        resetPassword,
         setLanguage,
       }}
     >

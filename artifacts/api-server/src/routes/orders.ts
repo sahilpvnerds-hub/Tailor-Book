@@ -119,7 +119,11 @@ router.get("/:id", async (req: Request, res: Response) => {
     .select()
     .from(orderItems)
     .where(eq(orderItems.orderId, order.id));
-  res.json({ ...order, items });
+  const mappedItems = items.map((it: any) => ({
+    ...it,
+    deliveryStatus: it.deliveryStatus ?? it.delivery_status ?? "pending",
+  }));
+  res.json({ ...order, items: mappedItems });
 });
 
 // ---- POST /api/orders -----------------------------------------------------

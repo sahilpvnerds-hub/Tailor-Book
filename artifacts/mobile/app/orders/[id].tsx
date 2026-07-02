@@ -24,6 +24,7 @@ import { Button, Card, Badge, Divider, Input } from "@/components/ui";
 import { DatePicker } from "@/components/DatePicker";
 import { formatCurrency, formatDate } from "@/utils/storage";
 import { Order } from "@/types";
+import { i18n } from "@/utils/i18n";
 
 function titleCase(value: string | null | undefined) {
   if (!value) return "";
@@ -148,29 +149,42 @@ export default function OrderDetailScreen() {
     return Math.ceil(diff / (1000 * 60 * 60 * 24));
   }
 
+  // Builds share text with NO amounts — only name, product, features,
+  // qty, measurements and notes.
   function buildOrderShareText(o: Order): string {
+    const t = i18n.t;
     const items = o.items ?? [];
+    const itemLines: string[] = [];
+    items.forEach((it, idx) => {
+      itemLines.push(`${idx + 1}. ${it.productType}${
+        it.featureLabel ? ` (${it.featureLabel})` : ""
+      } — ${t("share.qty", "Qty")}: ${it.quantity} — ${t("share.for", "For")}: ${it.personName ?? o.customerName}`);
+      // Include measurement values if available
+      if (it.measurementValues && Object.keys(it.measurementValues).length > 0) {
+        const measStr = Object.entries(it.measurementValues)
+          .filter(([, v]) => v)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(", ");
+        if (measStr) itemLines.push(`   ${t("share.measurements", "Measurements")}: ${measStr}`);
+      }
+    });
     const lines = [
-      `TAILOR BOOK — ORDER`,
-      `==========================`,
-      `Order #: ${o.orderNumber}`,
-      `Customer: ${o.customerName}`,
-      `Mobile: ${o.customerMobile}`,
-      o.deliveryDate ? `Delivery Date: ${formatDate(o.deliveryDate)}` : ``,
+      t("share.orderHeader", "🧵 TAILOR ORDER DETAILS"),
+      `━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `${t("share.order", "📋 Order")}: ${o.orderNumber}`,
+      `${t("share.customer", "👤 Customer")}: ${o.customerName}`,
+      `${t("share.mobile", "📞 Mobile")}: ${o.customerMobile}`,
+      o.deliveryDate ? `${t("share.delivery", "🚚 Delivery")}: ${formatDate(o.deliveryDate)}` : ``,
       ``,
-      `ITEMS`,
-      ...items.map((it) =>
-        `- ${it.productType}${it.featureLabel ? ` (${it.featureLabel})` : ""} x${it.quantity} — ${it.personName ?? o.customerName} — ${formatCurrency(Number(it.price) * it.quantity)}`
-      ),
+      t("share.items", "🛍️ ITEMS"),
+      ...itemLines,
+      o.notes ? `\n${t("share.notes", "📝 Notes")}: ${o.notes}` : ``,
       ``,
-      `Total: ${formatCurrency(Number(o.totalAmount))}`,
-      o.advanceAmount ? `Advance Paid: ${formatCurrency(o.advanceAmount)}` : ``,
-      o.balanceDue ? `Balance Due: ${formatCurrency(o.balanceDue)}` : ``,
-      o.notes ? `Notes: ${o.notes}` : ``,
-      `==========================`,
-      `Thank you for choosing us!`,
+
+      `━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `${t("share.footer", "Thank you for choosing us!")} 🙏`,
     ]
-      .filter(Boolean)
+      .filter((l) => l !== undefined && l !== null)
       .join("\n");
     return lines;
   }
@@ -178,11 +192,16 @@ export default function OrderDetailScreen() {
   // Initialise / refresh per-item delivery map whenever the order changes.
   // Source of truth is the persisted deliveryStatus on each item.
   useEffect(() => {
-    setItemDelivery((prev) => {
+    setItemDelivery(() => {
       const next: Record<string, ItemDeliveryStatus> = {};
       (currentOrder.items ?? []).forEach((it) => {
-        // Use persisted deliveryStatus if available, fall back to order status for legacy data
-        next[it.id] = it.deliveryStatus ?? (currentOrder.status === "completed" ? "delivered" : "pending");
+        // If the order is completed, ALL items are delivered — use order.status
+        // as the authoritative source to avoid stale per-item fields from the server.
+        if (currentOrder.status === "completed") {
+          next[it.id] = "delivered";
+        } else {
+          next[it.id] = (it.deliveryStatus ?? "pending") as ItemDeliveryStatus;
+        }
       });
       return next;
     });
@@ -212,13 +231,16 @@ export default function OrderDetailScreen() {
     return Object.values(groups);
   }, [currentOrder.items]);
 
-  // Whether all items are delivered (order is completed)
+  // Whether all items are delivered — order.status === "completed" is the
+  // authoritative check so the banner is correct even if per-item fields lag.
   const allItemsDelivered = useMemo(
     () =>
-      (currentOrder.items ?? []).every(
-        (it) => (itemDelivery[it.id] ?? "pending") === "delivered",
-      ),
-    [currentOrder.items, itemDelivery],
+      currentOrder.status === "completed" ||
+      ((currentOrder.items ?? []).length > 0 &&
+        (currentOrder.items ?? []).every(
+          (it) => (itemDelivery[it.id] ?? "pending") === "delivered",
+        )),
+    [currentOrder.status, currentOrder.items, itemDelivery],
   );
 
   // Lock the order once it's marked completed: edit, delete, status changes,
@@ -322,8 +344,11 @@ export default function OrderDetailScreen() {
                 await updateItemDeliveryStatus(it.id, "delivered");
               }
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              // Refresh to sync with API and get updated state
-              await refresh();
+              // NOTE: Do NOT call refresh() here — it creates a race condition where
+              // the server response (which may still have stale delivery_status values)
+              // overwrites the local state before the component re-renders, causing the
+              // "Mark all delivered" button to reappear. The local state update from
+              // updateItemDeliveryStatus() is already sufficient for the UI.
             } catch (e: any) {
               Alert.alert("Error", e?.message ?? "Failed to update status");
             } finally {
@@ -377,8 +402,23 @@ export default function OrderDetailScreen() {
     const text = buildOrderShareText(currentOrder);
     setShareLoading(true);
     try {
-      await Share.share({ message: text, title: `Order ${currentOrder.orderNumber}` });
-    } catch {} finally {
+      if (Platform.OS === "web") {
+        if (navigator.share) {
+          await navigator.share({
+            title: `Order ${currentOrder.orderNumber}`,
+            text: text,
+          });
+        } else {
+          // Standard web copy to clipboard fallback
+          await navigator.clipboard.writeText(text);
+          Alert.alert("Success", "Order details copied to clipboard!");
+        }
+      } else {
+        await Share.share({ message: text, title: `Order ${currentOrder.orderNumber}` });
+      }
+    } catch (e) {
+      console.warn("Share failed:", e);
+    } finally {
       setShareLoading(false);
     }
   }
@@ -389,17 +429,16 @@ export default function OrderDetailScreen() {
       `Dear ${currentOrder.customerName},\n\nYour tailoring order details:\n\n${buildOrderShareText(currentOrder)}`,
     );
     const mobile = currentOrder.customerMobile.replace(/\D/g, "");
-    const url = `whatsapp://send?phone=91${mobile}&text=${text}`;
-    const canOpen = await Linking.canOpenURL(url);
-    if (canOpen) {
+    const url = `https://wa.me/91${mobile}?text=${text}`;
+    try {
       await Linking.openURL(url);
-    } else {
-      Alert.alert(
-        "WhatsApp not installed",
-        "Please install WhatsApp to use this feature",
-      );
+    } catch (e) {
+      Alert.alert("Error", "Could not open WhatsApp.");
     }
   }
+
+  // ── Share modal ───────────────────────────────────────────────────────
+  const [showShareModal, setShowShareModal] = useState(false);
 
   // ── Edit modal (status, delivery date, discount, notes) ────────────────
   const [showEditModal, setShowEditModal] = useState(false);
@@ -537,22 +576,20 @@ export default function OrderDetailScreen() {
           >
             <MaterialIcons name="edit" size={20} color={c.primary} />
           </Pressable>
+          {/* Share button — replaces delete */}
           <Pressable
-            onPress={confirmDelete}
-            disabled={deleting || isOrderLocked}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setShowShareModal(true);
+            }}
             style={{
               padding: 8,
-              backgroundColor: "#FEE2E2",
+              backgroundColor: c.primary + "15",
               borderRadius: 8,
-              opacity: deleting || isOrderLocked ? 0.35 : 1,
             }}
             hitSlop={4}
           >
-            {deleting ? (
-              <ActivityIndicator size="small" color={c.destructive} />
-            ) : (
-              <MaterialIcons name="delete" size={20} color={c.destructive} />
-            )}
+            <MaterialIcons name="share" size={20} color={c.primary} />
           </Pressable>
         </View>
       </View>
@@ -575,18 +612,21 @@ export default function OrderDetailScreen() {
             >
               Customer Information
             </Text>
+            {/* Order number pill — like "Order INV 029" label in invoice screen */}
             <View
               style={{
-                width: 36,
-                height: 36,
-                borderRadius: 18,
-                backgroundColor: c.primary + "18",
+                flexDirection: "row",
                 alignItems: "center",
-                justifyContent: "center",
+                gap: 5,
+                backgroundColor: c.primary,
+                borderRadius: 20,
+                paddingHorizontal: 10,
+                paddingVertical: 5,
               }}
             >
-              <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: c.primary }}>
-                {order.customerName.charAt(0).toUpperCase()}
+              <MaterialIcons name="receipt" size={12} color="#FFFFFF" />
+              <Text style={{ fontSize: 12, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>
+                {order.orderNumber}
               </Text>
             </View>
           </View>
@@ -1446,6 +1486,102 @@ export default function OrderDetailScreen() {
             </Pressable>
           </Pressable>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── Share Order Modal ─────────────────────────────────────────── */}
+      <Modal
+        visible={showShareModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowShareModal(false)}
+      >
+        <Pressable
+          onPress={() => setShowShareModal(false)}
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }}
+        >
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: c.card,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              padding: 24,
+              paddingBottom: insets.bottom + 24,
+              gap: 16,
+              borderTopWidth: 1,
+              borderTopColor: c.border,
+            }}
+          >
+            {/* Handle bar */}
+            <View style={{ alignItems: "center", marginBottom: 4 }}>
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: c.border }} />
+            </View>
+
+            {/* Header / Label matching the style */}
+            <Text
+              style={{
+                fontSize: 12,
+                fontFamily: "Inter_600SemiBold",
+                color: c.mutedForeground,
+                textTransform: "uppercase",
+                letterSpacing: 0.5,
+              }}
+            >
+              Share Order
+            </Text>
+
+            {/* Two horizontal buttons layout exactly like img 1 */}
+            <View style={{ flexDirection: "row", gap: 12 }}>
+              <Pressable
+                onPress={async () => {
+                  await handleShareOrder();
+                  setShowShareModal(false);
+                }}
+                style={({ pressed }) => ({
+                  flex: 1,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  paddingVertical: 14,
+                  borderRadius: 12,
+                  backgroundColor: pressed ? c.primary + "1A" : c.primary + "0D",
+                  borderWidth: 1,
+                  borderColor: c.primary + "20",
+                })}
+              >
+                <MaterialIcons name="share" size={20} color={c.primary} />
+                <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.primary }}>
+                  Share
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={async () => {
+                  await handleWhatsApp();
+                  setShowShareModal(false);
+                }}
+                style={({ pressed }) => ({
+                  flex: 1,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  paddingVertical: 14,
+                  borderRadius: 12,
+                  backgroundColor: pressed ? "#25D36625" : "#25D36612",
+                  borderWidth: 1,
+                  borderColor: "#25D36630",
+                })}
+              >
+                <MaterialIcons name="chat" size={20} color="#25D366" />
+                <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#25D366" }}>
+                  WhatsApp
+                </Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );

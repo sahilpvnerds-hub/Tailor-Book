@@ -77,7 +77,7 @@
     "verify": "ચકાસો",
     "submit": "એકાઉન્ટ બનાવો",
     "success": "એકાઉન્ટ બની ગયું — હવે તમે લોગ ઈન કરી શકો છો",
-    "successMessage": "ટેલર બુકમાં આપનું સ્વાગત છે! તમારું એકાઉન્ટ તૈયાર છે.",
+    "successMessage": "સ્ટીચિક્સમાં આપનું સ્વાગત છે! તમારું એકાઉન્ટ તૈયાર છે.",
     "devOtpAlert": "ડેમો OTP: {{code}}\n\nપ્રોડક્શનમાં આ તમારા ઈમેઈલ પર મોકલવામાં આવશે.",
     "specialities": {
       "male": "Male",
@@ -253,7 +253,7 @@
     "sendWhatsApp": "WhatsApp મોકલો",
     "sendEmail": "ઈમેઈલ મોકલો",
     "noItems": "ઓછામાં ઓછી એક વસ્તુ ઉમેરો",
-    "shareTitle": "ટેલર બુક ઈન્વોઈસ",
+    "shareTitle": "સ્ટીચિક્સ ઈન્વોઈસ",
     "viewOrder": "ઓર્ડર જુઓ",
     "noInvoices": "હજુ કોઈ ઈન્વોઈસ નથી"
   },
@@ -449,5 +449,32 @@
       "markUnread": "ન વાંચેલા તરીકે માર્ક કરો",
       "dismiss": "બંધ કરો"
     }
+  },
+  "share": {
+    "orderHeader": "🧵 ટેલર ઓર્ડર વિગતો",
+    "order": "📋 ઓર્ડર",
+    "customer": "👤 ગ્રાહક",
+    "mobile": "📞 મોબાઈલ",
+    "delivery": "🚚 ડિલિવરી",
+    "items": "🛍️ આઇટમ્સ",
+    "product": "પ્રોડક્ટ",
+    "qty": "માત્રા",
+    "for": "માટે",
+    "measurements": "માપ",
+    "notes": "📝 નોંધો",
+    "invoiceHeader": "સ્ટીચિક્સ - ઇનવોઇસ",
+    "invoiceNo": "ઇનવોઇસ #",
+    "orderNo": "ઓર્ડર #",
+    "date": "તારીખ",
+    "customerDetails": "ગ્રાહક વિગતો",
+    "orderItems": "ઓર્ડર આઇટમ્સ",
+    "person": "વ્યક્તિ",
+    "qtyRate": "માત્રા/ભાવ",
+    "subtotal": "પેટા-કુલ",
+    "total": "કુલ",
+    "paid": "ચૂકવેલ",
+    "balance": "બાકી",
+    "status": "સ્થિતિ",
+    "footer": "અમને પસંદ કરવા બદલ આભાર!"
   }
 }

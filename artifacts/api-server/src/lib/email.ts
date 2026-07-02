@@ -19,7 +19,7 @@ const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = Number(process.env.SMTP_PORT || "587");
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
-const SMTP_FROM = process.env.SMTP_FROM || "Tailor Book <no-reply@tailorbook.com>";
+const SMTP_FROM = process.env.SMTP_FROM || "Stitchix <no-reply@tailorbook.com>";
 
 let cachedTransport: Transporter | null = null;
 let transportInitFailed = false;
@@ -61,23 +61,55 @@ export function buildOtpEmail(code: string, ttlMinutes: number): {
   text: string;
   html: string;
 } {
-  const subject = "Tailor Book - Email Verification Code";
+  const subject = "Stitchix - Email Verification Code";
   const text =
     `Hello,\n\n` +
-    `Your Tailor Book verification code is:\n\n` +
+    `Your Stitchix verification code is:\n\n` +
     `  ${code}\n\n` +
     `This OTP is valid for ${ttlMinutes} minutes.\n\n` +
     `Do not share this code with anyone.\n\n` +
     `Regards,\n` +
-    `Tailor Book Team`;
+    `Stitchix Team`;
   const html =
     `<p>Hello,</p>` +
-    `<p>Your Tailor Book verification code is:</p>` +
+    `<p>Your Stitchix verification code is:</p>` +
     `<p style="font-size: 28px; font-weight: bold; letter-spacing: 6px; ` +
     `font-family: monospace;">${code}</p>` +
     `<p>This OTP is valid for ${ttlMinutes} minutes.</p>` +
     `<p><strong>Do not share this code with anyone.</strong></p>` +
-    `<p>Regards,<br/>Tailor Book Team</p>`;
+    `<p>Regards,<br/>Stitchix Team</p>`;
+  return { subject, text, html };
+}
+
+/**
+ * Password reset OTP email body. Used for the forgot-password flow.
+ */
+export function buildPasswordResetEmail(code: string, ttlMinutes: number): {
+  subject: string;
+  text: string;
+  html: string;
+} {
+  const subject = "Stitchix - Password Reset Code";
+  const text =
+    `Hello,\n\n` +
+    `You requested to reset your Stitchix account password.\n\n` +
+    `Your password reset code is:\n\n` +
+    `  ${code}\n\n` +
+    `This code is valid for ${ttlMinutes} minutes.\n\n` +
+    `Do not share this code with anyone.\n\n` +
+    `If you did not request this reset, you can safely ignore this email.\n\n` +
+    `Regards,\n` +
+    `Stitchix Team`;
+  const html =
+    `<p>Hello,</p>` +
+    `<p>You requested to reset your <strong>Stitchix</strong> account password.</p>` +
+    `<p>Your password reset code is:</p>` +
+    `<p style="font-size: 28px; font-weight: bold; letter-spacing: 6px; ` +
+    `font-family: monospace;">${code}</p>` +
+    `<p>This code is valid for ${ttlMinutes} minutes.</p>` +
+    `<p><strong>Do not share this code with anyone.</strong></p>` +
+    `<p>If you did not request this reset, you can safely ignore this email.</p>` +
+    `<p>Regards,<br/>Stitchix Team</p>`;
   return { subject, text, html };
 }
 
@@ -107,6 +139,32 @@ export async function sendOtpEmail(
     return { delivered: true, via: "smtp" };
   } catch (err) {
     console.error("[email] Failed to send OTP email:", err);
+    return {
+      delivered: false,
+      via: "demo",
+      reason: (err as Error).message,
+    };
+  }
+}
+
+/**
+ * Send a password reset OTP email. Falls back to demo mode if SMTP is not configured.
+ */
+export async function sendPasswordResetEmail(
+  to: string,
+  code: string,
+  ttlMinutes = 10,
+): Promise<SendResult> {
+  const { subject, text, html } = buildPasswordResetEmail(code, ttlMinutes);
+  const transport = await getTransport();
+  if (!transport) {
+    return { delivered: false, via: "demo", reason: "SMTP not configured" };
+  }
+  try {
+    await transport.sendMail({ from: SMTP_FROM, to, subject, text, html });
+    return { delivered: true, via: "smtp" };
+  } catch (err) {
+    console.error("[email] Failed to send password reset email:", err);
     return {
       delivered: false,
       via: "demo",

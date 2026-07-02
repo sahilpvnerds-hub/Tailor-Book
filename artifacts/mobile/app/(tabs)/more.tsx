@@ -202,7 +202,7 @@ export default function MoreScreen() {
       </Card>
 
       <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground, textAlign: "center" }}>
-        Tailor Book v2.0.0
+        Stitchix v2.0.0
       </Text>
     </ScrollView>
   );

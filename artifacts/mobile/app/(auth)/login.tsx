@@ -15,6 +15,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 import { Button, Input } from "@/components/ui";
+import { checkAvailability } from "@/utils/api";
 import colors from "@/constants/colors";
 
 export default function LoginScreen() {
@@ -25,6 +26,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
   async function handleLogin() {
@@ -88,6 +90,62 @@ export default function LoginScreen() {
     }
   }
 
+  async function handleForgotPassword() {
+    const emailVal = emailOrMobile.trim();
+
+    // 1. Empty check
+    if (!emailVal) {
+      Alert.alert(
+        "Email Required",
+        "Please enter your email address to reset your password."
+      );
+      return;
+    }
+
+    // 2. Must be an email (forgot password only works with email, not mobile)
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailVal)) {
+      Alert.alert(
+        "Invalid Input",
+        "Please enter a valid email address to reset your password.\n\nMobile numbers cannot be used for password reset."
+      );
+      return;
+    }
+
+    setForgotLoading(true);
+    try {
+      // 3. Check if email exists in the database
+      const result = await checkAvailability({ email: emailVal.toLowerCase() });
+
+      if (!result.available) {
+        // Email exists — navigate and let forgot-password screen handle delivery
+        router.push(`/(auth)/forgot-password?email=${encodeURIComponent(emailVal.toLowerCase())}`);
+      } else {
+        // Email not found — show generic message (don't reveal if email exists or not)
+        Alert.alert(
+          "Check Your Email",
+          "If an account with this email exists, a password reset code has been sent."
+        );
+      }
+    } catch (err) {
+      // Network error or server down — still show generic message
+      const msg = (err as Error).message ?? "Unknown error";
+      if (/HTML instead of JSON|Network request failed|reach http/i.test(msg)) {
+        Alert.alert(
+          "Cannot Reach Server",
+          "Make sure the API server is running on port 4000.\n\n" + msg
+        );
+      } else {
+        Alert.alert(
+          "Check Your Email",
+          "If an account with this email exists, a password reset code has been sent."
+        );
+      }
+    } finally {
+      setForgotLoading(false);
+    }
+  }
+
   const topPad = Platform.OS === "web" ? 67 : 0;
 
   return (
@@ -140,7 +198,7 @@ export default function LoginScreen() {
                 letterSpacing: -0.5,
               }}
             >
-              Tailor Book
+              Stitchix
             </Text>
             <Text
               style={{
@@ -250,6 +308,26 @@ export default function LoginScreen() {
               Admin demo: admin@tailorbook.com{"\n"}Password: admin123
             </Text>
           </View> */}
+
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "center",
+              gap: 4,
+            }}
+          >
+            <Pressable onPress={handleForgotPassword} disabled={forgotLoading}>
+              <Text
+                style={{
+                  fontSize: 14,
+                  fontFamily: "Inter_700Bold",
+                  color: forgotLoading ? c.mutedForeground : c.primary,
+                }}
+              >
+                {forgotLoading ? "Checking…" : "Forgot Password?"}
+              </Text>
+            </Pressable>
+          </View>
 
           {/* Register */}
           <View

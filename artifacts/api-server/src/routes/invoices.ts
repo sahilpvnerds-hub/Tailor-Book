@@ -240,7 +240,8 @@ router.post("/", async (req: Request, res: Response) => {
 
 // ---- PATCH /api/invoices/:id/status --------------------------------------
 const statusSchema = z.object({
-  status: z.enum(["pending", "completed", "cancelled"]),
+  status: z.enum(["pending", "completed", "cancelled"]).optional(),
+  paidAmount: z.number().nonnegative().optional(),
 });
 
 router.patch("/:id/status", async (req: Request, res: Response) => {
@@ -263,10 +264,29 @@ router.patch("/:id/status", async (req: Request, res: Response) => {
     res.status(400).json({ error: "Invalid request body" });
     return;
   }
-  await db
-    .update(invoices)
-    .set({ status: body.data.status })
-    .where(eq(invoices.id, id));
+
+  const updateFields: any = {};
+  if (body.data.status) {
+    updateFields.status = body.data.status;
+  }
+  if (body.data.paidAmount !== undefined) {
+    updateFields.paidAmount = String(body.data.paidAmount);
+    
+    // Auto-complete status if fully paid
+    const newPaid = body.data.paidAmount;
+    const totalVal = Number(existing.total ?? 0);
+    if (newPaid >= totalVal && body.data.status !== "cancelled" && existing.status !== "cancelled") {
+      updateFields.status = "completed";
+    }
+  }
+
+  if (Object.keys(updateFields).length > 0) {
+    await db
+      .update(invoices)
+      .set(updateFields)
+      .where(eq(invoices.id, id));
+  }
+
   const [updated] = await db
     .select()
     .from(invoices)

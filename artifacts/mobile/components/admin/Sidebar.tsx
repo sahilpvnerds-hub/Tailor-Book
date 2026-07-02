@@ -1,5 +1,5 @@
 import React from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Image, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { usePathname, useRouter } from "expo-router";
@@ -53,29 +53,19 @@ export function Sidebar({ userName, userEmail, onLogout }: SidebarProps) {
       <View style={{ flex: 1 }}>
         {/* Brand — gradient logo */}
         <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 6, marginBottom: 28 }}>
-          <View
+          <Image
+            source={require("@/assets/images/icon.png")}
             style={{
               width: 40,
               height: 40,
               borderRadius: 12,
-              backgroundColor: c.primary,
-              alignItems: "center",
-              justifyContent: "center",
-              // Subtle gradient via overlay tint
-              shadowColor: c.primary,
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.35,
-              shadowRadius: 8,
-              elevation: 4,
               borderWidth: 1,
-              borderColor: c.accent,
+              borderColor: c.border,
             }}
-          >
-            <MaterialIcons name="admin-panel-settings" size={22} color={c.primaryForeground} />
-          </View>
+          />
           <View style={{ marginLeft: 12 }}>
-            <Text style={{ fontSize: 15, fontWeight: "800", color: c.foreground, letterSpacing: -0.2 }}>
-              Tailor Book
+            <Text style={{ fontSize: 20, fontFamily: "Inter_700Bold", color: c.foreground, letterSpacing: -0.5 }}>
+              Stitchix
             </Text>
             <Text style={{ fontSize: 11, color: c.mutedForeground, fontWeight: "500", letterSpacing: 0.3 }}>
               Admin Console

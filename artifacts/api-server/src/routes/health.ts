@@ -7,7 +7,7 @@ const router: IRouter = Router();
 // --- GET /api  (root: human-friendly landing) ----------------------------
 router.get("/", (_req: Request, res: Response) => {
   res.json({
-    name: "Tailor Book API",
+    name: "Stitchix API",
     version: "0.1.0",
     status: "running",
     endpoints: {

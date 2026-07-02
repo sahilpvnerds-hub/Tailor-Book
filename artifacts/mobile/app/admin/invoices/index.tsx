@@ -69,9 +69,12 @@ export default function AdminInvoicesScreen() {
     let revenue = 0;
     let outstanding = 0;
     for (const inv of list) {
-      if (inv.status === "completed") revenue += Number(inv.total);
-      if (inv.status === "pending")
+      if (inv.status === "completed") {
+        revenue += Number(inv.total);
+      } else if (inv.status === "pending") {
+        revenue += Number(inv.paidAmount ?? 0);
         outstanding += Math.max(0, Number(inv.total) - Number(inv.paidAmount ?? 0));
+      }
     }
     return { revenue, outstanding };
   }, [list]);

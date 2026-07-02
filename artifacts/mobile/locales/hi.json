@@ -77,7 +77,7 @@
     "verify": "सत्यापित करें",
     "submit": "खाता बनाएं",
     "success": "खाता बन गया — अब आप लॉग इन कर सकते हैं",
-    "successMessage": "टेलर बुक में आपका स्वागत है! आपका खाता तैयार है।",
+    "successMessage": "स्टिचिक्स में आपका स्वागत है! आपका खाता तैयार है।",
     "devOtpAlert": "डेमो OTP: {{code}}\n\nप्रोडक्शन में यह आपके ईमेल पर भेजा जाएगा।",
     "specialities": {
       "male": "Male",
@@ -253,7 +253,7 @@
     "sendWhatsApp": "WhatsApp भेजें",
     "sendEmail": "ईमेल भेजें",
     "noItems": "कम से कम एक वस्तु जोड़ें",
-    "shareTitle": "टेलर बुक चालान",
+    "shareTitle": "स्टिचिक्स चालान",
     "viewOrder": "ऑर्डर देखें",
     "noInvoices": "अभी कोई चालान नहीं"
   },
@@ -449,5 +449,32 @@
       "markUnread": "अपठित के रूप में चिह्नित करें",
       "dismiss": "बंद करें"
     }
+  },
+  "share": {
+    "orderHeader": "🧵 टेलर ऑर्डर विवरण",
+    "order": "📋 ऑर्डर",
+    "customer": "👤 ग्राहक",
+    "mobile": "📞 मोबाइल",
+    "delivery": "🚚 डिलीवरी",
+    "items": "🛍️ आइटम",
+    "product": "उत्पाद",
+    "qty": "मात्रा",
+    "for": "के लिए",
+    "measurements": "माप",
+    "notes": "📝 नोट्स",
+    "invoiceHeader": "स्टिचिक्स - इनवॉइस",
+    "invoiceNo": "इनवॉइस #",
+    "orderNo": "ऑर्डर #",
+    "date": "दिनांक",
+    "customerDetails": "ग्राहक विवरण",
+    "orderItems": "ऑर्डर आइटम",
+    "person": "व्यक्ति",
+    "qtyRate": "मात्रा/दर",
+    "subtotal": "उप-कुल",
+    "total": "कुल",
+    "paid": "भुगतान किया",
+    "balance": "बकाया",
+    "status": "स्थिति",
+    "footer": "हमें चुनने के लिए धन्यवाद!"
   }
 }

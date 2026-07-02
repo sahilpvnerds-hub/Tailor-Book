@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Alert, Image, Linking, Modal, Platform, Pressable, ScrollView, Share, Text, View } from "react-native";
+import { Alert, Image, Linking, Modal, Platform, Pressable, ScrollView, Share, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -11,6 +11,7 @@ import { displayOrderLabel, formatCurrency, formatDate } from "@/utils/storage";
 import { base64ToDataUri } from "@/utils/photos";
 import { Invoice } from "@/types";
 import colors from "@/constants/colors";
+import { i18n } from "@/utils/i18n";
 
 function titleCase(value?: string | null) {
   return value ? value[0].toUpperCase() + value.slice(1) : value;
@@ -23,38 +24,41 @@ function invoiceItemPersonLabel(item: Invoice["items"][number], customerName: st
 }
 
 function buildInvoiceText(invoice: Invoice): string {
+  const t = i18n.t;
   const lines = [
-    `TAILOR BOOK - INVOICE`,
+    t("share.invoiceHeader", "TAILOR BOOK - INVOICE"),
     `============================`,
-    `Invoice #: ${invoice.invoiceNumber}`,
-    `Order #: ${displayOrderLabel(invoice)}`,
-    `Date: ${formatDate(invoice.createdAt)}`,
+    `${t("share.invoiceNo", "Invoice #")}: ${invoice.invoiceNumber}`,
+    `${t("share.orderNo", "Order #")}: ${displayOrderLabel(invoice)}`,
+    `${t("share.date", "Date")}: ${formatDate(invoice.createdAt)}`,
     ``,
-    `CUSTOMER DETAILS`,
-    `Name: ${invoice.customerName}`,
-    `Mobile: ${invoice.customerMobile}`,
+    t("share.customerDetails", "CUSTOMER DETAILS"),
+    `${t("common.name", "Name")}: ${invoice.customerName}`,
+    `${t("common.mobile", "Mobile")}: ${invoice.customerMobile}`,
     ``,
-    `ORDER ITEMS`,
+    t("share.orderItems", "ORDER ITEMS"),
     ...invoice.items.flatMap((item, idx) => {
       const itemLines = [
-        `${idx + 1}. Product: ${item.productType}${item.featureLabel ? ` (${item.featureLabel})` : ""}`,
-        `   Person: ${invoiceItemPersonLabel(item, invoice.customerName)}`,
-        `   Qty/Rate: ${item.quantity} x ${formatCurrency(item.price)} = ${formatCurrency(item.price * item.quantity)}`,
+        `${idx + 1}. ${t("share.product", "Product")}: ${item.productType}${item.featureLabel ? ` (${item.featureLabel})` : ""}`,
+        `   ${t("share.person", "Person")}: ${invoiceItemPersonLabel(item, invoice.customerName)}`,
+        `   ${t("share.qtyRate", "Qty/Rate")}: ${item.quantity} x ${formatCurrency(item.price)} = ${formatCurrency(item.price * item.quantity)}`,
       ];
       if (item.measurementValues && Object.keys(item.measurementValues).length > 0) {
         const measList = Object.entries(item.measurementValues).map(([k, v]) => `${titleCase(k)}: ${v}`).join(", ");
-        itemLines.push(`   Measurements: ${measList}`);
+        itemLines.push(`   ${t("share.measurements", "Measurements")}: ${measList}`);
       }
       return itemLines;
     }),
     ``,
-    `Subtotal: ${formatCurrency(invoice.subtotal)}`,
-    `TOTAL: ${formatCurrency(invoice.total)}`,
+    `${t("share.subtotal", "Subtotal")}: ${formatCurrency(invoice.subtotal)}`,
+    `${t("share.total", "Total")}: ${formatCurrency(invoice.total)}`,
+    `${t("share.paid", "Paid")}: ${formatCurrency(invoice.paidAmount ?? 0)}`,
+    `${t("share.balance", "Balance")}: ${formatCurrency((invoice.total ?? 0) - (invoice.paidAmount ?? 0))}`,
     ``,
-    `Status: ${invoice.status.toUpperCase()}`,
-    invoice.notes ? `Notes: ${invoice.notes}` : "",
+    `${t("share.status", "Status")}: ${invoice.status.toUpperCase()}`,
+    invoice.notes ? `${t("share.notes", "Notes")}: ${invoice.notes}` : "",
     `============================`,
-    `Thank you for choosing us!`,
+    t("share.footer", "Thank you for choosing us!"),
   ]
     .filter((l) => l !== undefined && l !== null)
     .join("\n");
@@ -67,6 +71,8 @@ export default function InvoiceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { invoices, updateInvoiceStatus, measurements } = useData();
   const invoice = invoices.find((i) => i.id === id);
+
+  const [paymentInput, setPaymentInput] = useState("");
 
   // Collect photos from the underlying measurement(s) referenced by each line item.
   const linkedMeasurementIds = Array.from(
@@ -122,8 +128,43 @@ export default function InvoiceDetailScreen() {
   }
 
   async function handleStatusChange(status: Invoice["status"]) {
-    await updateInvoiceStatus(invoice!.id, status);
+    if (status === "completed") {
+      // Mark complete makes it fully paid!
+      await updateInvoiceStatus(invoice!.id, "completed", invoice!.total);
+    } else {
+      await updateInvoiceStatus(invoice!.id, status);
+    }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }
+
+  async function handleRecordPayment() {
+    const amt = parseFloat(paymentInput);
+    if (isNaN(amt) || amt <= 0) {
+      Alert.alert("Invalid Amount", "Please enter a valid payment amount.");
+      return;
+    }
+    const currentPaid = invoice!.paidAmount ?? 0;
+    const nextPaid = currentPaid + amt;
+    const balance = invoice!.total - currentPaid;
+
+    if (amt > balance) {
+      Alert.alert(
+        "Excess Amount",
+        `The amount ₹${amt} exceeds the remaining balance of ₹${balance}.`
+      );
+      return;
+    }
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      const nextStatus = nextPaid >= invoice!.total ? "completed" : "pending";
+      await updateInvoiceStatus(invoice!.id, nextStatus, nextPaid);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Payment Recorded", `Payment of ₹${amt} recorded successfully.`);
+      setPaymentInput("");
+    } catch (e: any) {
+      Alert.alert("Error", e?.message ?? "Failed to record payment");
+    }
   }
 
   const statusVariantMap = {
@@ -361,29 +402,25 @@ export default function InvoiceDetailScreen() {
               <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>Total</Text>
               <Text style={{ fontSize: 18, fontFamily: "Inter_700Bold", color: "#059669" }}>{formatCurrency(invoice.total)}</Text>
             </View>
-            {(invoice.paidAmount ?? 0) > 0 && (
-              <>
-                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                  <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: "#059669" }}>Advance Paid</Text>
-                  <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: "#059669" }}>-{formatCurrency(invoice.paidAmount ?? 0)}</Text>
-                </View>
-                <View style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  backgroundColor: (invoice.total - (invoice.paidAmount ?? 0)) <= 0 ? "#D1FAE5" : "#FEF3C7",
-                  borderRadius: 8, padding: 10,
-                }}>
-                  <Text style={{ fontSize: 15, fontFamily: "Inter_700Bold", color: (invoice.total - (invoice.paidAmount ?? 0)) <= 0 ? "#059669" : "#D97706" }}>
-                    {(invoice.total - (invoice.paidAmount ?? 0)) <= 0 ? "✓ Fully Paid" : "Balance Due"}
-                  </Text>
-                  {(invoice.total - (invoice.paidAmount ?? 0)) > 0 && (
-                    <Text style={{ fontSize: 16, fontFamily: "Inter_800ExtraBold", color: "#D97706" }}>
-                      {formatCurrency(invoice.total - (invoice.paidAmount ?? 0))}
-                    </Text>
-                  )}
-                </View>
-              </>
-            )}
+            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+              <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: c.mutedForeground }}>Amount Paid</Text>
+              <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: "#059669" }}>{formatCurrency(invoice.paidAmount ?? 0)}</Text>
+            </View>
+            <View style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              backgroundColor: (invoice.total - (invoice.paidAmount ?? 0)) <= 0 ? "#D1FAE5" : "#FEF3C7",
+              borderRadius: 8, padding: 10,
+            }}>
+              <Text style={{ fontSize: 15, fontFamily: "Inter_700Bold", color: (invoice.total - (invoice.paidAmount ?? 0)) <= 0 ? "#059669" : "#D97706" }}>
+                {(invoice.total - (invoice.paidAmount ?? 0)) <= 0 ? "✓ Fully Paid" : "Balance Due"}
+              </Text>
+              {(invoice.total - (invoice.paidAmount ?? 0)) > 0 && (
+                <Text style={{ fontSize: 16, fontFamily: "Inter_800ExtraBold", color: "#D97706" }}>
+                  {formatCurrency(invoice.total - (invoice.paidAmount ?? 0))}
+                </Text>
+              )}
+            </View>
           </View>
         </Card>
 
@@ -394,6 +431,73 @@ export default function InvoiceDetailScreen() {
               Notes
             </Text>
             <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: c.foreground }}>{invoice.notes}</Text>
+          </Card>
+        )}
+
+        {/* Part Payment Section */}
+        {(invoice.total - (invoice.paidAmount ?? 0)) > 0 && (
+          <Card style={{ gap: 12 }}>
+            <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
+              Record Payment
+            </Text>
+            <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: c.foreground }}>
+              Enter payment amount to record a partial or full payment.
+            </Text>
+            <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
+              <View style={{
+                flex: 1,
+                flexDirection: "row",
+                alignItems: "center",
+                backgroundColor: c.muted,
+                borderRadius: colors.radius,
+                paddingHorizontal: 12,
+                borderWidth: 1,
+                borderColor: c.border,
+                height: 46,
+              }}>
+                <Text style={{ fontSize: 16, fontFamily: "Inter_600SemiBold", color: c.foreground, marginRight: 4 }}>₹</Text>
+                <TextInput
+                  value={paymentInput}
+                  onChangeText={setPaymentInput}
+                  keyboardType="numeric"
+                  placeholder="Amount"
+                  placeholderTextColor={c.mutedForeground}
+                  style={{
+                    flex: 1,
+                    fontSize: 16,
+                    fontFamily: "Inter_600SemiBold",
+                    color: c.foreground,
+                    padding: 0,
+                  }}
+                />
+              </View>
+              <Button
+                label="Pay"
+                onPress={handleRecordPayment}
+                variant="primary"
+                style={{ height: 46, paddingHorizontal: 20 }}
+              />
+            </View>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              <Pressable
+                onPress={() => setPaymentInput(String(Math.min(100, invoice.total - (invoice.paidAmount ?? 0))))}
+                style={{ backgroundColor: c.muted, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 }}
+              >
+                <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: c.foreground }}>+₹100</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setPaymentInput(String(Math.min(500, invoice.total - (invoice.paidAmount ?? 0))))}
+                style={{ backgroundColor: c.muted, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 }}
+              >
+                <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: c.foreground }}>+₹500</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setPaymentInput(String(invoice.total - (invoice.paidAmount ?? 0)))}
+                style={{ backgroundColor: c.primary + "15", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 }}
+              >
+                <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: c.primary }}>Full Balance (₹{invoice.total - (invoice.paidAmount ?? 0)})</Text>
+              </Pressable>
+            </View>
           </Card>
         )}
 
@@ -444,27 +548,7 @@ export default function InvoiceDetailScreen() {
               <MaterialIcons name="chevron-right" size={18} color={c.mutedForeground} />
             </Pressable>
 
-            <Pressable
-              onPress={handleWhatsApp}
-              style={({ pressed }) => ({
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 12,
-                backgroundColor: c.muted,
-                borderRadius: colors.radius,
-                padding: 14,
-                opacity: pressed ? 0.8 : 1,
-              })}
-            >
-              <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#25D36620", alignItems: "center", justifyContent: "center" }}>
-                <MaterialIcons name="message" size={18} color="#25D366" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.foreground }}>Send via WhatsApp</Text>
-                <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>Open in WhatsApp</Text>
-              </View>
-              <MaterialIcons name="chevron-right" size={18} color={c.mutedForeground} />
-            </Pressable>
+
 
             <Pressable
               onPress={handleEmail}

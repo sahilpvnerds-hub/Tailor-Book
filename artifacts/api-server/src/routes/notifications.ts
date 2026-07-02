@@ -130,7 +130,7 @@ router.post("/dispatch-delivery", async (req: Request, res: Response) => {
         `Hello ${inv.customerName},\n\n` +
         `Your order is ready for delivery.\n\n` +
         `Delivery Date:\n${dateStr}\n\n` +
-        `Thank you,\nTailor Book`;
+        `Thank you,\nStitchix`;
       const phoneDigits = (inv.customerMobile ?? "").replace(/\D/g, "");
       const whatsappUrl = `whatsapp://send?phone=${phoneDigits ? `91${phoneDigits}` : ""}&text=${encodeURIComponent(message)}`;
       const subject = `Your order is ready — ${inv.orderLabel ?? inv.invoiceNumber}`;

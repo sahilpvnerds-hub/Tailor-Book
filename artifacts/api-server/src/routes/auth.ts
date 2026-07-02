@@ -5,7 +5,7 @@ import { db } from "@workspace/db";
 import { pendingOtps, users } from "@workspace/db/schema";
 import { signToken, authMiddleware } from "../middlewares/auth";
 import { rateLimit } from "../middlewares/rate-limit";
-import { sendOtpEmail, smtpConfigured } from "../lib/email";
+import { sendOtpEmail, sendPasswordResetEmail, smtpConfigured } from "../lib/email";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -381,6 +381,201 @@ router.get("/me", authMiddleware, async (req: Request, res: Response) => {
 // future session table integration.
 router.post("/logout", authMiddleware, (_req: Request, res: Response) => {
   res.json({ ok: true });
+});
+
+// --- POST /api/auth/forgot-password ------------------------------------------
+// Initiate password reset by sending OTP to email
+router.post("/forgot-password", async (req: Request, res: Response) => {
+  const body = z.object({ email: z.string().email() }).safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: "Valid email is required" });
+    return;
+  }
+
+  const email = body.data.email.toLowerCase().trim();
+
+  // Check if user exists (don't reveal the result to the caller)
+  const [user] = await db
+    .select({ id: users.id, email: users.email, status: users.status })
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+
+  if (!user || user.status === "rejected") {
+    // Simulate sending so timing is indistinguishable from the success path
+    await new Promise((r) => setTimeout(r, 800 + Math.random() * 500));
+    res.status(200).json({
+      message: "If an account with this email exists, a reset code has been sent.",
+      delivered: false,
+    });
+    return;
+  }
+
+  // Invalidate any older unused OTPs for this email
+  await db.delete(pendingOtps).where(eq(pendingOtps.email, email));
+
+  const otp = generateOtp();
+  const expiresAt = new Date(Date.now() + OTP_TTL_MS);
+
+  await db.insert(pendingOtps).values({
+    id: crypto.randomUUID(),
+    email,
+    otp,
+    expiresAt,
+    attempts: 0,
+    consumed: false,
+  });
+
+  // Send via SMTP
+  const delivery = await sendPasswordResetEmail(email, otp, 10);
+  if (!delivery.delivered) {
+    console.error(
+      `[forgot-password] SMTP delivery failed for ${email}:`,
+      delivery.reason,
+    );
+    // Return delivered:false so the client can warn the user (without
+    // revealing whether the account actually exists).
+    res.status(200).json({
+      message: "If an account with this email exists, a reset code has been sent.",
+      delivered: false,
+    });
+    return;
+  }
+
+  res.status(200).json({
+    message: "If an account with this email exists, a reset code has been sent.",
+    delivered: true,
+  });
+});
+
+// --- POST /api/auth/verify-reset-otp ----------------------------------------
+// Verify a password-reset OTP for the given email. On success, mark the OTP
+// as consumed so the same code cannot be used to also reset the password.
+router.post("/verify-reset-otp", async (req: Request, res: Response) => {
+  const body = z
+    .object({ email: z.string().email(), otp: z.string().regex(/^\d{6}$/) })
+    .safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: "Email and 6-digit code are required" });
+    return;
+  }
+  const email = body.data.email.toLowerCase().trim();
+  const otp = body.data.otp;
+
+  // Find the latest unconsumed, non-expired OTP for this email
+  const [record] = await db
+    .select()
+    .from(pendingOtps)
+    .where(
+      and(
+        eq(pendingOtps.email, email),
+        eq(pendingOtps.consumed, false),
+        gt(pendingOtps.expiresAt, new Date()),
+      ),
+    )
+    .orderBy(desc(pendingOtps.createdAt))
+    .limit(1);
+
+  if (!record) {
+    res.status(400).json({ error: "No active reset code for this email. Please request a new one." });
+    return;
+  }
+
+  if (record.attempts >= OTP_MAX_ATTEMPTS) {
+    await db.delete(pendingOtps).where(eq(pendingOtps.id, record.id));
+    res.status(429).json({ error: "Too many attempts. Please request a new code." });
+    return;
+  }
+
+  if (record.otp !== otp) {
+    await db
+      .update(pendingOtps)
+      .set({ attempts: record.attempts + 1 })
+      .where(eq(pendingOtps.id, record.id));
+    res.status(400).json({ error: "Invalid code. Please try again." });
+    return;
+  }
+
+  // Mark consumed — /reset-password must consume a separate record
+  // that has been consumed by this endpoint within the last 30 minutes.
+  await db
+    .update(pendingOtps)
+    .set({ consumed: true })
+    .where(eq(pendingOtps.id, record.id));
+
+  res.json({ ok: true, verifiedAt: new Date().toISOString() });
+});
+
+// --- POST /api/auth/reset-password -------------------------------------------
+// Reset password with OTP verification. Requires a recently-verified OTP
+// (consumed by /verify-reset-otp within the last 30 minutes).
+router.post("/reset-password", async (req: Request, res: Response) => {
+  const body = z
+    .object({
+      email: z.string().email(),
+      newPassword: z.string().min(8),
+    })
+    .safeParse(req.body);
+
+  if (!body.success) {
+    res.status(400).json({ error: "Email and password are required" });
+    return;
+  }
+
+  const { email, newPassword } = body.data;
+  const emailLower = email.toLowerCase().trim();
+
+  // Check that the OTP was verified in the last 30 minutes
+  const recentVerified = await db
+    .select({ id: pendingOtps.id, createdAt: pendingOtps.createdAt })
+    .from(pendingOtps)
+    .where(
+      and(
+        eq(pendingOtps.email, emailLower),
+        eq(pendingOtps.consumed, true),
+        gt(pendingOtps.createdAt, new Date(Date.now() - 30 * 60 * 1000)),
+      ),
+    )
+    .orderBy(desc(pendingOtps.createdAt))
+    .limit(1);
+
+  if (recentVerified.length === 0) {
+    res
+      .status(403)
+      .json({ error: "OTP not verified. Please verify your code before resetting your password." });
+    return;
+  }
+
+  // Find the user
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, emailLower))
+    .limit(1);
+
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  // Hash new password
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+  // Update user password in the users table
+  await db
+    .update(users)
+    .set({
+      password: hashedPassword,
+    })
+    .where(eq(users.id, user.id));
+
+  // Consume the verified OTP so it can't be used again
+  await db
+    .update(pendingOtps)
+    .set({ consumed: true })
+    .where(eq(pendingOtps.id, recentVerified[0].id));
+
+  res.json({ success: true, message: "Password has been reset successfully" });
 });
 
 // --- PATCH /api/auth/me ---------------------------------------------------

@@ -106,7 +106,7 @@ interface DataContextType {
     deliveryDate?: string;
     orderId?: string | null;
   }) => Promise<Invoice>;
-  updateInvoiceStatus: (id: string, status: Invoice["status"]) => Promise<void>;
+  updateInvoiceStatus: (id: string, status: Invoice["status"], paidAmount?: number) => Promise<void>;
   deleteInvoice: (id: string) => Promise<void>;
   getCustomerInvoices: (customerId: string) => Invoice[];
   addOrder: (data: {
@@ -179,6 +179,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       items: (o.items ?? []).map((it: any) => ({
         ...it,
         price: Number(it.price ?? 0),
+        // Normalize snake_case DB column to camelCase used by the client.
+        // Without this, after a server refresh it.deliveryStatus is undefined
+        // and the "Mark all delivered" banner incorrectly reappears.
+        deliveryStatus: (it.deliveryStatus ?? it.delivery_status ?? "pending") as "pending" | "delivered",
       })),
     };
   }
@@ -1015,14 +1019,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return inv;
   }
 
-  async function updateInvoiceStatus(id: string, status: Invoice["status"]) {
+  async function updateInvoiceStatus(id: string, status: Invoice["status"], paidAmount?: number) {
     const all = await rawGet<Invoice>(STORAGE_KEYS.INVOICES);
-    await saveAllInvoices(all.map((i) => (i.id === id ? { ...i, status } : i)));
-    setInvoices((prev) => prev.map((i) => (i.id === id ? { ...i, status } : i)));
+    const nextInvoices = all.map((i) => {
+      if (i.id === id) {
+        const nextPaid = paidAmount !== undefined ? paidAmount : Number(i.paidAmount ?? 0);
+        return { ...i, status, paidAmount: nextPaid };
+      }
+      return i;
+    });
+    await saveAllInvoices(nextInvoices);
+    setInvoices(nextInvoices.map(normalizeInvoice));
     try {
       const token = await getToken();
       if (token) {
-        await api.invoices.updateStatus(token, id, status);
+        await api.invoices.updateStatus(token, id, status, paidAmount);
       }
     } catch (err) {
       console.warn("updateInvoiceStatus API failed:", err);
@@ -1279,7 +1290,7 @@ async function updateItemDeliveryStatus(itemId: string, status: ItemDeliveryStat
       console.warn("Failed to sync item delivery status:", err);
     }
     // Sync the updated order status
-    const order = all.find(o => o.items.some((it: any) => it.id === itemId));
+    const order = all.find(o => (o.items ?? []).some((it: any) => it.id === itemId));
     if (order) {
       await apiUpdateOrderStatus(token, order.id, order.status);
     }
