@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import {
   Alert,
   Image,
+  InteractionManager,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -197,7 +198,11 @@ export default function NewInvoiceScreen() {
     >
       {/* Header */}
       <View style={{ paddingTop: insets.top + topPad + 16, paddingHorizontal: 20, paddingBottom: 16, backgroundColor: c.card, borderBottomWidth: 1, borderBottomColor: c.border, flexDirection: "row", alignItems: "center", gap: 12 }}>
-        <Pressable onPress={() => router.back()} style={{ backgroundColor: c.muted, borderRadius: 10, padding: 8 }}>
+        <Pressable onPress={() => {
+          InteractionManager.runAfterInteractions(() => {
+            router.back();
+          });
+        }} style={{ backgroundColor: c.muted, borderRadius: 10, padding: 8 }}>
           <MaterialIcons name="arrow-back" size={20} color={c.foreground} />
         </Pressable>
         <Text style={{ flex: 1, fontSize: 18, fontFamily: "Inter_700Bold", color: c.foreground }}>New Invoice</Text>

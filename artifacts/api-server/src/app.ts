@@ -9,6 +9,7 @@ import { logger } from "./lib/logger";
 import { CustomError, errorHandler, errorConverter } from "./middlewares/error-handling";
 
 const app: Express = express();
+app.set("trust proxy", 1); // Trust first proxy (required for rate limiting behind reverse proxies)
 
 app.use(helmet());
 app.use(compression());

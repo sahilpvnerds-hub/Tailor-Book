@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from "react-native";
+import { InteractionManager, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -101,7 +101,7 @@ export default function DashboardScreen() {
     // Send the typed query to the new-customer screen so it can prefill
     // the name or mobile field.
     const q = encodeURIComponent(trimmedQuery);
-    router.push(`/customers/new?q=${q}` as any);
+    InteractionManager.runAfterInteractions(() => router.push(`/customers/new?q=${q}` as any));
   }
 
   const topPad = Platform.OS === "web" ? 67 : 0;
@@ -143,7 +143,7 @@ export default function DashboardScreen() {
 
           {/* Notification bell */}
           <Pressable
-            onPress={() => router.push("/notifications")}
+            onPress={() => InteractionManager.runAfterInteractions(() => router.push("/notifications"))}
             style={({ pressed }) => ({
               width: 40,
               height: 40,
@@ -254,7 +254,7 @@ export default function DashboardScreen() {
                     key={cust.id}
                     onPress={() => {
                       setSearchQuery("");
-                      router.push(`/customers/${cust.id}` as any);
+                      InteractionManager.runAfterInteractions(() => router.push(`/customers/${cust.id}` as any));
                     }}
                     style={({ pressed }) => ({
                       flexDirection: "row",
@@ -485,19 +485,19 @@ export default function DashboardScreen() {
             icon="person-add"
             label={t("dashboard.addCustomer")}
             color="#6366F1"
-            onPress={() => router.push("/customers/new")}
+            onPress={() => InteractionManager.runAfterInteractions(() => router.push("/customers/new"))}
           />
           <QuickAction
             icon="content-cut"
             label={t("dashboard.newOrder")}
             color="#0D6E6E"
-            onPress={() => router.push("/orders/new")}
+            onPress={() => InteractionManager.runAfterInteractions(() => router.push("/orders/new"))}
           />
           <QuickAction
             icon="receipt"
             label={t("dashboard.invoiceList")}
             color="#059669"
-            onPress={() => router.push("/invoices")}
+            onPress={() => InteractionManager.runAfterInteractions(() => router.push("/invoices"))}
           />
         </View>
       </View>
@@ -505,7 +505,7 @@ export default function DashboardScreen() {
       {/* Pending alert */}
       {pendingCount > 0 && (
         <Pressable
-          onPress={() => router.push("/invoices")}
+          onPress={() => InteractionManager.runAfterInteractions(() => router.push("/invoices"))}
           style={({ pressed }) => ({
             marginHorizontal: 22,
             marginTop: 18,
@@ -544,7 +544,7 @@ export default function DashboardScreen() {
             <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>
               {t("dashboard.recentCustomers")}
             </Text>
-            <Pressable onPress={() => router.push("/(tabs)/customers")}>
+            <Pressable onPress={() => InteractionManager.runAfterInteractions(() => router.push("/(tabs)/customers"))}>
               <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: c.primary }}>{t("dashboard.seeAll")}</Text>
             </Pressable>
           </View>
@@ -553,7 +553,7 @@ export default function DashboardScreen() {
               <CustomerItem
                 key={cust.id}
                 customer={cust}
-                onPress={() => router.push(`/customers/${cust.id}` as any)}
+                onPress={() => InteractionManager.runAfterInteractions(() => router.push(`/customers/${cust.id}` as any))}
                 measurementCount={measurements.filter((m) => m.customerId === cust.id).length}
               />
             ))}
@@ -566,13 +566,13 @@ export default function DashboardScreen() {
         <View style={{ marginTop: 24 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginHorizontal: 22, marginBottom: 12 }}>
             <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>{t("dashboard.recentInvoices")}</Text>
-            <Pressable onPress={() => router.push("/invoices")}>
+            <Pressable onPress={() => InteractionManager.runAfterInteractions(() => router.push("/invoices"))}>
               <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: c.primary }}>{t("dashboard.seeAll")}</Text>
             </Pressable>
           </View>
           <View style={{ marginHorizontal: 22, gap: 8 }}>
             {recentInvoices.map((inv) => (
-              <InvoiceItem key={inv.id} invoice={inv} onPress={() => router.push(`/invoices/${inv.id}` as any)} />
+              <InvoiceItem key={inv.id} invoice={inv} onPress={() => InteractionManager.runAfterInteractions(() => router.push(`/invoices/${inv.id}` as any))} />
             ))}
           </View>
         </View>
@@ -603,7 +603,7 @@ export default function DashboardScreen() {
             {t("dashboard.startFirstOrderHint")}
           </Text>
           <Pressable
-            onPress={() => router.push("/customers/new")}
+            onPress={() => InteractionManager.runAfterInteractions(() => router.push("/customers/new"))}
             style={({ pressed }) => ({
               backgroundColor: c.primary,
               paddingHorizontal: 24,

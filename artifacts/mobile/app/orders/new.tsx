@@ -2,6 +2,8 @@ import React, { useState, useMemo, useEffect } from "react";
 import {
   Alert,
   Image,
+  InteractionManager,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -151,11 +153,11 @@ export default function NewOrderScreen() {
   const selectedCustomer = customers.find((cu) => cu.id === selectedCustomerId);
   
   // Initialize customer search field with preselected customer name
-  useState(() => {
+  useEffect(() => {
     if (selectedCustomer) {
       setCustomerSearch(selectedCustomer.name);
     }
-  });
+  }, [selectedCustomer]);
 
   // Get family members for the customer
   const customerFamilyMembers = useMemo(() => {
@@ -272,21 +274,23 @@ export default function NewOrderScreen() {
   // Set up first item when customer is selected
   useEffect(() => {
     if (selectedCustomerId && localItems.length === 0 && productTypes.length > 0) {
-      const pt = productTypes[0];
-      const measState = getMeasurementState(selectedCustomerId, null, pt.id, pt.name);
-      setLocalItems([
-        {
-          id: Math.random().toString(),
-          productTypeId: pt.id,
-          productType: pt.name,
-          quantity: 1,
-          price: pt.amount ? Number(pt.amount) : 0,
-          familyMemberId: null,
-          selectedFeatures: [],
-          ...measState,
-          expanded: true
-        }
-      ]);
+      InteractionManager.runAfterInteractions(() => {
+        const pt = productTypes[0];
+        const measState = getMeasurementState(selectedCustomerId, null, pt.id, pt.name);
+        setLocalItems([
+          {
+            id: Math.random().toString(),
+            productTypeId: pt.id,
+            productType: pt.name,
+            quantity: 1,
+            price: pt.amount ? Number(pt.amount) : 0,
+            familyMemberId: null,
+            selectedFeatures: [],
+            ...measState,
+            expanded: true
+          }
+        ]);
+      });
     }
   }, [selectedCustomerId, productTypes]);
 
@@ -768,7 +772,11 @@ export default function NewOrderScreen() {
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert("Success", "Order created successfully!", [
-        { text: "OK", onPress: () => router.back() },
+        { text: "OK", onPress: () => {
+          InteractionManager.runAfterInteractions(() => {
+            router.back();
+          });
+        } },
       ]);
     } catch (e: any) {
       Alert.alert("Error", e.message ?? "Failed to create order");
@@ -800,7 +808,11 @@ export default function NewOrderScreen() {
           gap: 12,
         }}
       >
-        <Pressable onPress={() => router.back()} style={{ padding: 4 }}>
+        <Pressable onPress={() => {
+          InteractionManager.runAfterInteractions(() => {
+            router.back();
+          });
+        }} style={{ padding: 4 }}>
           <MaterialIcons name="arrow-back" size={24} color={c.foreground} />
         </Pressable>
         <Text style={{ fontSize: 20, fontFamily: "Inter_700Bold", color: c.foreground }}>
@@ -892,9 +904,11 @@ export default function NewOrderScreen() {
                           // come back here with ?customerId=… so the new
                           // customer is auto-selected for the order.
                           setShowCustomerList(false);
-                          router.push({
-                            pathname: "/customers/new",
-                            params: { q: customerSearch.trim(), returnTo: "order" },
+                          InteractionManager.runAfterInteractions(() => {
+                            router.push({
+                              pathname: "/customers/new",
+                              params: { q: customerSearch.trim(), returnTo: "order" },
+                            });
                           });
                         }}
                         style={{
@@ -1570,9 +1584,11 @@ export default function NewOrderScreen() {
                 <Pressable
                   onPress={() => {
                     setShowCustomerModal(false);
-                    router.push({
-                      pathname: "/customers/new",
-                      params: { q: modalSearch.trim(), returnTo: "order" },
+                    InteractionManager.runAfterInteractions(() => {
+                      router.push({
+                        pathname: "/customers/new",
+                        params: { q: modalSearch.trim(), returnTo: "order" },
+                      });
                     });
                   }}
                   style={{

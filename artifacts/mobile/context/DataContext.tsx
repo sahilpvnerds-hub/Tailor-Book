@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { InteractionManager } from "react-native";
 import {
   Customer,
   CustomMeasurementField,
@@ -354,7 +355,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return result;
   }
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    InteractionManager.runAfterInteractions(() => {
+      refresh();
+    });
+  }, [refresh]);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
@@ -1290,7 +1295,7 @@ async function updateItemDeliveryStatus(itemId: string, status: ItemDeliveryStat
       console.warn("Failed to sync item delivery status:", err);
     }
     // Sync the updated order status
-    const order = all.find(o => o.items.some((it: any) => it.id === itemId));
+    const order = all.find(o => o.items?.some((it: any) => it.id === itemId));
     if (order) {
       await apiUpdateOrderStatus(token, order.id, order.status);
     }

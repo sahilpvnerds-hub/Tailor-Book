@@ -18,6 +18,7 @@ import { useWebModalBlur } from "@/hooks/useWebModalBlur";
 import { useData } from "@/context/DataContext";
 import { EmptyState, SectionHeader } from "@/components/ui";
 import { formatDate } from "@/utils/storage";
+import { navigateAfterInteractions } from "@/utils/navigation";
 import colors from "@/constants/colors";
 import { FamilyMember, Relation } from "@/types";
 import { Button, Input } from "@/components/ui";
@@ -462,7 +463,7 @@ export default function CustomerDetailScreen() {
         {/* Quick Actions */}
         <View style={{ flexDirection: "row", gap: 10 }}>
           <Pressable
-            onPress={() => router.push({ pathname: "/measurements/new", params: { customerId: customer.id, customerName: customer.name } })}
+            onPress={() => navigateAfterInteractions(() => router.push({ pathname: "/measurements/new", params: { customerId: customer.id, customerName: customer.name } }))}
             style={({ pressed }) => ({
               flex: 1, backgroundColor: c.card, borderRadius: colors.radius, padding: 14,
               alignItems: "center", gap: 8, borderWidth: 1, borderColor: c.border, opacity: pressed ? 0.8 : 1,
@@ -472,7 +473,7 @@ export default function CustomerDetailScreen() {
             <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: c.foreground, textAlign: "center" }}>Add Measurement</Text>
           </Pressable>
           <Pressable
-            onPress={() => router.push({ pathname: "/orders/new", params: { customerId: customer.id, customerName: customer.name, customerMobile: customer.mobile } })}
+            onPress={() => navigateAfterInteractions(() => router.push({ pathname: "/orders/new", params: { customerId: customer.id, customerName: customer.name, customerMobile: customer.mobile } }))}
             style={({ pressed }) => ({
               flex: 1, backgroundColor: c.card, borderRadius: colors.radius, padding: 14,
               alignItems: "center", gap: 8, borderWidth: 1, borderColor: c.border, opacity: pressed ? 0.8 : 1,
@@ -530,7 +531,7 @@ export default function CustomerDetailScreen() {
                     </Text>
                   </View>
                   <Pressable
-                    onPress={() => router.push({ pathname: "/measurements/new", params: { customerId: customer.id, customerName: m.name, familyMemberId: m.id } })}
+                    onPress={() => navigateAfterInteractions(() => router.push({ pathname: "/measurements/new", params: { customerId: customer.id, customerName: m.name, familyMemberId: m.id } }))}
                     style={{ backgroundColor: c.primary + "18", padding: 8, borderRadius: 8 }}
                   >
                     <MaterialIcons name="straighten" size={16} color={c.primary} />
@@ -548,7 +549,7 @@ export default function CustomerDetailScreen() {
         <View>
           <SectionHeader
             title="Measurements"
-            action={{ label: "Add", onPress: () => router.push({ pathname: "/measurements/new", params: { customerId: customer.id, customerName: customer.name } }) }}
+            action={{ label: "Add", onPress: () => navigateAfterInteractions(() => router.push({ pathname: "/measurements/new", params: { customerId: customer.id, customerName: customer.name } })) }}
           />
 
           {/* Primary customer section */}
@@ -558,7 +559,7 @@ export default function CustomerDetailScreen() {
             personIcon="person"
             measurements={selfMeasurements}
             onAddMeasurement={() =>
-              router.push({ pathname: "/measurements/new", params: { customerId: customer.id, customerName: customer.name, familyMemberId: "self" } })
+              navigateAfterInteractions(() => router.push({ pathname: "/measurements/new", params: { customerId: customer.id, customerName: customer.name, familyMemberId: "self" } }))
             }
             customer={customer}
             c={c}
@@ -574,7 +575,7 @@ export default function CustomerDetailScreen() {
               familyMemberId={m.id}
               measurements={memberMeasurementsMap[m.id] ?? []}
               onAddMeasurement={() =>
-                router.push({ pathname: "/measurements/new", params: { customerId: customer.id, customerName: m.name, familyMemberId: m.id } })
+                navigateAfterInteractions(() => router.push({ pathname: "/measurements/new", params: { customerId: customer.id, customerName: m.name, familyMemberId: m.id } }))
               }
               customer={customer}
               c={c}

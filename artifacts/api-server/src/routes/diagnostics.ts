@@ -6,7 +6,7 @@ const router: IRouter = Router();
 // GET /api/debug/diagnostics
 // Run on-demand diagnostics and log results to console. Returns a JSON summary
 // so you can inspect the results in the browser / Postman too.
-router.get("/diagnostics", async (_req: Request, res: Response) => {
+router.get("/", async (_req: Request, res: Response) => {
   const results: Record<string, unknown> = {
     timestamp: new Date().toISOString(),
     env: {

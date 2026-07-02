@@ -11,11 +11,30 @@ import { Platform } from "react-native";
  */
 export function useWebModalBlur(visible: boolean) {
   useEffect(() => {
-    if (visible && Platform.OS === "web" && typeof document !== "undefined") {
+    if (Platform.OS !== "web" || typeof document === "undefined") return;
+
+    // Blur focus before applying inert so the active element drops focus
+    if (visible) {
       const active = document.activeElement as HTMLElement | null;
-      if (active && typeof active.blur === "function") {
+      if (
+        active &&
+        active !== document.body &&
+        active !== document.documentElement &&
+        typeof active.blur === "function"
+      ) {
         active.blur();
       }
     }
+
+    const root = document.getElementById("__next") || document.body;
+    if (!root) return;
+
+    if (visible) {
+      root.setAttribute("inert", "");
+    } else {
+      root.removeAttribute("inert");
+    }
+
+    return () => root.removeAttribute("inert");
   }, [visible]);
 }
