@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
@@ -19,8 +20,8 @@ import { useColors } from "@/hooks/useColors";
 import { useData } from "@/context/DataContext";
 import { Button, Card, Input } from "@/components/ui";
 import { DatePicker } from "@/components/DatePicker";
-import { OrderItem, Relation, Measurement, ProductType, Gender, CustomMeasurementField } from "@/types";
-import { formatCurrency } from "@/utils/storage";
+import { OrderItem, Relation, Measurement, ProductType, Gender, CustomMeasurementField, Order } from "@/types";
+import { formatCurrency, generateId } from "@/utils/storage";
 import { getFieldsForProduct, MEASUREMENT_FIELDS } from "@/constants/products";
 import { MeasurementKey } from "@/constants/measurementFields";
 import { base64ToDataUri, pickMeasurementPhotos } from "@/utils/photos";
@@ -79,30 +80,28 @@ interface LocalItem {
   price: number;
   familyMemberId: string | null; // null = self
   selectedFeatures: string[];
-  
+
   // Measurement details
   measurementId: string | null;
   measurementValues: Record<string, string>;
   customValues: Record<string, string>;
   photos: string[];
   notes: string;
-  
+
   expanded: boolean;
 }
 
-export default function NewOrderScreen() {
+export default function EditOrderScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{
-    customerId?: string;
-  }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
 
   const {
     customers,
     productTypes,
     measurements,
     familyMembers,
-    addOrder,
+    updateOrder,
     addMeasurement,
     updateMeasurement,
     addFamilyMember,
@@ -112,60 +111,127 @@ export default function NewOrderScreen() {
     updateProductType,
   } = useData();
 
+  const [loading, setLoading] = useState(false);
+  const [initialOrder, setInitialOrder] = useState<Order | null>(null);
+
+  // --- Form State ---
   const [customerSearch, setCustomerSearch] = useState("");
-  const [selectedCustomerId, setSelectedCustomerId] = useState(params.customerId ?? "");
-  const [showCustomerList, setShowCustomerList] = useState(!params.customerId);
+  const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const [showCustomerList, setShowCustomerList] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [modalSearch, setModalSearch] = useState("");
   const [notes, setNotes] = useState("");
   const [deliveryDate, setDeliveryDate] = useState("");
   const [advanceAmount, setAdvanceAmount] = useState("");
-  const [loading, setLoading] = useState(false);
-  // Order-level product reference photos (shown above Delivery Date)
+
+  // Order-level product reference photos
   const [orderPhotos, setOrderPhotos] = useState<string[]>([]);
 
-  // Discount controls — type can be "none" | "fixed" | "percent". Only one
-  // discount applies at a time. The discount is applied to the order
-  // subtotal (sum of item price × quantity) to compute the final amount.
+  // Discount controls
   const [discountType, setDiscountType] = useState<"none" | "fixed" | "percent">("none");
   const [discountValue, setDiscountValue] = useState("");
 
-  // React to the customerId query param changing — this happens when the
-  // user adds a new customer from the inline search / modal picker and the
-  // customers/new page routes back here with ?customerId=<newId>.
+  const [localItems, setLocalItems] = useState<LocalItem[]>([]);
+
+  // Modals State
+  const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null);
+  const [showMeasModal, setShowMeasModal] = useState(false);
+  const [measDraftValues, setMeasDraftValues] = useState<Record<string, string>>({});
+  const [measDraftCustom, setMeasDraftCustom] = useState<Record<string, string>>({});
+  const [measDraftPhotos, setMeasDraftPhotos] = useState<string[]>([]);
+  const [measDraftNotes, setMeasDraftNotes] = useState("");
+  const [savingMeasurement, setSavingMeasurement] = useState(false);
+
+  const [showAddCustomFieldModal, setShowAddCustomFieldModal] = useState(false);
+  const [newCustomFieldName, setNewCustomFieldName] = useState("");
+  const [savingCustomField, setSavingCustomField] = useState(false);
+
+  const [showFamilyModal, setShowFamilyModal] = useState(false);
+  const [familyDraftName, setFamilyDraftName] = useState("");
+  const [familyDraftRelation, setFamilyDraftRelation] = useState<Relation>("other");
+  const [savingFamily, setSavingFamily] = useState(false);
+  const [familyAssignTargetIdx, setFamilyAssignTargetIdx] = useState<number | null>(null);
+
+  const [showCustomFeatureModal, setShowCustomFeatureModal] = useState(false);
+  const [customFeatureInput, setCustomFeatureInput] = useState("");
+  const [customFeatureTargetIdx, setCustomFeatureTargetIdx] = useState<number | null>(null);
+  const [savingCustomFeature, setSavingCustomFeature] = useState(false);
+  const [itemCustomFeatureText, setItemCustomFeatureText] = useState<Record<string, string>>({});
+
+  // --- Load Order Data ---
   useEffect(() => {
-    const id = params.customerId;
-    if (id && id !== selectedCustomerId) {
-      const cu = customers.find((c) => c.id === id);
-      if (cu) {
-        setSelectedCustomerId(id);
-        setCustomerSearch(cu.name);
-        setShowCustomerList(false);
-        setShowCustomerModal(false);
-        setLocalItems([]);
+    loadOrder();
+  }, [id]);
+
+  const loadOrder = async () => {
+    setLoading(true);
+    try {
+      const allOrders = await import("@/utils/storage").then(m => m.getStorageItem<Order[]>("@tailorbook/orders"));
+      const orderData = allOrders?.find((o: Order) => o.id === id);
+
+      if (orderData) {
+        setInitialOrder({ ...orderData });
+        setSelectedCustomerId(orderData.customerId);
+        setCustomerSearch(orderData.customerName);
+        setNotes(orderData.notes ?? "");
+        setDeliveryDate(orderData.deliveryDate ?? "");
+
+        // Load order-level photos
+        setOrderPhotos(orderData.photos ?? []);
+
+        // Calculate advance amount from balance
+        const totalAmount = Number(orderData.totalAmount) || 0;
+        const balanceDue = Number(orderData.balanceDue) || 0;
+        const advanceFromOrder = totalAmount - balanceDue;
+        setAdvanceAmount(advanceFromOrder > 0 ? String(advanceFromOrder) : "");
+
+        // Convert order items to local format
+        const items = orderData.items || [];
+        const localItemsData: LocalItem[] = items.map(item => {
+          const measVals: Record<string, string> = {};
+          if (item.measurementValues) {
+            Object.entries(item.measurementValues).forEach(([k, v]) => {
+              measVals[k] = String(v).replace(/"/g, "");
+            });
+          }
+
+          return {
+            id: item.id || generateId(),
+            productTypeId: item.productTypeId || "",
+            productType: item.productType,
+            quantity: item.quantity,
+            price: Number(item.price) || 0,
+            familyMemberId: item.familyMemberId || null,
+            selectedFeatures: item.featureLabel ? item.featureLabel.split(", ").filter(Boolean) : [],
+            measurementId: item.measurementId || null,
+            measurementValues: measVals,
+            customValues: {},
+            photos: [],
+            notes: "",
+            expanded: false,
+          };
+        });
+
+        setLocalItems(localItemsData);
+      } else {
+        Alert.alert("Error", "Order not found");
+        router.back();
       }
+    } catch (error) {
+      Alert.alert("Error", "Failed to load order");
+      router.back();
+    } finally {
+      setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.customerId, customers]);
+  };
 
-  // Selected customer details
+  // --- Helpers ---
   const selectedCustomer = customers.find((cu) => cu.id === selectedCustomerId);
-  
-  // Initialize customer search field with preselected customer name
-  useState(() => {
-    if (selectedCustomer) {
-      setCustomerSearch(selectedCustomer.name);
-    }
-  });
 
-  // Get family members for the customer
   const customerFamilyMembers = useMemo(() => {
     return familyMembers.filter((fm) => fm.primaryCustomerId === selectedCustomerId);
   }, [familyMembers, selectedCustomerId]);
 
-  const [localItems, setLocalItems] = useState<LocalItem[]>([]);
-
-  // Find latest measurement for a person and product type
   function findLatestMeasurement(
     customerId: string,
     familyMemberId: string | null,
@@ -202,7 +268,6 @@ export default function NewOrderScreen() {
     return getCustomFieldsForScope(selectedCustomerId, item.familyMemberId, item.productTypeId, item.productType);
   }
 
-  // Pre-fill or build measurement details
   function getMeasurementState(customerId: string, familyMemberId: string | null, productTypeId: string, productTypeName: string) {
     const latest = findLatestMeasurement(customerId, familyMemberId, productTypeId, productTypeName);
     if (!latest) {
@@ -267,114 +332,45 @@ export default function NewOrderScreen() {
     return item.selectedFeatures.filter((label) => matchingLabels.has(label));
   }
 
-  // Set up first item when customer is selected
-  useEffect(() => {
-    if (selectedCustomerId && localItems.length === 0 && productTypes.length > 0) {
-      const pt = productTypes[0];
-      const measState = getMeasurementState(selectedCustomerId, null, pt.id, pt.name);
-      setLocalItems([
-        {
-          id: Math.random().toString(),
-          productTypeId: pt.id,
-          productType: pt.name,
-          quantity: 1,
-          price: pt.amount ? Number(pt.amount) : 0,
-          familyMemberId: null,
-          selectedFeatures: [],
-          ...measState,
-          expanded: true
-        }
-      ]);
-    }
-  }, [selectedCustomerId, productTypes]);
+  // --- Change Detection ---
+  function detectChanges(): boolean {
+    if (!initialOrder) return true;
 
-  const filteredCustomers = customers.filter(
-    (cu) =>
-      cu.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
-      cu.mobile.includes(customerSearch)
-  );
-  
-  const modalFiltered = customers.filter(
-    (cu) =>
-      cu.name.toLowerCase().includes(modalSearch.toLowerCase()) ||
-      cu.mobile.includes(modalSearch)
-  );
-  
-  const useModalPicker = customers.length > CUSTOMER_INLINE_LIMIT;
+    // Check basic fields
+    if (initialOrder.customerId !== selectedCustomerId) return true;
+    if (initialOrder.deliveryDate !== (deliveryDate || null)) return true;
+    if (initialOrder.notes !== (notes.trim() || null)) return true;
 
-  function selectCustomer(id: string) {
-    const cu = customers.find((c) => c.id === id);
-    if (cu) {
-      setSelectedCustomerId(id);
-      setCustomerSearch(cu.name);
-      setShowCustomerList(false);
-      setShowCustomerModal(false);
-      setLocalItems([]);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Check order-level photos
+    const initialPhotos = (initialOrder.photos ?? []) as string[];
+    if (JSON.stringify(initialPhotos) !== JSON.stringify(orderPhotos)) return true;
+
+    // Check items
+    const initialItems = initialOrder.items || [];
+    if (initialItems.length !== localItems.length) return true;
+
+    // Compare item properties
+    for (let i = 0; i < initialItems.length; i++) {
+      const orig = initialItems[i];
+      const loc = localItems[i];
+
+      if (orig.productType !== loc.productType) return true;
+      if (orig.quantity !== loc.quantity) return true;
+      if (Number(orig.price) !== loc.price) return true;
+      if (orig.familyMemberId !== loc.familyMemberId) return true;
+      if (orig.featureLabel !== loc.selectedFeatures.join(", ")) return true;
+      if (orig.measurementId !== loc.measurementId) return true;
+
+      // Compare measurement values (normalize)
+      const origMeas = orig.measurementValues || {};
+      const locMeas = loc.measurementValues;
+      if (JSON.stringify(origMeas) !== JSON.stringify(locMeas)) return true;
     }
+
+    return false;
   }
 
-  const orderItemsList = useMemo(() => {
-    return localItems.map((item) => {
-      const member = item.familyMemberId
-        ? familyMembers.find((fm) => fm.id === item.familyMemberId)
-        : undefined;
-
-      const mValues: Record<string, string> = {};
-      Object.entries(item.measurementValues).forEach(([k, v]) => {
-        if (v && Number(v) > 0) mValues[k] = `${v}"`;
-      });
-      // Merge custom measurements labels
-      Object.entries(item.customValues).forEach(([fid, val]) => {
-        const cf = customFields.find((f) => f.id === fid);
-        if (cf && val && Number(val) > 0) {
-          mValues[cf.fieldName] = `${val}"`;
-        }
-      });
-
-      return {
-        productTypeId: item.productTypeId || undefined,
-        productType: item.productType,
-        featureLabel: getValidSelectedFeatures(item).join(", ") || null,
-        quantity: item.quantity,
-        price: item.price,
-        measurementId: item.measurementId,
-        familyMemberId: item.familyMemberId,
-        personName: member?.name ?? selectedCustomer?.name,
-        relation: member?.relation ?? "self",
-        measurementValues: Object.keys(mValues).length > 0 ? mValues : null,
-      };
-    });
-  }, [localItems, familyMembers, selectedCustomer, customFields, productTypes]);
-
-  const totalAmount = useMemo(() => {
-    return orderItemsList.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  }, [orderItemsList]);
-
-  // Discount amount — never negative, capped to the subtotal so the final
-  // amount can't go below 0. For percent, the user enters a number between
-  // 0–100.
-  const discountAmount = useMemo(() => {
-    if (discountType === "none") return 0;
-    const raw = Number(discountValue);
-    if (!Number.isFinite(raw) || raw <= 0) return 0;
-    if (discountType === "percent") {
-      const pct = Math.min(raw, 100);
-      return Math.min(Math.round((totalAmount * pct) / 100), totalAmount);
-    }
-    // fixed
-    return Math.min(Math.round(raw), totalAmount);
-  }, [discountType, discountValue, totalAmount]);
-
-  const finalAmount = useMemo(() => Math.max(0, totalAmount - discountAmount), [totalAmount, discountAmount]);
-
-  const advancePaid = useMemo(() => {
-    const n = Number(advanceAmount);
-    return isNaN(n) ? 0 : Math.min(n, finalAmount);
-  }, [advanceAmount, finalAmount]);
-
-  const balanceDue = useMemo(() => finalAmount - advancePaid, [finalAmount, advancePaid]);
-
+  // --- Item Management ---
   function addLocalItem() {
     if (productTypes.length === 0) return;
     const pt = productTypes[0];
@@ -382,7 +378,7 @@ export default function NewOrderScreen() {
     setLocalItems((prev) => [
       ...prev.map((it) => ({ ...it, expanded: false })),
       {
-        id: Math.random().toString(),
+        id: generateId(),
         productTypeId: pt.id,
         productType: pt.name,
         quantity: 1,
@@ -398,6 +394,7 @@ export default function NewOrderScreen() {
   function removeLocalItem(id: string) {
     setLocalItems((prev) => prev.filter((item) => item.id !== id));
   }
+
 
   function updateItemProduct(idx: number, productTypeId: string) {
     const pt = productTypes.find((p) => p.id === productTypeId);
@@ -449,40 +446,20 @@ export default function NewOrderScreen() {
     });
   }
 
-  // Modals States
-  const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null);
-  const [showMeasModal, setShowMeasModal] = useState(false);
-  const [measDraftValues, setMeasDraftValues] = useState<Record<string, string>>({});
-  const [measDraftCustom, setMeasDraftCustom] = useState<Record<string, string>>({});
-  const [measDraftPhotos, setMeasDraftPhotos] = useState<string[]>([]);
-  const [measDraftNotes, setMeasDraftNotes] = useState("");
-  const [savingMeasurement, setSavingMeasurement] = useState(false);
+  // --- Customer Selection ---
+  function selectCustomer(id: string) {
+    const cu = customers.find((c) => c.id === id);
+    if (cu) {
+      setSelectedCustomerId(id);
+      setCustomerSearch(cu.name);
+      setShowCustomerList(false);
+      setShowCustomerModal(false);
+      setLocalItems([]);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  }
 
-  // "Add Custom Field" sub-modal — opens inside the measurement editor so
-  // the tailor can declare a new master custom field without leaving the
-  // order page. The new field shows up immediately in the Custom
-  // Measurement Fields list and persists to the master record (and the
-  // Masters page) via the data context.
-  const [showAddCustomFieldModal, setShowAddCustomFieldModal] = useState(false);
-  const [newCustomFieldName, setNewCustomFieldName] = useState("");
-  const [savingCustomField, setSavingCustomField] = useState(false);
-
-  const [showFamilyModal, setShowFamilyModal] = useState(false);
-  const [familyDraftName, setFamilyDraftName] = useState("");
-  const [familyDraftRelation, setFamilyDraftRelation] = useState<Relation>("other");
-  const [savingFamily, setSavingFamily] = useState(false);
-  const [familyAssignTargetIdx, setFamilyAssignTargetIdx] = useState<number | null>(null);
-
-  // "Add Custom Feature" modal — inline input row in Features/Sub-types
-  // section. Opens a popup to confirm, then saves feature to Product
-  // Master and auto-selects it for the current item.
-  const [showCustomFeatureModal, setShowCustomFeatureModal] = useState(false);
-  const [customFeatureInput, setCustomFeatureInput] = useState("");
-  const [customFeatureTargetIdx, setCustomFeatureTargetIdx] = useState<number | null>(null);
-  const [savingCustomFeature, setSavingCustomFeature] = useState(false);
-  // Per-item inline input text (shown in the input box before opening popup)
-  const [itemCustomFeatureText, setItemCustomFeatureText] = useState<Record<string, string>>({});
-
+  // --- Measurement Modal ---
   function openMeasurementEditor(idx: number) {
     const item = localItems[idx];
     setActiveItemIndex(idx);
@@ -504,7 +481,6 @@ export default function NewOrderScreen() {
         const val = measDraftValues[k];
         if (!val) return;
         const n = parseFloat(val);
-        // Guard against NaN / negative / zero — only persist sensible values
         if (Number.isFinite(n) && n > 0) valuesToSave[k] = n;
       });
 
@@ -516,9 +492,6 @@ export default function NewOrderScreen() {
         })
         .filter((cm) => cm.value > 0);
 
-      // Require at least one measurement value to save — prevents empty
-      // "ghost" measurements from being created when the user opens the
-      // editor and just taps Save.
       if (Object.keys(valuesToSave).length === 0 && customToSave.length === 0) {
         Alert.alert("No measurements", "Please enter at least one measurement value before saving.");
         setSavingMeasurement(false);
@@ -569,7 +542,7 @@ export default function NewOrderScreen() {
     }
   }
 
-  // Order-level product photo handlers
+  // --- Order-level Photos ---
   async function handleAddOrderPhoto() {
     const picked = await pickMeasurementPhotos(orderPhotos.length);
     if (picked.length === 0) return;
@@ -581,13 +554,34 @@ export default function NewOrderScreen() {
     setOrderPhotos((prev) => prev.filter((_, i) => i !== idx));
   }
 
-  /**
-   * Declare a new custom measurement field while the order is being
-   * created. Persists to the master record (so the new field shows up
-   * in the Masters page, on the Measurements tab, and on every future
-   * order) and the next render of the Custom Measurement Fields list
-   * inside the modal picks it up.
-   */
+  // --- Per-item Photo Management ---
+  async function handleAddItemPhoto(idx: number) {
+    const item = localItems[idx];
+    const picked = await pickMeasurementPhotos(item.photos.length);
+    if (picked.length === 0) return;
+    setLocalItems((prev) => {
+      const updated = [...prev];
+      updated[idx] = {
+        ...updated[idx],
+        photos: [...updated[idx].photos, ...picked.map((p) => p.base64).filter(Boolean)],
+      };
+      return updated;
+    });
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }
+
+  function handleRemoveItemPhoto(idx: number, photoIdx: number) {
+    setLocalItems((prev) => {
+      const updated = [...prev];
+      updated[idx] = {
+        ...updated[idx],
+        photos: updated[idx].photos.filter((_, i) => i !== photoIdx),
+      };
+      return updated;
+    });
+  }
+
+  // --- Custom Fields ---
   async function handleAddCustomField() {
     const trimmed = newCustomFieldName.trim();
     if (!trimmed) {
@@ -629,14 +623,11 @@ export default function NewOrderScreen() {
           onPress: async () => {
             try {
               await deleteCustomField(cfId);
-              // Clear draft value for this field
               setMeasDraftCustom((prev) => {
                 const next = { ...prev };
                 delete next[cfId];
                 return next;
               });
-              // Remove from every item's customValues so it can't slip into
-              // the order snapshot when the tailor taps Save Order
               setLocalItems((prev) =>
                 prev.map((it) => {
                   const { [cfId]: _removed, ...rest } = it.customValues;
@@ -653,11 +644,7 @@ export default function NewOrderScreen() {
     );
   }
 
-  /**
-   * Opens the custom feature confirmation popup for a given item index.
-   * The tailor types the feature name in the inline input, then taps +
-   * which opens this popup to confirm.
-   */
+  // --- Custom Features ---
   function openCustomFeatureModal(idx: number) {
     const item = localItems[idx];
     const text = (itemCustomFeatureText[item.id] ?? "").trim();
@@ -667,12 +654,6 @@ export default function NewOrderScreen() {
     setShowCustomFeatureModal(true);
   }
 
-  /**
-   * Confirms and saves the custom feature:
-   * 1. Appends it to the product master's features list (persisted via
-   *    updateProductType so it shows in Masters and all future orders).
-   * 2. Auto-selects the new feature for the current item.
-   */
   async function handleAddCustomFeature() {
     if (customFeatureTargetIdx === null) return;
     const label = customFeatureInput.trim();
@@ -686,12 +667,10 @@ export default function NewOrderScreen() {
       Alert.alert("Error", "Product type not found.");
       return;
     }
-    // Prevent duplicates (case-insensitive)
     const existing = (pt.features ?? []).find(
       (f) => f.label.toLowerCase() === label.toLowerCase()
     );
     if (existing) {
-      // Feature already exists — just select it and close
       setLocalItems((prev) => {
         const updated = [...prev];
         const it = updated[customFeatureTargetIdx];
@@ -711,10 +690,8 @@ export default function NewOrderScreen() {
     try {
       const newFeature = { label, gender: "both" as const };
       const updatedFeatures = [...(pt.features ?? []), newFeature];
-      // Persist to Product Master
       await updateProductType(pt.id, { features: updatedFeatures });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // Auto-select the new feature for the current item
       setLocalItems((prev) => {
         const updated = [...prev];
         const it = updated[customFeatureTargetIdx];
@@ -724,7 +701,6 @@ export default function NewOrderScreen() {
         };
         return updated;
       });
-      // Clear inline input
       setItemCustomFeatureText((prev) => ({ ...prev, [item.id]: "" }));
       setShowCustomFeatureModal(false);
     } catch (e: any) {
@@ -734,6 +710,7 @@ export default function NewOrderScreen() {
     }
   }
 
+  // --- Family Member ---
   function openFamilyCreator(idx: number) {
     setFamilyAssignTargetIdx(idx);
     setFamilyDraftName("");
@@ -770,20 +747,18 @@ export default function NewOrderScreen() {
     }
   }
 
-  async function handleSave() {
+  // --- Handle Update ---
+  async function handleUpdate() {
     if (!selectedCustomerId || !selectedCustomer) {
       Alert.alert("Customer required", "Please select a customer before saving the order.");
       return;
     }
-    if (orderItemsList.length === 0) {
+    if (localItems.length === 0) {
       Alert.alert("No items", "Please include at least one item in the order.");
       return;
     }
 
-    // Per-item validation — every item must have a product type, an amount
-    // greater than zero, a quantity of at least 1, an assigned family
-    // member (self counts), and measurement details. We surface the first
-    // invalid item so the user can fix it in place.
+    // Validation
     for (let i = 0; i < localItems.length; i++) {
       const it = localItems[i];
       if (!it.productType || !it.productType.trim()) {
@@ -798,14 +773,10 @@ export default function NewOrderScreen() {
         Alert.alert("Quantity required", `Item #${i + 1}: quantity must be at least 1.`);
         return;
       }
-      // Assignee is always set (null = self), but keep an explicit guard
-      // so an item with no assignee never slips through.
       if (it.familyMemberId === undefined) {
         Alert.alert("Assignee required", `Item #${i + 1}: please choose who this item is for.`);
         return;
       }
-      // Measurement details — at least one standard or custom value must
-      // be entered (or a saved measurement linked to this item).
       const hasMeasurementValues = Object.values(it.measurementValues).some(
         (v) => v && Number(v) > 0
       );
@@ -821,9 +792,7 @@ export default function NewOrderScreen() {
       }
     }
 
-    // Discount sanity — if a discount type is selected the value must
-    // parse to a positive number. Empty values are treated as no
-    // discount.
+    // Discount validation
     if (discountType !== "none") {
       const n = Number(discountValue);
       if (!Number.isFinite(n) || n <= 0) {
@@ -841,9 +810,47 @@ export default function NewOrderScreen() {
       }
     }
 
+    // Check if changes were made
+    if (!detectChanges()) {
+      Alert.alert("No Changes", "No changes detected. The order is already up to date.");
+      router.back();
+      return;
+    }
+
     setLoading(true);
     try {
-      await addOrder({
+      const orderItemsList = localItems.map((item) => {
+        const member = item.familyMemberId
+          ? familyMembers.find((fm) => fm.id === item.familyMemberId)
+          : undefined;
+
+        const mValues: Record<string, string> = {};
+        Object.entries(item.measurementValues).forEach(([k, v]) => {
+          if (v && Number(v) > 0) mValues[k] = `${v}"`;
+        });
+        Object.entries(item.customValues).forEach(([fid, val]) => {
+          const cf = customFields.find((f) => f.id === fid);
+          if (cf && val && Number(val) > 0) {
+            mValues[cf.fieldName] = `${val}"`;
+          }
+        });
+
+        return {
+          id: item.id,
+          productTypeId: item.productTypeId || undefined,
+          productType: item.productType,
+          featureLabel: getValidSelectedFeatures(item).join(", ") || null,
+          quantity: item.quantity,
+          price: item.price,
+          measurementId: item.measurementId,
+          familyMemberId: item.familyMemberId,
+          personName: member?.name ?? selectedCustomer?.name,
+          relation: member?.relation ?? "self",
+          measurementValues: Object.keys(mValues).length > 0 ? mValues : null,
+        };
+      });
+
+      await updateOrder(id, {
         customerId: selectedCustomerId,
         customerName: selectedCustomer.name,
         customerMobile: selectedCustomer.mobile,
@@ -855,19 +862,101 @@ export default function NewOrderScreen() {
       });
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("Success", "Order created successfully!", [
+      Alert.alert("Success", "Order updated successfully!", [
         { text: "OK", onPress: () => router.back() },
       ]);
     } catch (e: any) {
-      Alert.alert("Error", e.message ?? "Failed to create order");
+      Alert.alert("Error", e.message ?? "Failed to update order");
     } finally {
       setLoading(false);
     }
   }
 
+  // --- Computed Values ---
+  const orderItemsList = useMemo(() => {
+    return localItems.map((item) => {
+      const member = item.familyMemberId
+        ? familyMembers.find((fm) => fm.id === item.familyMemberId)
+        : undefined;
+
+      const mValues: Record<string, string> = {};
+      Object.entries(item.measurementValues).forEach(([k, v]) => {
+        if (v && Number(v) > 0) mValues[k] = `${v}"`;
+      });
+      Object.entries(item.customValues).forEach(([fid, val]) => {
+        const cf = customFields.find((f) => f.id === fid);
+        if (cf && val && Number(val) > 0) {
+          mValues[cf.fieldName] = `${val}"`;
+        }
+      });
+
+      return {
+        id: item.id,
+        productTypeId: item.productTypeId || undefined,
+        productType: item.productType,
+        featureLabel: getValidSelectedFeatures(item).join(", ") || null,
+        quantity: item.quantity,
+        price: item.price,
+        measurementId: item.measurementId,
+        familyMemberId: item.familyMemberId,
+        personName: member?.name ?? selectedCustomer?.name,
+        relation: member?.relation ?? "self",
+        measurementValues: Object.keys(mValues).length > 0 ? mValues : null,
+      };
+    });
+  }, [localItems, familyMembers, selectedCustomer, customFields, productTypes]);
+
+  const totalAmount = useMemo(() => {
+    return orderItemsList.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  }, [orderItemsList]);
+
+  const discountAmount = useMemo(() => {
+    if (discountType === "none") return 0;
+    const raw = Number(discountValue);
+    if (!Number.isFinite(raw) || raw <= 0) return 0;
+    if (discountType === "percent") {
+      const pct = Math.min(raw, 100);
+      return Math.min(Math.round((totalAmount * pct) / 100), totalAmount);
+    }
+    return Math.min(Math.round(raw), totalAmount);
+  }, [discountType, discountValue, totalAmount]);
+
+  const finalAmount = useMemo(() => Math.max(0, totalAmount - discountAmount), [totalAmount, discountAmount]);
+
+  const advancePaid = useMemo(() => {
+    const n = Number(advanceAmount);
+    return isNaN(n) ? 0 : Math.min(n, finalAmount);
+  }, [advanceAmount, finalAmount]);
+
+  const balanceDue = useMemo(() => finalAmount - advancePaid, [finalAmount, advancePaid]);
+
+  // --- Customer Filtering ---
+  const filteredCustomers = customers.filter(
+    (cu) =>
+      cu.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+      cu.mobile.includes(customerSearch)
+  );
+
+  const modalFiltered = customers.filter(
+    (cu) =>
+      cu.name.toLowerCase().includes(modalSearch.toLowerCase()) ||
+      cu.mobile.includes(modalSearch)
+  );
+
+  const useModalPicker = customers.length > CUSTOMER_INLINE_LIMIT;
+
   const topPad = Platform.OS === "web" ? 67 : 0;
   const activeItem = activeItemIndex === null ? null : localItems[activeItemIndex] ?? null;
   const activeCustomFields = activeItem ? getCustomFieldsForItem(activeItem) : [];
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: c.background }}>
+        <ActivityIndicator size="large" color={c.primary} />
+        <Text style={{ marginTop: 16, color: c.mutedForeground }}>Loading order...</Text>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -892,7 +981,7 @@ export default function NewOrderScreen() {
           <MaterialIcons name="arrow-back" size={24} color={c.foreground} />
         </Pressable>
         <Text style={{ fontSize: 20, fontFamily: "Inter_700Bold", color: c.foreground }}>
-          Create Order
+          Update Order
         </Text>
       </View>
 
@@ -903,30 +992,58 @@ export default function NewOrderScreen() {
             Customer Details
           </Text>
           <View style={{ position: "relative" }}>
+            <View
+              style={{
+                borderWidth: 1,
+                borderColor: c.border,
+                borderRadius: 8,
+                paddingVertical: 12,
+                paddingHorizontal: 14,
+                backgroundColor: c.muted + "30",
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <MaterialIcons name="person" size={20} color={c.mutedForeground} />
+              <Text
+                style={{
+                  flex: 1,
+                  fontSize: 15,
+                  fontFamily: "Inter_500Medium",
+                  color: c.foreground,
+                }}
+                numberOfLines={1}
+              >
+                {customerSearch || (selectedCustomer ? selectedCustomer.name : "Select a customer")}
+              </Text>
+              <View
+                style={{
+                  backgroundColor: c.muted,
+                  borderRadius: 4,
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 10,
+                    fontFamily: "Inter_600SemiBold",
+                    color: c.mutedForeground,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Locked
+                </Text>
+              </View>
+            </View>
+            {/* Hidden native input to keep focus behavior */}
             <Input
               placeholder="Search Customer..."
               value={customerSearch}
-              onChangeText={(text) => {
-                setCustomerSearch(text);
-                setShowCustomerList(true);
-                if (selectedCustomerId) {
-                  setSelectedCustomerId("");
-                }
-              }}
-              onFocus={() => {
-                if (useModalPicker) {
-                  setShowCustomerModal(true);
-                } else {
-                  setShowCustomerList(true);
-                }
-              }}
-              rightElement={
-                useModalPicker ? (
-                  <Pressable onPress={() => setShowCustomerModal(true)} style={{ padding: 8 }}>
-                    <MaterialIcons name="search" size={20} color={c.mutedForeground} />
-                  </Pressable>
-                ) : undefined
-              }
+              onChangeText={() => {}}
+              onFocus={() => {}}
+              style={{ position: "absolute", opacity: 0, height: 0, width: 0 }}
             />
             {showCustomerList && !useModalPicker && customerSearch.length > 0 && (
               <View
@@ -967,42 +1084,6 @@ export default function NewOrderScreen() {
                       </Text>
                     </Pressable>
                   ))}
-                  {filteredCustomers.length === 0 && (
-                    <View style={{ padding: 16, gap: 10 }}>
-                      <Text style={{ textAlign: "center", color: c.mutedForeground, fontFamily: "Inter_500Medium", fontSize: 13 }}>
-                        No matches for "{customerSearch}"
-                      </Text>
-                      <Pressable
-                        onPress={() => {
-                          // Close the dropdown but keep the typed query so
-                          // the new-customer form can prefill it. The
-                          // "returnTo=order" param tells customers/new to
-                          // come back here with ?customerId=… so the new
-                          // customer is auto-selected for the order.
-                          setShowCustomerList(false);
-                          router.push({
-                            pathname: "/customers/new",
-                            params: { q: customerSearch.trim(), returnTo: "order" },
-                          });
-                        }}
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: 6,
-                          backgroundColor: c.primary,
-                          paddingVertical: 10,
-                          paddingHorizontal: 14,
-                          borderRadius: 8,
-                        }}
-                      >
-                        <MaterialIcons name="person-add" size={16} color="#FFFFFF" />
-                        <Text style={{ color: "#FFFFFF", fontSize: 13, fontFamily: "Inter_700Bold" }}>
-                          Add new customer
-                        </Text>
-                      </Pressable>
-                    </View>
-                  )}
                 </ScrollView>
               </View>
             )}
@@ -1044,7 +1125,6 @@ export default function NewOrderScreen() {
               const pt = getProductForItem(item);
               const matchingFeatures = getMatchingFeatures(pt, item.familyMemberId);
 
-              // Measurements summary text
               const measSummaryList: string[] = [];
               getFieldsForProduct(item.productType).forEach((k) => {
                 const val = item.measurementValues[k];
@@ -1064,7 +1144,7 @@ export default function NewOrderScreen() {
               const summaryText = summaryParts.join("  ·  ") || "Tap to add measurements & features";
 
               return (
-                <Card key={item.id} style={{ padding: 16, borderWidth: 1, borderColor: c.border }}>
+                <Card key={item.id || `item-${idx}`} style={{ padding: 16, borderWidth: 1, borderColor: c.border }}>
                   {!item.expanded ? (
                     /* Collapsed State */
                     <Pressable
@@ -1229,10 +1309,6 @@ export default function NewOrderScreen() {
                               const clean = val.replace(/[^0-9]/g, "").slice(0, 4);
                               setLocalItems((prev) => {
                                 const updated = [...prev];
-                                // Same pattern as price: clearing the field
-                                // stores 0 so the input goes blank and the
-                                // user can type any value. handleSave()
-                                // enforces >= 1 at submit time.
                                 updated[idx].quantity = clean === "" ? 0 : Math.min(9999, Number(clean));
                                 return updated;
                               });
@@ -1254,7 +1330,7 @@ export default function NewOrderScreen() {
                         </View>
                       </View>
 
-                      {/* Assign To Chips (Self + Family Members + Add Family button) */}
+                      {/* Assign To Chips */}
                       <View style={{ gap: 6 }}>
                         <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
                           Assign To
@@ -1317,13 +1393,12 @@ export default function NewOrderScreen() {
                         </ScrollView>
                       </View>
 
-                      {/* Subtypes/Features Checklist */}
+                      {/* Features/Sub-types */}
                       <View style={{ gap: 8 }}>
                         <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
                           Features / Sub-types
                         </Text>
 
-                        {/* Existing features as checkboxes */}
                         {matchingFeatures.length > 0 ? (
                           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
                             {matchingFeatures.map((feat) => {
@@ -1364,7 +1439,7 @@ export default function NewOrderScreen() {
                           </View>
                         )}
 
-                        {/* Inline "Add Custom Feature" input row (like 2nd image) */}
+                        {/* Inline Add Custom Feature */}
                         <View
                           style={{
                             flexDirection: "row",
@@ -1411,7 +1486,7 @@ export default function NewOrderScreen() {
                         </View>
                       </View>
 
-                      {/* Measurement Box with Add/Edit Measurement */}
+                      {/* Measurement Box */}
                       <View style={{ gap: 6, marginTop: 4 }}>
                         <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
                           Measurements Details
@@ -1474,8 +1549,7 @@ export default function NewOrderScreen() {
         {/* Order Meta Info */}
         {selectedCustomerId && (
           <Card style={{ padding: 16, gap: 14 }}>
-
-            {/* Product Photos — order-level reference photos */}
+            {/* Product Photos */}
             <View style={{ gap: 10 }}>
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                 <View style={{ gap: 2 }}>
@@ -1617,9 +1691,7 @@ export default function NewOrderScreen() {
               maxLength={500}
             />
 
-            {/* Discount controls — type can be "none" | "fixed" | "percent".
-                The discount is applied to the order subtotal to derive
-                the final amount. */}
+            {/* Discount controls */}
             <View style={{ gap: 8 }}>
               <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
                 Discount (Optional)
@@ -1745,8 +1817,8 @@ export default function NewOrderScreen() {
             )}
 
             <Button
-              label="Save Order"
-              onPress={handleSave}
+              label="Update Order"
+              onPress={handleUpdate}
               loading={loading}
               icon="save"
               size="lg"
@@ -1755,7 +1827,7 @@ export default function NewOrderScreen() {
         )}
       </ScrollView>
 
-      {/* Customer Picker Modal (for long lists) */}
+      {/* Customer Picker Modal */}
       <Modal visible={showCustomerModal} animationType="slide">
         <View style={{ flex: 1, backgroundColor: c.background, paddingTop: insets.top }}>
           <View style={{ flexDirection: "row", alignItems: "center", padding: 16, borderBottomWidth: 1, borderBottomColor: c.border, gap: 12 }}>
@@ -1785,39 +1857,6 @@ export default function NewOrderScreen() {
                 </Text>
               </Pressable>
             ))}
-            {modalFiltered.length === 0 && (
-              <View style={{ padding: 24, gap: 12, alignItems: "center" }}>
-                <Text style={{ textAlign: "center", color: c.mutedForeground, fontFamily: "Inter_500Medium", fontSize: 14 }}>
-                  {modalSearch.trim()
-                    ? `No matches for "${modalSearch.trim()}"`
-                    : "No customers yet"}
-                </Text>
-                <Pressable
-                  onPress={() => {
-                    setShowCustomerModal(false);
-                    router.push({
-                      pathname: "/customers/new",
-                      params: { q: modalSearch.trim(), returnTo: "order" },
-                    });
-                  }}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 8,
-                    backgroundColor: c.primary,
-                    paddingVertical: 12,
-                    paddingHorizontal: 18,
-                    borderRadius: 10,
-                  }}
-                >
-                  <MaterialIcons name="person-add" size={18} color="#FFFFFF" />
-                  <Text style={{ color: "#FFFFFF", fontSize: 14, fontFamily: "Inter_700Bold" }}>
-                    Add new customer
-                  </Text>
-                </Pressable>
-              </View>
-            )}
           </ScrollView>
         </View>
       </Modal>
@@ -1884,11 +1923,7 @@ export default function NewOrderScreen() {
                 </View>
               </View>
 
-              {/* Custom Fields — always rendered so the tailor can
-                  declare new fields even when none exist yet. New fields
-                  are persisted to the master record (Masters page) via
-                  addCustomField and immediately available for this item
-                  and all future orders. */}
+              {/* Custom Fields */}
               <View style={{ gap: 12, borderTopWidth: 1, borderTopColor: c.border, paddingTop: 16 }}>
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                   <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
@@ -1922,7 +1957,6 @@ export default function NewOrderScreen() {
                   <View style={{ flexDirection: "row", flexWrap: "wrap", marginHorizontal: -6 }}>
                     {activeCustomFields.map((cf) => (
                       <View key={cf.id} style={{ width: "50%", paddingHorizontal: 6, marginBottom: 12 }}>
-                        {/* Label row with delete button */}
                         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
                           <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: c.foreground, flex: 1 }} numberOfLines={1}>
                             {cf.fieldName}
@@ -1980,7 +2014,6 @@ export default function NewOrderScreen() {
                 )}
               </View>
 
-
               {/* Notes */}
               <View style={{ gap: 6, borderTopWidth: 1, borderTopColor: c.border, paddingTop: 16 }}>
                 <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
@@ -2009,12 +2042,7 @@ export default function NewOrderScreen() {
             </ScrollView>
           </View>
 
-          {/* Add Custom Field overlay — rendered inside the parent
-              measurement modal as an absolutely-positioned View rather
-              than a nested native <Modal>. Nesting two native modals
-              causes the inner one to be queued behind the parent's
-              animation, so it only appears after the parent closes/saves.
-              An inline overlay sidesteps the native ModalManager entirely. */}
+          {/* Add Custom Field overlay */}
           {showAddCustomFieldModal && (
             <KeyboardAvoidingView
               behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -2095,207 +2123,117 @@ export default function NewOrderScreen() {
         </Modal>
       )}
 
-      {/* Add Custom Feature Modal — confirms new feature before saving to Product Master */}
+      {/* Add Custom Feature Modal */}
       <Modal
         visible={showCustomFeatureModal}
         transparent
         animationType="fade"
-        onRequestClose={() => {
-          if (!savingCustomFeature) setShowCustomFeatureModal(false);
-        }}
+        onRequestClose={() => setShowCustomFeatureModal(false)}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={{ flex: 1, justifyContent: "center", padding: 20, backgroundColor: "rgba(0,0,0,0.5)" }}
+        <Pressable
+          onPress={() => !savingCustomFeature && setShowCustomFeatureModal(false)}
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 24 }}
         >
-          <Pressable
-            onPress={() => { if (!savingCustomFeature) setShowCustomFeatureModal(false); }}
-            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
-          />
           <Pressable
             onPress={(e) => e.stopPropagation()}
             style={{
               backgroundColor: c.card,
               borderRadius: 16,
-              padding: 20,
+              padding: 24,
+              width: "100%",
+              maxWidth: 400,
               gap: 16,
-              borderWidth: 1,
-              borderColor: c.border,
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 8 },
-              shadowOpacity: 0.15,
-              shadowRadius: 16,
-              elevation: 12,
             }}
           >
-            {/* Header */}
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: c.primary + "15", alignItems: "center", justifyContent: "center" }}>
-                  <MaterialIcons name="label" size={16} color={c.primary} />
-                </View>
-                <Text style={{ fontSize: 17, fontFamily: "Inter_700Bold", color: c.foreground }}>
-                  Add Custom Feature
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => { if (!savingCustomFeature) setShowCustomFeatureModal(false); }}
-                style={{ padding: 4 }}
-              >
-                <MaterialIcons name="close" size={20} color={c.mutedForeground} />
-              </Pressable>
-            </View>
-
-            {/* Info note */}
-            <View style={{ backgroundColor: c.primary + "0D", borderRadius: 8, padding: 10, flexDirection: "row", gap: 8, alignItems: "flex-start" }}>
-              <MaterialIcons name="info-outline" size={14} color={c.primary} style={{ marginTop: 1 }} />
-              <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.primary, flex: 1 }}>
-                This feature will be saved to the Product Master and appear in future orders too.
-              </Text>
-            </View>
-
-            {/* Input */}
-            <View style={{ gap: 6 }}>
-              <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                Feature Name
-              </Text>
-              <TextInput
-                value={customFeatureInput}
-                onChangeText={(v) => setCustomFeatureInput(v.slice(0, 60))}
-                placeholder="e.g. Half Sleeve, V-Neck, Regular Fit"
-                placeholderTextColor={c.mutedForeground}
-                autoFocus
-                maxLength={60}
-                style={{
-                  borderWidth: 1,
-                  borderColor: c.primary,
-                  borderRadius: 10,
-                  paddingVertical: 11,
-                  paddingHorizontal: 14,
-                  fontSize: 15,
-                  color: c.foreground,
-                  backgroundColor: c.input,
-                  fontFamily: "Inter_500Medium",
-                }}
+            <Text style={{ fontSize: 18, fontFamily: "Inter_700Bold", color: c.foreground }}>
+              Add Custom Feature
+            </Text>
+            <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
+              Save "{customFeatureInput}" as a new feature for this product type?
+            </Text>
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <Button
+                label="Cancel"
+                onPress={() => setShowCustomFeatureModal(false)}
+                variant="outline"
+                style={{ flex: 1 }}
+                disabled={savingCustomFeature}
+              />
+              <Button
+                label="Save Feature"
+                onPress={handleAddCustomFeature}
+                loading={savingCustomFeature}
+                style={{ flex: 1 }}
               />
             </View>
-
-            {/* After adding — the new feature appears as a checked checkbox below others */}
-            <View style={{ backgroundColor: c.muted + "30", borderRadius: 8, padding: 10, gap: 6 }}>
-              <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: c.mutedForeground }}>
-                PREVIEW — will appear as:
-              </Text>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                <MaterialIcons name="check-box" size={16} color={c.primary} />
-                <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: customFeatureInput.trim() ? c.foreground : c.mutedForeground }}>
-                  {customFeatureInput.trim() || "Feature name"}
-                </Text>
-              </View>
-            </View>
-
-            {/* Action Buttons */}
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              <Pressable
-                onPress={() => { if (!savingCustomFeature) setShowCustomFeatureModal(false); }}
-                style={{
-                  flex: 1,
-                  paddingVertical: 12,
-                  borderRadius: 10,
-                  borderWidth: 1,
-                  borderColor: c.border,
-                  alignItems: "center",
-                }}
-                disabled={savingCustomFeature}
-              >
-                <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.mutedForeground }}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                onPress={handleAddCustomFeature}
-                disabled={savingCustomFeature || !customFeatureInput.trim()}
-                style={{
-                  flex: 1,
-                  paddingVertical: 12,
-                  borderRadius: 10,
-                  backgroundColor: customFeatureInput.trim() ? c.primary : c.muted,
-                  alignItems: "center",
-                  flexDirection: "row",
-                  justifyContent: "center",
-                  gap: 6,
-                }}
-              >
-                {savingCustomFeature ? (
-                  <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#FFFFFF" }}>Saving...</Text>
-                ) : (
-                  <>
-                    <MaterialIcons name="add" size={16} color={customFeatureInput.trim() ? "#FFFFFF" : c.mutedForeground} />
-                    <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: customFeatureInput.trim() ? "#FFFFFF" : c.mutedForeground }}>
-                      Add Feature
-                    </Text>
-                  </>
-                )}
-              </Pressable>
-            </View>
           </Pressable>
-        </KeyboardAvoidingView>
+        </Pressable>
       </Modal>
 
-      {/* Add Family Member Modal */}
-      <Modal visible={showFamilyModal} transparent animationType="fade">
+      {/* Family Member Modal */}
+      <Modal
+        visible={showFamilyModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !savingFamily && setShowFamilyModal(false)}
+      >
         <Pressable
-          onPress={() => setShowFamilyModal(false)}
-          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 20 }}
+          onPress={() => !savingFamily && setShowFamilyModal(false)}
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 24 }}
         >
           <Pressable
             onPress={(e) => e.stopPropagation()}
-            style={{ backgroundColor: c.card, borderRadius: 16, padding: 20, gap: 16, borderWidth: 1, borderColor: c.border }}
+            style={{
+              backgroundColor: c.card,
+              borderRadius: 16,
+              padding: 24,
+              width: "100%",
+              maxWidth: 400,
+              gap: 16,
+            }}
           >
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <Text style={{ fontSize: 18, fontFamily: "Inter_700Bold", color: c.foreground }}>
-                Add Family Member
-              </Text>
-              <Pressable onPress={() => setShowFamilyModal(false)}>
-                <MaterialIcons name="close" size={22} color={c.mutedForeground} />
-              </Pressable>
-            </View>
-
+            <Text style={{ fontSize: 18, fontFamily: "Inter_700Bold", color: c.foreground }}>
+              Add Family Member
+            </Text>
             <Input
               label="Name"
-              placeholder="Enter name..."
+              placeholder="Enter name"
               value={familyDraftName}
-              onChangeText={(v) => setFamilyDraftName(v.slice(0, 80))}
-              maxLength={80}
+              onChangeText={(v) => setFamilyDraftName(v.slice(0, 60))}
+              autoFocus
             />
-
             <View style={{ gap: 6 }}>
-              <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.mutedForeground }}>
+              <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5 }}>
                 Relation
               </Text>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-                {(["father", "mother", "wife", "husband", "son", "daughter", "brother", "sister", "other"] as Relation[]).map((rel) => (
+              <View style={{ flexDirection: "row", gap: 6 }}>
+                {(["self", "spouse", "son", "daughter", "father", "mother", "brother", "sister", "other"] as Relation[]).map((rel) => (
                   <Pressable
                     key={rel}
                     onPress={() => setFamilyDraftRelation(rel)}
                     style={{
-                      paddingHorizontal: 12,
+                      paddingHorizontal: 10,
                       paddingVertical: 6,
-                      borderRadius: 14,
+                      borderRadius: 8,
                       backgroundColor: familyDraftRelation === rel ? c.primary : c.muted,
+                      borderWidth: 1,
+                      borderColor: familyDraftRelation === rel ? c.primary : "transparent",
                     }}
                   >
-                    <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: familyDraftRelation === rel ? "#FFFFFF" : c.mutedForeground }}>
+                    <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: familyDraftRelation === rel ? "#FFFFFF" : c.mutedForeground }}>
                       {titleCase(rel)}
                     </Text>
                   </Pressable>
                 ))}
               </View>
             </View>
-
-            <View style={{ flexDirection: "row", gap: 12, marginTop: 8 }}>
+            <View style={{ flexDirection: "row", gap: 10 }}>
               <Button
                 label="Cancel"
                 onPress={() => setShowFamilyModal(false)}
                 variant="outline"
                 style={{ flex: 1 }}
+                disabled={savingFamily}
               />
               <Button
                 label="Add"

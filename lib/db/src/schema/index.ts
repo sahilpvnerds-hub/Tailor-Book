@@ -210,6 +210,8 @@ export const orders = mysqlTable("orders", {
   advanceAmount: decimal("advance_amount", { precision: 12, scale: 2 }).notNull().default("0"),
   /** Remaining balance = totalAmount - advanceAmount. */
   balanceDue: decimal("balance_due", { precision: 12, scale: 2 }).notNull().default("0"),
+  /** Order-level reference photos (base64 strings). */
+  photos: json("photos").$type<string[]>().default([]),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
 });

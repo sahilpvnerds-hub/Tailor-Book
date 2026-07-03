@@ -24,6 +24,7 @@ import {
   deleteCustomField as apiDeleteCustomField,
   getCustomFields as apiGetCustomFields,
   getToken,
+  updateOrder as apiUpdateOrder,
   updateOrderStatus as apiUpdateOrderStatus,
 } from "@/utils/api";
 import {
@@ -117,6 +118,18 @@ interface DataContextType {
     notes?: string;
     deliveryDate?: string;
     advanceAmount?: number;
+    photos?: string[];
+  }) => Promise<Order>;
+  updateOrder: (orderId: string, data: {
+    customerId?: string;
+    customerName?: string;
+    customerMobile?: string;
+    status?: Order["status"];
+    deliveryDate?: string;
+    notes?: string;
+    advanceAmount?: number;
+    photos?: string[];
+    items: Array<Omit<OrderItem, "orderId" | "createdAt" | "deliveryStatus" | "invoiceId"> & { id?: string }>;
   }) => Promise<Order>;
   updateOrderStatus: (id: string, status?: Order["status"]) => Promise<void>;
   deleteOrder: (id: string) => Promise<void>;
@@ -176,6 +189,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       totalAmount: Number(o.totalAmount ?? 0),
       advanceAmount: Number(o.advanceAmount ?? 0),
       balanceDue: Number(o.balanceDue ?? 0),
+      photos: o.photos ?? [],
       items: (o.items ?? []).map((it: any) => ({
         ...it,
         price: Number(it.price ?? 0),
@@ -1086,6 +1100,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     notes?: string;
     deliveryDate?: string;
     advanceAmount?: number;
+    photos?: string[];
   }) {
     if (!user) throw new Error("Not authenticated");
     const all = await rawGet<Order>(STORAGE_KEYS.ORDERS);
@@ -1129,6 +1144,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           deliveryDate: data.deliveryDate ?? null,
           notes: data.notes ?? null,
           advanceAmount: advancePaid,
+          photos: data.photos ?? [],
           items: enrichedItems as any,
         });
         ord = {
@@ -1144,6 +1160,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           totalAmount: Number(apiOrder.totalAmount ?? totalAmount),
           advanceAmount: Number(apiOrder.advanceAmount ?? advancePaid),
           balanceDue: Number(apiOrder.balanceDue ?? balanceDue),
+          photos: apiOrder.photos ?? data.photos ?? [],
           createdAt: apiOrder.createdAt,
           updatedAt: apiOrder.updatedAt,
           items: (apiOrder.items ?? []).map((it: any) => ({
@@ -1203,6 +1220,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         totalAmount,
         advanceAmount: advancePaid,
         balanceDue,
+        photos: data.photos ?? [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         items,
@@ -1212,6 +1230,87 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     await saveAllOrders([...all, ord]);
     setOrders((prev) => [ord!, ...prev]);
     return ord;
+  }
+
+  /**
+   * Update an existing order with new details and items
+   */
+  async function updateOrder(orderId: string, data: {
+    customerId?: string;
+    customerName?: string;
+    customerMobile?: string;
+    status?: Order["status"];
+    deliveryDate?: string;
+    notes?: string;
+    advanceAmount?: number;
+    photos?: string[];
+    items: Array<Omit<OrderItem, "orderId" | "createdAt" | "deliveryStatus" | "invoiceId"> & { id?: string }>;
+  }) {
+    // Update locally first so the UI is snappy, then sync to the server
+    const allOrders = await rawGet<Order>(STORAGE_KEYS.ORDERS);
+    const existingOrder = allOrders.find((o) => o.id === orderId);
+
+    if (!existingOrder) {
+      throw new Error("Order not found");
+    }
+
+    // Ensure all items have IDs (preserve existing ones or generate new ones)
+    const itemsWithIds: OrderItem[] = data.items.map((item) => {
+      const existingItem = existingOrder.items?.find((ei) => ei.id === item.id);
+      const { id: itemId, ...restItem } = item;
+      return {
+        ...restItem,
+        id: itemId || generateId(),
+        orderId: orderId,
+        createdAt: existingItem?.createdAt || new Date().toISOString(),
+        deliveryStatus: existingItem?.deliveryStatus || ("pending" as const),
+        invoiceId: existingItem?.invoiceId || null,
+      };
+    });
+
+    // Calculate totals
+    const totalAmount = itemsWithIds.reduce((s, i) => s + i.price * i.quantity, 0);
+    const advanceAmount = Math.min(data.advanceAmount ?? 0, totalAmount);
+    const balanceDue = Math.max(0, totalAmount - advanceAmount);
+
+    const updatedOrder = {
+      ...existingOrder,
+      ...data,
+      items: itemsWithIds,
+      totalAmount,
+      advanceAmount,
+      balanceDue,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const updatedOrders = allOrders.map((o) => o.id === orderId ? updatedOrder : o);
+    await saveAllOrders(updatedOrders);
+    setOrders(prev => prev.map((o) => o.id === orderId ? updatedOrder : o));
+
+    // Sync to the server
+    const token = await getToken();
+    if (token) {
+      try {
+        const serverOrder = await apiUpdateOrder(token, orderId, {
+          ...data,
+          items: data.items.map((item) => {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { id: _id, ...rest } = item as any; // Strip optional id before sending to API
+            return rest;
+          }),
+          totalAmount,
+          advanceAmount,
+          balanceDue,
+          photos: data.photos ?? [],
+        });
+        // Update local state with server response
+        setOrders(prev => prev.map((o) => o.id === orderId ? serverOrder : o));
+      } catch (err) {
+        console.warn("updateOrder API sync failed:", err);
+      }
+    }
+
+    return updatedOrder;
   }
 
   async function updateOrderStatus(id: string, status?: Order["status"]) {
@@ -1495,7 +1594,7 @@ async function deleteOrder(id: string) {
       addMeasurement, addMeasurementSession, updateMeasurement, deleteMeasurement, getCustomerMeasurements,
       getCustomerMeasurementsByProduct, getCustomerProducts,
       createInvoice, updateInvoiceStatus, deleteInvoice, getCustomerInvoices,
-      addOrder, updateOrderStatus, deleteOrder, generateInvoiceFromOrder,
+      addOrder, updateOrder, updateOrderStatus, deleteOrder, generateInvoiceFromOrder,
       updateItemDeliveryStatus,
       markNotificationRead, markAllRead, clearAllNotifications,
     }}>

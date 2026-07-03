@@ -213,7 +213,9 @@ export default function OrdersScreen() {
                 <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>
                   {formatCurrency(Number(item.totalAmount))}
                 </Text>
-                <Badge label={sc.label} variant={sc.variant} />
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Badge label={sc.label} variant={sc.variant} />
+                </View>
               </View>
             </Pressable>
           );

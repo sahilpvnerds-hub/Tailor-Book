@@ -97,14 +97,23 @@ export default function RegisterScreen() {
 
   // Restore any in-flight OTP + form data from a previous session so a
   // reload / app backgrounding doesn't lose progress.
+  // This useEffect runs ONCE on mount to check for pending OTP data and
+  // immediately jump to the OTP step without showing the form first.
   useEffect(() => {
     (async () => {
       const pending = await getOtpPending();
-      if (!pending) return;
-      if (Date.now() > pending.expiresAt) {
-        await clearOtpPending();
+      if (!pending) {
+        // No pending OTP - show the registration form
+        setStep("form");
         return;
       }
+      if (Date.now() > pending.expiresAt) {
+        // OTP expired - clear it and show the form
+        await clearOtpPending();
+        setStep("form");
+        return;
+      }
+      // Pending OTP exists and is valid - restore form data and jump to OTP step
       setForm((f) => ({
         ...f,
         name: pending.formData.name ?? f.name,
@@ -122,6 +131,7 @@ export default function RegisterScreen() {
       // doesn't carry over.
       setEnteredOtp("");
       setOtpError("");
+      // IMMEDIATELY go to OTP step - don't show form first!
       setStep("otp");
     })();
   }, []);
@@ -460,10 +470,13 @@ export default function RegisterScreen() {
         >
           <Pressable
             onPress={() => {
-              // Clear the previously entered OTP so when the user re-enters
-              // this step the field is empty and any old error is gone.
+              // Clear the pending OTP and form data so we start fresh next time.
+              clearOtpPending().catch(() => {});
+              // Clear the entered OTP and error.
               setEnteredOtp("");
               setOtpError("");
+              // Go back to the registration form so user can edit details
+              // or start a new registration.
               setStep("form");
             }}
             style={{ marginBottom: 28, flexDirection: "row", alignItems: "center", gap: 8 }}

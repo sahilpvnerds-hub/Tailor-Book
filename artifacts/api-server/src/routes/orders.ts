@@ -147,6 +147,20 @@ const createOrderSchema = z.object({
   deliveryDate: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
   advanceAmount: z.number().nonnegative().default(0),
+  photos: z.array(z.string()).default([]),
+  items: z.array(orderItemInputSchema).min(1),
+});
+
+// Schema for updating an existing order - includes status
+const updateOrderSchema = z.object({
+  customerId: z.string().min(1),
+  customerName: z.string().min(1),
+  customerMobile: z.string().min(1),
+  status: z.enum(["pending", "partially-delivered", "completed", "cancelled"]).optional(),
+  deliveryDate: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  advanceAmount: z.number().nonnegative().default(0),
+  photos: z.array(z.string()).default([]),
   items: z.array(orderItemInputSchema).min(1),
 });
 
@@ -240,6 +254,7 @@ router.post("/", async (req: Request, res: Response) => {
       totalAmount: String(totalAmount),
       advanceAmount: String(advancePaid),
       balanceDue: String(balanceDue),
+      photos: d.photos ?? [],
     });
 
     for (const it of enrichedItems) {
@@ -299,6 +314,178 @@ router.patch("/:id/status", async (req: Request, res: Response) => {
   const [updated] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
   const items = await db.select().from(orderItems).where(eq(orderItems.orderId, id));
   res.json({ ...updated, items });
+});
+
+// ---- PATCH /api/orders/:id -----------------------------------------------
+// Full order update - allows editing items, measurements, photos, status, etc.
+router.patch("/:id", async (req: Request, res: Response) => {
+  const id = getParam(req, "id");
+  const [existing] = await db
+    .select()
+    .from(orders)
+    .where(eq(orders.id, id))
+    .limit(1);
+  if (!existing) {
+    res.status(404).json({ error: "Order not found" });
+    return;
+  }
+  if (!ensureOwnership(req, existing.tailorId)) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  const body = updateOrderSchema.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: "Invalid request body", issues: body.error.issues });
+    return;
+  }
+  const d = body.data;
+
+  // Validate that the customer still exists and belongs to this tailor
+  const [cust] = await db
+    .select()
+    .from(customers)
+    .where(eq(customers.id, d.customerId))
+    .limit(1);
+  if (!cust) {
+    res.status(404).json({ error: "Customer not found" });
+    return;
+  }
+  if (!ensureOwnership(req, cust.tailorId)) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  const enrichedItems: any[] = [];
+  for (const item of d.items) {
+    let familyMemberId = item.familyMemberId ?? null;
+    let personName = item.personName ?? null;
+    let relation = item.relation ?? null;
+
+    // Validate measurementId exists in DB if provided
+    if (item.measurementId) {
+      const [measurement] = await db
+        .select()
+        .from(measurements)
+        .where(eq(measurements.id, item.measurementId))
+        .limit(1);
+      if (!measurement) {
+        res.status(400).json({ error: `Measurement with ID ${item.measurementId} not found in database.` });
+        return;
+      }
+      if (measurement.customerId !== d.customerId) {
+        res.status(400).json({ error: `Measurement ${item.measurementId} does not belong to this customer` });
+        return;
+      }
+      familyMemberId = familyMemberId ?? measurement.familyMemberId ?? null;
+      if (!personName) personName = measurement.customerName;
+      if (!relation) relation = measurement.familyMemberId ? "family" : "self";
+    }
+
+    if (familyMemberId) {
+      const [member] = await db
+        .select()
+        .from(familyMembers)
+        .where(eq(familyMembers.id, familyMemberId))
+        .limit(1);
+      if (!member || member.primaryCustomerId !== d.customerId) {
+        res.status(400).json({ error: `Invalid family member for ${item.productType}` });
+        return;
+      }
+      personName = member.name;
+      relation = member.relation;
+    } else {
+      personName = personName ?? cust.name;
+      relation = relation ?? "self";
+    }
+
+    enrichedItems.push({ ...item, familyMemberId, personName, relation });
+  }
+
+  const totalAmount = enrichedItems.reduce((s, i) => s + i.price * i.quantity, 0);
+  const advancePaid = Math.min(d.advanceAmount ?? 0, totalAmount);
+  const balanceDue = totalAmount - advancePaid;
+
+  await db.transaction(async (tx) => {
+    // 1. Update the main order
+    await tx.update(orders).set({
+      customerId: d.customerId,
+      customerName: d.customerName,
+      customerMobile: d.customerMobile,
+      status: d.status || existing.status,
+      deliveryDate: d.deliveryDate ? new Date(d.deliveryDate) : existing.deliveryDate,
+      notes: d.notes ?? null,
+      totalAmount: String(totalAmount),
+      advanceAmount: String(advancePaid),
+      balanceDue: String(balanceDue),
+      photos: d.photos ?? [],
+    }).where(eq(orders.id, id));
+
+    // 2. Get existing order items to track which ones to update vs delete
+    const existingItems = await tx
+      .select()
+      .from(orderItems)
+      .where(eq(orderItems.orderId, id));
+
+    // 3. Update or replace order items
+    const updatedOrderItemIds = new Set<string>();
+
+    for (const newItem of enrichedItems) {
+      const existingItem = existingItems.find(it =>
+        it.productType === newItem.productType &&
+        it.familyMemberId === (newItem.familyMemberId ?? null) &&
+        JSON.stringify(it.measurementValues) === JSON.stringify(newItem.measurementValues)
+      );
+
+      if (existingItem) {
+        // Update existing item
+        await tx.update(orderItems).set({
+          productTypeId: newItem.productTypeId ?? null,
+          productType: newItem.productType,
+          featureLabel: newItem.featureLabel ?? null,
+          quantity: newItem.quantity,
+          price: String(newItem.price),
+          measurementId: newItem.measurementId ?? null,
+          familyMemberId: newItem.familyMemberId ?? null,
+          personName: newItem.personName ?? null,
+          relation: newItem.relation ?? null,
+          measurementValues: newItem.measurementValues ?? null,
+        }).where(eq(orderItems.id, existingItem.id));
+        updatedOrderItemIds.add(existingItem.id);
+      } else {
+        // Add new item
+        const newItemId = crypto.randomUUID();
+        await tx.insert(orderItems).values({
+          id: newItemId,
+          orderId: id,
+          productTypeId: newItem.productTypeId ?? null,
+          productType: newItem.productType,
+          featureLabel: newItem.featureLabel ?? null,
+          quantity: newItem.quantity,
+          price: String(newItem.price),
+          measurementId: newItem.measurementId ?? null,
+          familyMemberId: newItem.familyMemberId ?? null,
+          personName: newItem.personName ?? null,
+          relation: newItem.relation ?? null,
+          measurementValues: newItem.measurementValues ?? null,
+          invoiceId: null,
+        });
+        updatedOrderItemIds.add(newItemId);
+      }
+    }
+
+    // 4. Remove any existing items that are no longer in the update
+    const itemsToRemove = existingItems.filter(it => !updatedOrderItemIds.has(it.id));
+    if (itemsToRemove.length > 0) {
+      await tx
+        .delete(orderItems)
+        .where(inArray(orderItems.id, itemsToRemove.map(it => it.id)));
+    }
+  });
+
+  const [updatedOrder] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+  const items = await db.select().from(orderItems).where(eq(orderItems.orderId, id));
+  res.json({ ...updatedOrder, items });
 });
 
 // ---- DELETE /api/orders/:id -----------------------------------------------

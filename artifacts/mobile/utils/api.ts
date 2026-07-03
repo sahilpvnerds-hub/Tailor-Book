@@ -746,6 +746,26 @@ export async function createOrder(
   return data;
 }
 
+export async function updateOrder(
+  token: string,
+  orderId: string,
+  order: Partial<Order> & { items: Omit<OrderItem, "id" | "orderId" | "createdAt" | "deliveryStatus" | "invoiceId">[] }
+): Promise<Order> {
+  const response = await fetch(`${API_BASE_URL}/orders/${orderId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(order),
+  });
+  const data = await parseJson<any>(response, "Failed to update order");
+  if (!response.ok) {
+    throw new Error(data.error ?? "Failed to update order");
+  }
+  return data;
+}
+
 export async function updateOrderStatus(token: string, orderId: string, status: Order["status"]): Promise<Order> {
   const response = await fetch(`${API_BASE_URL}/orders/${orderId}/status`, {
     method: "PATCH",
@@ -1155,6 +1175,7 @@ export const api = {
   orders: {
     get: getOrders,
     create: createOrder,
+    update: updateOrder,
     updateStatus: updateOrderStatus,
     updateItemDelivery,
     delete: deleteOrder,

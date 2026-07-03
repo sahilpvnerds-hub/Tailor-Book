@@ -564,7 +564,7 @@ export default function OrderDetailScreen() {
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <Badge label={sc.label} variant={sc.variant} />
           <Pressable
-            onPress={openEditModal}
+            onPress={() => router.push(`/orders/edit/${order.id}` as any)}
             disabled={isOrderLocked}
             style={{
               padding: 8,
@@ -770,6 +770,56 @@ export default function OrderDetailScreen() {
           </Card>
         )}
 
+        {/* ── Product Photos ─────────────────────────────────────── */}
+        {(() => {
+          // Collect all photos from order items' measurements
+          const allPhotos: string[] = [];
+          currentOrder.items?.forEach((it) => {
+            const sourceMeas = it.measurementId
+              ? measurements.find((m) => m.id === it.measurementId)
+              : null;
+            const itemPhotos: string[] = (sourceMeas?.photos as string[] | undefined) ?? [];
+            itemPhotos.forEach((p) => {
+              if (!allPhotos.includes(p)) allPhotos.push(p);
+            });
+          });
+          if (allPhotos.length === 0) return null;
+          return (
+            <Card style={{ padding: 16, backgroundColor: c.card }}>
+              <Text
+                style={{
+                  fontSize: 14,
+                  fontFamily: "Inter_600SemiBold",
+                  color: c.foreground,
+                  marginBottom: 12,
+                }}
+              >
+                Product Photos ({allPhotos.length})
+              </Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {allPhotos.map((photo, idx) => (
+                  <View key={idx} style={{ position: "relative" }}>
+                    <Image
+                      source={{
+                        uri: photo.startsWith("data:") ? photo : `data:image/jpeg;base64,${photo}`
+                      }}
+                      style={{
+                        width: 80,
+                        height: 80,
+                        borderRadius: 8,
+                        backgroundColor: c.muted,
+                        borderWidth: 1,
+                        borderColor: c.border,
+                      }}
+                      resizeMode="cover"
+                    />
+                  </View>
+                ))}
+              </View>
+            </Card>
+          );
+        })()}
+
         {/* ── Items grouped by person ─────────────────────────────── */}
         <View style={{ gap: 14 }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
@@ -852,7 +902,7 @@ export default function OrderDetailScreen() {
 
                 {/* Items in this group */}
                 <View style={{ gap: 10 }}>
-                  {group.items.map((it) => {
+                  {group.items.map((it, idx) => {
                     const inv = it.invoiceId ? invoices.find((i) => i.id === it.invoiceId) : null;
                     const measValues = it.measurementValues ?? null;
                     const measEntries = measValues ? Object.entries(measValues) : [];
@@ -865,7 +915,7 @@ export default function OrderDetailScreen() {
 
                     return (
                       <View
-                        key={it.id}
+                        key={it.id || `item-${idx}`}
                         style={{
                           backgroundColor: c.muted + "20",
                           padding: 10,
@@ -1072,6 +1122,94 @@ export default function OrderDetailScreen() {
             );
           })}
         </View>
+
+        {/* ── Product Photos ─────────────────────────────────────── */}
+        {(() => {
+          const allPhotos: string[] = [];
+          const seen = new Set<string>();
+          currentOrder.items?.forEach((it) => {
+            const sourceMeas = it.measurementId
+              ? measurements.find((m) => m.id === it.measurementId)
+              : null;
+            const itemPhotos: string[] = (sourceMeas?.photos as string[] | undefined) ?? [];
+            itemPhotos.forEach((p) => {
+              if (!seen.has(p)) { seen.add(p); allPhotos.push(p); }
+            });
+          });
+          if (allPhotos.length === 0) return null;
+          return (
+            <Card style={{ padding: 16, backgroundColor: c.card }}>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.foreground }}>
+                  Product Photos ({allPhotos.length})
+                </Text>
+              </View>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {allPhotos.slice(0, 8).map((photo, idx) => (
+                  <View
+                    key={idx}
+                    style={{ position: "relative" }}
+                  >
+                    <Image
+                      source={{
+                        uri: photo.startsWith("data:") ? photo : `data:image/jpeg;base64,${photo}`
+                      }}
+                      style={{
+                        width: 80,
+                        height: 80,
+                        borderRadius: 8,
+                        backgroundColor: c.muted,
+                        borderWidth: 1,
+                        borderColor: c.border,
+                      }}
+                      resizeMode="cover"
+                    />
+                  </View>
+                ))}
+                {allPhotos.length > 8 && (
+                  <View style={{ width: 80, height: 80, borderRadius: 8, backgroundColor: c.muted, justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: c.border }}>
+                    <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.mutedForeground }}>
+                      +{allPhotos.length - 8} more
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </Card>
+          );
+        })()}
+
+        {/* ── Order Photos ──────────────────────────────────────── */}
+        {(() => {
+          const orderPhotos = (currentOrder.photos ?? []) as string[];
+          if (orderPhotos.length === 0) return null;
+          return (
+            <Card style={{ padding: 16, backgroundColor: c.card }}>
+              <Text
+                style={{
+                  fontSize: 14,
+                  fontFamily: "Inter_600SemiBold",
+                  color: c.foreground,
+                  marginBottom: 12,
+                }}
+              >
+                Order Photos ({orderPhotos.length})
+              </Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {orderPhotos.map((photo, idx) => (
+                  <View key={idx} style={{ position: "relative" }}>
+                    <Image
+                      source={{
+                        uri: photo.startsWith("data:") ? photo : `data:image/jpeg;base64,${photo}`,
+                      }}
+                      style={{ width: 80, height: 80, borderRadius: 8, backgroundColor: c.muted }}
+                      resizeMode="cover"
+                    />
+                  </View>
+                ))}
+              </View>
+            </Card>
+          );
+        })()}
 
         {/* ── Total card ──────────────────────────────────────────── */}
         <Card style={{ padding: 16, backgroundColor: c.card }}>

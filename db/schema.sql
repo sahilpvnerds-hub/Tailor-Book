@@ -280,6 +280,7 @@ CREATE TABLE IF NOT EXISTS orders (
   delivery_date    DATE          NULL,
   notes            TEXT          NULL,
   total_amount     DECIMAL(12,2) NOT NULL DEFAULT 0,
+  photos           JSON         NULL DEFAULT ('[]'),
   created_at       TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at       TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 

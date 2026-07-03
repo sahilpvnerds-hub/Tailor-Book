@@ -269,6 +269,8 @@ export interface Order {
   advanceAmount?: number;
   /** Remaining balance = totalAmount - advanceAmount */
   balanceDue?: number;
+  /** Order-level reference photos (base64 strings) */
+  photos?: string[];
   createdAt: string;
   updatedAt: string;
   items?: OrderItem[];
