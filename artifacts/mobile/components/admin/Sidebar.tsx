@@ -54,7 +54,7 @@ export function Sidebar({ userName, userEmail, onLogout }: SidebarProps) {
         {/* Brand — gradient logo */}
         <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 6, marginBottom: 28 }}>
           <Image
-            source={require("@/assets/images/icon.png")}
+            source={require("@/assets/images/icon.jpg")}
             style={{
               width: 40,
               height: 40,

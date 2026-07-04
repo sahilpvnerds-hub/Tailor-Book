@@ -183,7 +183,7 @@ export default function LoginScreen() {
             }}
           >
             <Image
-              source={require("@/assets/images/icon.png")}
+              source={require("@/assets/images/icon.jpg")}
               style={{ width: 72, height: 72 }}
               resizeMode="cover"
             />
