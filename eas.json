@@ -11,7 +11,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EAS_BUILD_WORKINGDIR": "artifacts/mobile"
+        "EAS_BUILD_WORKINGDIR": "artifacts/mobile",
+        "EXPO_PUBLIC_API_URL": "https://api-tailorbook.yiion.com"
       }
     },
     "preview": {
@@ -20,7 +21,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EAS_BUILD_WORKINGDIR": "artifacts/mobile"
+        "EAS_BUILD_WORKINGDIR": "artifacts/mobile",
+        "EXPO_PUBLIC_API_URL": "https://api-tailorbook.yiion.com"
       }
     },
     "production": {
@@ -28,7 +30,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EAS_BUILD_WORKINGDIR": "artifacts/mobile"
+        "EAS_BUILD_WORKINGDIR": "artifacts/mobile",
+        "EXPO_PUBLIC_API_URL": "https://api-tailorbook.yiion.com"
       }
     }
   },
