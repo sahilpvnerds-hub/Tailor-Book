@@ -9,17 +9,26 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EAS_BUILD_WORKINGDIR": "artifacts/mobile"
       }
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EAS_BUILD_WORKINGDIR": "artifacts/mobile"
       }
     },
     "production": {
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EAS_BUILD_WORKINGDIR": "artifacts/mobile"
       }
     }
   },
