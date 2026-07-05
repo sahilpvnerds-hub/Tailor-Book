@@ -10,10 +10,13 @@ module.exports = function (api) {
               if (
                 path.node.object.type === "MemberExpression" &&
                 path.node.object.object.name === "process" &&
-                path.node.object.property.name === "env" &&
-                path.node.property.name === "EXPO_ROUTER_APP_ROOT"
+                path.node.object.property.name === "env"
               ) {
-                path.replaceWith({ type: "StringLiteral", value: "../../app" });
+                if (path.node.property.name === "EXPO_ROUTER_APP_ROOT") {
+                  path.replaceWith({ type: "StringLiteral", value: "../../app" });
+                } else if (path.node.property.name === "EXPO_ROUTER_IMPORT_MODE") {
+                  path.replaceWith({ type: "StringLiteral", value: "sync" });
+                }
               }
             }
           }
