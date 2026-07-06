@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "b2333ea9-d652-4a0f-8428-b384978dce13"
+      }
+    },
+    "android": {
+      "package": "com.lppatel879.workspace"
+    }
+  }
+}

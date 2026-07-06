@@ -9,17 +9,29 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EAS_BUILD_WORKINGDIR": "artifacts/mobile",
+        "EXPO_PUBLIC_API_URL": "https://api-tailorbook.yiion.com"
       }
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EAS_BUILD_WORKINGDIR": "artifacts/mobile",
+        "EXPO_PUBLIC_API_URL": "https://api-tailorbook.yiion.com"
       }
     },
     "production": {
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EAS_BUILD_WORKINGDIR": "artifacts/mobile",
+        "EXPO_PUBLIC_API_URL": "https://api-tailorbook.yiion.com"
       }
     }
   },
