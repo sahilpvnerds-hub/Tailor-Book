@@ -108,6 +108,7 @@ async function ensureColumns(database: string): Promise<void> {
   await addIndexIfMissing(database, "order_items", "idx_order_items_product_type", "(`product_type_id`)");
 
   await addColumnIfMissing(database, "orders", "photos", "`photos` json DEFAULT ('[]') AFTER `balance_due`");
+  await addColumnIfMissing(database, "orders", "updated_at", "`updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER `created_at`");
 
   if (await tableExists(database, "custom_measurement_fields")) {
     await addColumnIfMissing(database, "custom_measurement_fields", "customer_id", "`customer_id` varchar(36) NULL AFTER `field_name`");

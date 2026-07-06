@@ -135,4 +135,34 @@ INNER JOIN orders o ON oi.order_id = o.id
 SET oi.delivery_status = 'delivered'
 WHERE o.status = 'completed' AND oi.delivery_status = 'pending';
 
+-- 12. Add photos column to orders table (for storing order-level photos)
+SET @column_exists = (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'orders'
+  AND COLUMN_NAME = 'photos'
+);
+SET @sql = IF(@column_exists = 0,
+  'ALTER TABLE orders ADD COLUMN photos JSON NULL DEFAULT ('[]') AFTER balance_due',
+  'SELECT ''Column photos already exists'' AS status'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- 13. Ensure updated_at column exists and has proper default
+SET @column_exists = (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'orders'
+  AND COLUMN_NAME = 'updated_at'
+);
+SET @sql = IF(@column_exists = 0,
+  'ALTER TABLE orders ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at',
+  'SELECT ''Column updated_at already exists'' AS status'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
 SELECT 'Orders migration applied successfully' AS status;

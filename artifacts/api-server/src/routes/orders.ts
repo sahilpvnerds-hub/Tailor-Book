@@ -419,6 +419,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
       advanceAmount: String(advancePaid),
       balanceDue: String(balanceDue),
       photos: d.photos ?? [],
+      updatedAt: new Date(),
     }).where(eq(orders.id, id));
 
     // 2. Get existing order items to track which ones to update vs delete
