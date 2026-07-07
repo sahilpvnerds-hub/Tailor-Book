@@ -59,12 +59,13 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
+    "expo": "~54.0.35",
+    "expo-dev-client": "~6.0.21",
     "expo-localization": "^17.0.9",
     "i18next": "^26.3.1",
     "metro-runtime": "^0.84.4",
-    "react-i18next": "^17.0.8",
-    "expo": "~54.0.35",
     "react": "19.1.0",
+    "react-i18next": "^17.0.8",
     "react-native": "0.81.5"
   }
 }
