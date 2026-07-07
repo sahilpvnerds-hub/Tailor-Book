@@ -66,6 +66,9 @@ function resolveApiBaseUrl(): string {
 
 const API_BASE_URL = resolveApiBaseUrl();
 
+// Export so login screen can show the URL for debugging
+export { API_BASE_URL, resolveApiBaseUrl };
+
 // Internal helper: parse a fetch response as JSON, or throw a friendly
 // error. Handles the case where the dev server (Metro) returns HTML
 // instead of the API response — e.g. when the user accidentally hits
@@ -139,13 +142,20 @@ export async function checkAvailability(
 }
 
 export async function sendOtp(email: string): Promise<{ ok: boolean; message: string }> {
+  const url = `${API_BASE_URL}/auth/send-otp`;
+  console.log("[API Debug] Sending OTP to:", email);
+  console.log("[API Debug] API URL being used:", API_BASE_URL);
+
   const response = await fetch(`${API_BASE_URL}/auth/send-otp`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email }),
   });
   const data = await parseJson<any>(response, "Failed to send OTP");
+  console.log("[API Debug] sendOtp response:", { status: response.status, data });
+
   if (!response.ok) {
+    console.error("[API Debug] sendOtp failed:", { status: response.status, error: data.error });
     throw new Error(data.error ?? "Failed to send OTP");
   }
   return {
@@ -155,13 +165,18 @@ export async function sendOtp(email: string): Promise<{ ok: boolean; message: st
 }
 
 export async function verifyOtp(email: string, otp: string): Promise<{ ok: boolean; emailVerifiedAt: string }> {
+  console.log("[API Debug] Verifying OTP for:", email, otp);
+
   const response = await fetch(`${API_BASE_URL}/auth/verify-otp`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, otp }),
   });
   const data = await parseJson<any>(response, "OTP verification failed");
+  console.log("[API Debug] verifyOtp response:", { status: response.status, data });
+
   if (!response.ok) {
+    console.error("[API Debug] verifyOtp failed:", { status: response.status, error: data.error });
     throw new Error(data.error ?? "OTP verification failed");
   }
   return {
@@ -239,13 +254,17 @@ export async function login(emailOrMobile: string, password: string): Promise<{ 
     body: JSON.stringify({ emailOrMobile, password }),
   });
   const data = await parseJson<any>(response, "Login failed");
+  console.log("[API Debug] Login response:", { status: response.status, data });
+
   if (!response.ok) {
+    console.error("[API Debug] Login failed:", { status: response.status, data });
     return {
       ok: false,
       error: data.error ?? "Login failed",
       status: response.status,
     };
   }
+  console.log("[API Debug] Login success:", { status: response.status, hasToken: !!data.token, userEmail: data.user?.email });
   return {
     ok: true,
     token: data.token,
