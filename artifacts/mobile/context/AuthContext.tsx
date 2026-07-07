@@ -49,6 +49,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     init();
   }, []);
 
+  // Debug: Log which API URL is being used
+  useEffect(() => {
+    console.log("[AuthContext] API Base URL:", (process as any).env?.EXPO_PUBLIC_API_URL || "NOT SET");
+    console.log("[AuthContext] NODE_ENV:", process.env.NODE_ENV);
+  }, []);
+
   // On app launch, try to rehydrate the session from the stored token.
   // If the token is invalid or the server is unreachable, fall back to a
   // stored user (offline cache) and let API calls surface the auth error.
@@ -73,9 +79,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setIsLoading(false);
           return;
         } catch {
-          // Token invalid or server down — clear the invalid token so
+          // Token invalid or server down — CLEAR invalid token so
           // subsequent API calls don't keep sending a bad Bearer token
-          // (which would cause 401 on every request).
+          // (which would cause 401/403 on every request).
           await setToken(null);
         }
       }
@@ -90,7 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function login(emailOrMobile: string, password: string) {
     const result = await api.auth.login(emailOrMobile, password);
     if (!result.ok) {
-      return { success: false, error: result.error };
+      return { success: false, error: result.error, status: result.status };
     }
     await setToken(result.token);
     await setCurrentUser(result.user);
@@ -112,7 +118,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await api.auth.register(data);
       return { success: true };
     } catch (e) {
-      return { success: false, error: (e as Error).message };
+      const error = e as Error;
+      // Try to extract status from error message if available
+      const match = error.message.match(/status (\d+)/);
+      const status = match ? parseInt(match[1]) : undefined;
+      return { success: false, error: error.message, status };
     }
   }
 

@@ -61,10 +61,16 @@ app.use(
         return callback(null, true);
       }
 
-      // In production - strict mode
+      // In production - strict mode but allow mobile development origins
       // Allow localhost for testing
       if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return callback(null, true);
       if (/^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) return callback(null, true);
+
+      // Allow Android emulator (Origin is http://localhost for Android)
+      if (origin === "http://localhost") return callback(null, true);
+
+      // React Native Metro bundler dev server
+      if (origin === "http://localhost:8081") return callback(null, true);
 
       // Allow allowed origins from .env
       if (allowedOrigins.includes(origin)) {
@@ -75,6 +81,7 @@ app.use(
       if (origin.includes('yiion.com')) return callback(null, true);
 
       // Otherwise deny
+      console.error(`[CORS] Blocked origin: ${origin}`);
       callback(new Error(`CORS: origin ${origin} not allowed`));
     },
     credentials: true,

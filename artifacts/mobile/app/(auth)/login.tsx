@@ -17,6 +17,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Button, Input } from "@/components/ui";
 import { checkAvailability } from "@/utils/api";
 import colors from "@/constants/colors";
+import { resolveApiBaseUrl } from "@/utils/api";
 
 export default function LoginScreen() {
   const c = useColors();
@@ -44,6 +45,10 @@ export default function LoginScreen() {
       setLoading(false);
       if (!result.success) {
         const raw = result.error ?? "Something went wrong";
+        // Show raw error + HTTP status for easier debugging
+        const detail = result.status ? ` (status ${result.status})` : "";
+        const fullMessage = `${raw}${detail}`;
+
         // Pending approval — give a friendly, actionable message
         if (/pending admin approval/i.test(raw)) {
           Alert.alert(
@@ -58,13 +63,34 @@ export default function LoginScreen() {
             [{ text: "OK" }]
           );
         } else if (/Network request failed|fetch failed|NetworkError|reach http|HTML instead of JSON/i.test(raw)) {
+          // Show the resolved API URL in the error
+          const resolvedUrl = resolveApiBaseUrl();
           Alert.alert(
             "Cannot Reach Server",
-            "Make sure the API server is running on port 4000 and your device is on the same network.\n\nOriginal: " + raw,
+            `Make sure the API server is running and your device is on the same network.\n\nTried: ${resolvedUrl}\n\nOriginal error: ${raw}`,
+            [{ text: "OK" }]
+          );
+        } else if (result.status === 403) {
+          // Show specific messages for 403 errors
+          let specificMessage = "You don't have permission to access this resource.";
+          if (raw.includes("rejected")) {
+            specificMessage = "Your account has been rejected. Please contact support.";
+          } else if (raw.includes("admin access")) {
+            specificMessage = "Admin access required. Please contact an administrator.";
+          }
+          Alert.alert(
+            "Access Denied (403)",
+            `${specificMessage}\n\nStatus: 403\nError: ${raw}`,
+            [{ text: "OK" }]
+          );
+        } else if (result.status === 429) {
+          Alert.alert(
+            "Too Many Attempts",
+            "You have tried too many times. Please wait a few minutes and try again.",
             [{ text: "OK" }]
           );
         } else {
-          Alert.alert("Login Failed", raw);
+          Alert.alert("Login Failed", fullMessage);
         }
       } else {
         if (result.user?.role === "tailor" && !result.user?.onboardingComplete) {
