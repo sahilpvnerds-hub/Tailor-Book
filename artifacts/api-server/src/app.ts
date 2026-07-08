@@ -66,11 +66,11 @@ app.use(
       if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return callback(null, true);
       if (/^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) return callback(null, true);
 
-      // Allow Android emulator (Origin is http://localhost for Android)
-      if (origin === "http://localhost") return callback(null, true);
+      // // Allow Android emulator (Origin is http://localhost for Android)
+      // if (origin === "http://localhost") return callback(null, true);
 
-      // React Native Metro bundler dev server
-      if (origin === "http://localhost:8081") return callback(null, true);
+      // // React Native Metro bundler dev server
+      // if (origin === "http://localhost:8081") return callback(null, true);
 
       // Allow allowed origins from .env
       if (allowedOrigins.includes(origin)) {
