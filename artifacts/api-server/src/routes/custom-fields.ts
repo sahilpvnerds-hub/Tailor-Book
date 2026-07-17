@@ -78,20 +78,17 @@ router.delete("/:id", async (req: Request, res: Response) => {
     return;
   }
 
-  // Count historical measurements that contain this field name in their
-  // custom_measurements JSON. We match by label (field name string) because
-  // snapshots store the human-readable label, not the UUID.
-  // We do a lightweight JSON_SEARCH check; falls back to 0 on any error.
   let usageCount = 0;
   try {
-    const [rows] = await (db as any).$client.query(
-      `SELECT COUNT(*) AS cnt FROM measurements
-       WHERE JSON_SEARCH(custom_measurements, 'one', ?, NULL, '$[*].label') IS NOT NULL`,
+    const [resultSets] = await (db as any).$client.query(
+      `CALL CountCustomFieldUsage(?)`,
       [existing.fieldName],
     );
-    usageCount = Number((rows as any[])[0]?.cnt ?? 0);
-  } catch {
+    // The result is an array of result sets (since it's a CALL). The first result set is our SELECT.
+    usageCount = Number((resultSets as any[][])[0][0]?.cnt ?? 0);
+  } catch (err) {
     // Non-critical — proceed with deletion even if count fails
+    console.error("Failed to call CountCustomFieldUsage:", err);
   }
 
   await db.delete(customMeasurementFields).where(eq(customMeasurementFields.id, id));

@@ -1,6 +1,9 @@
 import bcrypt from "bcryptjs";
 import type { RowDataPacket } from "mysql2";
 import { pool } from "@workspace/db";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 interface DatabaseRow extends RowDataPacket {
   db: string;
@@ -269,13 +272,83 @@ async function ensureDemoUsers(): Promise<void> {
   );
 }
 
+async function runAutoMigrations(): Promise<void> {
+  try {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    
+    // Attempt to locate the drizzle migrations folder
+    // In dev: artifacts/api-server/src/lib -> ../../../../lib/db/drizzle
+    // In prod: artifacts/api-server/dist -> ../../../lib/db/drizzle
+    const candidates = [
+      path.resolve(__dirname, "../../../../lib/db/drizzle"),
+      path.resolve(__dirname, "../../../lib/db/drizzle"),
+      path.resolve(__dirname, "../../lib/db/drizzle"),
+    ];
+    
+    let drizzleFolder = null;
+    for (const c of candidates) {
+      if (fs.existsSync(path.join(c, "meta", "_journal.json"))) {
+        drizzleFolder = c;
+        break;
+      }
+    }
+
+    if (!drizzleFolder) {
+      console.warn("[auto-migrate] Could not locate drizzle migrations folder.");
+      return;
+    }
+
+    const journalPath = path.join(drizzleFolder, "meta", "_journal.json");
+    const journalRaw = fs.readFileSync(journalPath, "utf-8");
+    const journal = JSON.parse(journalRaw);
+
+    console.log(`[auto-migrate] Found ${journal.entries.length} migrations. Applying...`);
+
+    for (const entry of journal.entries) {
+      const sqlPath = path.join(drizzleFolder, `${entry.tag}.sql`);
+      if (!fs.existsSync(sqlPath)) continue;
+
+      const sqlContent = fs.readFileSync(sqlPath, "utf-8");
+      const statements = sqlContent
+        .split("--> statement-breakpoint")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      for (const stmt of statements) {
+        try {
+          await pool.query(stmt);
+        } catch (err: any) {
+          // Ignore table already exists and duplicate column errors
+          const ignoreCodes = ["ER_TABLE_EXISTS_ERROR", "ER_DUP_FIELDNAME"];
+          if (ignoreCodes.includes(err.code) || err.message.includes("Duplicate column") || err.message.includes("already exists")) {
+            // Expected when running migrations multiple times
+            continue;
+          }
+          console.error(`[auto-migrate] Failed to execute statement: ${stmt.substring(0, 100)}...`);
+          throw err;
+        }
+      }
+    }
+    console.log(`[auto-migrate] All migrations applied successfully.`);
+  } catch (err) {
+    console.error(`[auto-migrate] Error running migrations:`, err);
+  }
+}
+
 export async function bootstrapDatabase(): Promise<void> {
   const database = await currentDatabase();
-  if (!(await tableExists(database, "users"))) {
-    throw new Error("Tailor Book database is missing the users table. Import db/schema.sql first.");
-  }
+  
+  // 1. Run Drizzle Auto-Migrations (this creates 'users' if it doesn't exist)
+  await runAutoMigrations();
 
+  // 2. Fallback manual table/column creations (kept for backward compatibility)
   await ensureColumns(database);
   await ensureTables();
+  
+  if (!(await tableExists(database, "users"))) {
+    throw new Error("Tailor Book database is missing the users table. Migration failed.");
+  }
+  
   await ensureDemoUsers();
 }

@@ -8,6 +8,20 @@
       "when": 1781613689759,
       "tag": "0000_many_caretaker",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1784278261534,
+      "tag": "0001_glossy_solo",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1784278265000,
+      "tag": "0002_create_sp_custom_fields",
+      "breakpoints": true
     }
   ]
 }

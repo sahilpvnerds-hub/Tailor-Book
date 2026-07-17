@@ -93,7 +93,9 @@ export default function OrderDetailScreen() {
   // even though the underlying Order entity only has a single status field.
   // Keyed by orderItem id; default = "pending" (or "delivered" if the order
   // is already completed).
-  const [itemDelivery, setItemDelivery] = useState<Record<string, ItemDeliveryStatus>>({});
+  const [itemDelivery, setItemDelivery] = useState<
+    Record<string, ItemDeliveryStatus>
+  >({});
 
   const order = orders.find((o) => o.id === id);
 
@@ -156,16 +158,24 @@ export default function OrderDetailScreen() {
     const items = o.items ?? [];
     const itemLines: string[] = [];
     items.forEach((it, idx) => {
-      itemLines.push(`${idx + 1}. ${it.productType}${
-        it.featureLabel ? ` (${it.featureLabel})` : ""
-      } — ${t("share.qty", "Qty")}: ${it.quantity} — ${t("share.for", "For")}: ${it.personName ?? o.customerName}`);
+      itemLines.push(
+        `${idx + 1}. ${it.productType}${
+          it.featureLabel ? ` (${it.featureLabel})` : ""
+        } — ${t("share.qty", "Qty")}: ${it.quantity} — ${t("share.for", "For")}: ${it.personName ?? o.customerName}`,
+      );
       // Include measurement values if available
-      if (it.measurementValues && Object.keys(it.measurementValues).length > 0) {
+      if (
+        it.measurementValues &&
+        Object.keys(it.measurementValues).length > 0
+      ) {
         const measStr = Object.entries(it.measurementValues)
           .filter(([, v]) => v)
           .map(([k, v]) => `${k}: ${v}`)
           .join(", ");
-        if (measStr) itemLines.push(`   ${t("share.measurements", "Measurements")}: ${measStr}`);
+        if (measStr)
+          itemLines.push(
+            `   ${t("share.measurements", "Measurements")}: ${measStr}`,
+          );
       }
     });
     const lines = [
@@ -174,7 +184,9 @@ export default function OrderDetailScreen() {
       `${t("share.order", "📋 Order")}: ${o.orderNumber}`,
       `${t("share.customer", "👤 Customer")}: ${o.customerName}`,
       `${t("share.mobile", "📞 Mobile")}: ${o.customerMobile}`,
-      o.deliveryDate ? `${t("share.delivery", "🚚 Delivery")}: ${formatDate(o.deliveryDate)}` : ``,
+      o.deliveryDate
+        ? `${t("share.delivery", "🚚 Delivery")}: ${formatDate(o.deliveryDate)}`
+        : ``,
       ``,
       t("share.items", "🛍️ ITEMS"),
       ...itemLines,
@@ -211,7 +223,13 @@ export default function OrderDetailScreen() {
   const groupedItems = useMemo(() => {
     const groups: Record<
       string,
-      { key: string; name: string; relation: string; memberId: string | null; items: any[] }
+      {
+        key: string;
+        name: string;
+        relation: string;
+        memberId: string | null;
+        items: any[];
+      }
     > = {};
 
     currentOrder.items?.forEach((it) => {
@@ -219,7 +237,9 @@ export default function OrderDetailScreen() {
       if (!groups[key]) {
         groups[key] = {
           key,
-          name: it.familyMemberId ? (it.personName ?? "Family Member") : "Primary Customer (Self)",
+          name: it.familyMemberId
+            ? (it.personName ?? "Family Member")
+            : "Primary Customer (Self)",
           relation: it.familyMemberId ? (it.relation ?? "other") : "self",
           memberId: it.familyMemberId ?? null,
           items: [],
@@ -261,7 +281,10 @@ export default function OrderDetailScreen() {
         (inv) => inv.orderId === currentOrder.id,
       );
       if (existingInvoice) {
-        Alert.alert("Invoice Ready", `Invoice ${existingInvoice.invoiceNumber} is already generated.`);
+        Alert.alert(
+          "Invoice Ready",
+          `Invoice ${existingInvoice.invoiceNumber} is already generated.`,
+        );
         return;
       }
       const invoice = await generateInvoiceFromOrder(currentOrder.id);
@@ -270,7 +293,10 @@ export default function OrderDetailScreen() {
         "Invoice Generated",
         `Invoice ${invoice.invoiceNumber} created successfully!`,
         [
-          { text: "View Invoice", onPress: () => router.push(`/invoices/${invoice.id}` as any) },
+          {
+            text: "View Invoice",
+            onPress: () => router.push(`/invoices/${invoice.id}` as any),
+          },
           { text: "Dismiss" },
         ],
       );
@@ -290,7 +316,9 @@ export default function OrderDetailScreen() {
     const item = (currentOrder.items ?? []).find((it) => it.id === itemId);
     if (!item) return;
     const nextStatus: ItemDeliveryStatus =
-      (itemDelivery[itemId] ?? "pending") === "delivered" ? "pending" : "delivered";
+      (itemDelivery[itemId] ?? "pending") === "delivered"
+        ? "pending"
+        : "delivered";
 
     Alert.alert(
       nextStatus === "delivered" ? "Mark as Delivered" : "Mark as Pending",
@@ -343,7 +371,9 @@ export default function OrderDetailScreen() {
               for (const it of currentOrder.items ?? []) {
                 await updateItemDeliveryStatus(it.id, "delivered");
               }
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              Haptics.notificationAsync(
+                Haptics.NotificationFeedbackType.Success,
+              );
               // NOTE: Do NOT call refresh() here — it creates a race condition where
               // the server response (which may still have stale delivery_status values)
               // overwrites the local state before the component re-renders, causing the
@@ -382,7 +412,9 @@ export default function OrderDetailScreen() {
             setDeleting(true);
             try {
               await deleteOrder(currentOrder.id);
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              Haptics.notificationAsync(
+                Haptics.NotificationFeedbackType.Success,
+              );
               // Go back to the previous screen (orders are reached from
               // the dashboard, invoice tab, or customer detail).
               router.back();
@@ -414,7 +446,10 @@ export default function OrderDetailScreen() {
           Alert.alert("Success", "Order details copied to clipboard!");
         }
       } else {
-        await Share.share({ message: text, title: `Order ${currentOrder.orderNumber}` });
+        await Share.share({
+          message: text,
+          title: `Order ${currentOrder.orderNumber}`,
+        });
       }
     } catch (e) {
       console.warn("Share failed:", e);
@@ -459,7 +494,12 @@ export default function OrderDetailScreen() {
       discount: "0",
       notes: currentOrder.notes ?? "",
     });
-  }, [showEditModal, currentOrder.status, currentOrder.deliveryDate, currentOrder.notes]);
+  }, [
+    showEditModal,
+    currentOrder.status,
+    currentOrder.deliveryDate,
+    currentOrder.notes,
+  ]);
 
   function openEditModal() {
     if (isOrderLocked) return;
@@ -470,7 +510,13 @@ export default function OrderDetailScreen() {
   async function handleSaveEdit() {
     setSavingEdit(true);
     try {
-      const discountNum = Math.max(0, Math.min(Number(editDraft.discount) || 0, Number(currentOrder.totalAmount) || 0));
+      const discountNum = Math.max(
+        0,
+        Math.min(
+          Number(editDraft.discount) || 0,
+          Number(currentOrder.totalAmount) || 0,
+        ),
+      );
       // Apply status change via the existing helper (this also updates the
       // local cache and propagates to the API when reachable).
       if (editDraft.status !== currentOrder.status) {
@@ -480,7 +526,8 @@ export default function OrderDetailScreen() {
       // have a dedicated edit endpoint yet, so we patch the local cache
       // and let the next refresh resync.
       const { getStorageItem, saveAllOrders } = await import("@/utils/storage");
-      const allOrders = (await getStorageItem<Order[]>("@tailorbook/orders")) ?? [];
+      const allOrders =
+        (await getStorageItem<Order[]>("@tailorbook/orders")) ?? [];
       const nextTotal = Math.max(
         0,
         Number(currentOrder.totalAmount) - discountNum,
@@ -533,7 +580,14 @@ export default function OrderDetailScreen() {
           gap: 12,
         }}
       >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 12,
+            flex: 1,
+          }}
+        >
           <Pressable onPress={() => router.back()} style={{ padding: 4 }}>
             <MaterialIcons name="arrow-back" size={24} color={c.foreground} />
           </Pressable>
@@ -595,12 +649,22 @@ export default function OrderDetailScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={{ padding: 20, gap: 18, paddingBottom: insets.bottom + 40 }}
+        contentContainerStyle={{
+          padding: 20,
+          gap: 18,
+          paddingBottom: insets.bottom + 40,
+        }}
         keyboardShouldPersistTaps="handled"
       >
         {/* ── Customer card ─────────────────────────────────────────── */}
         <Card style={{ padding: 16, gap: 10 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
             <Text
               style={{
                 fontSize: 13,
@@ -625,18 +689,36 @@ export default function OrderDetailScreen() {
               }}
             >
               <MaterialIcons name="receipt" size={12} color="#FFFFFF" />
-              <Text style={{ fontSize: 12, fontFamily: "Inter_700Bold", color: "#FFFFFF" }}>
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontFamily: "Inter_700Bold",
+                  color: "#FFFFFF",
+                }}
+              >
                 {order.orderNumber}
               </Text>
             </View>
           </View>
 
-          <Text style={{ fontSize: 17, fontFamily: "Inter_700Bold", color: c.foreground }}>
+          <Text
+            style={{
+              fontSize: 17,
+              fontFamily: "Inter_700Bold",
+              color: c.foreground,
+            }}
+          >
             {order.customerName}
           </Text>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
             <MaterialIcons name="phone" size={14} color={c.mutedForeground} />
-            <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: c.mutedForeground }}>
+            <Text
+              style={{
+                fontSize: 13,
+                fontFamily: "Inter_400Regular",
+                color: c.mutedForeground,
+              }}
+            >
               {order.customerMobile}
             </Text>
           </View>
@@ -652,19 +734,26 @@ export default function OrderDetailScreen() {
               }}
             >
               <MaterialIcons name="local-shipping" size={16} color="#059669" />
-              <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: "#059669" }}>
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontFamily: "Inter_500Medium",
+                  color: "#059669",
+                }}
+              >
                 Delivery: {formatDate(order.deliveryDate)}
               </Text>
               {(() => {
                 const days = deliveryDaysLeft(order.deliveryDate);
                 if (days === null) return null;
-                const color = days < 0 ? "#DC2626" : days <= 2 ? "#D97706" : "#059669";
+                const color =
+                  days < 0 ? "#DC2626" : days <= 2 ? "#D97706" : "#059669";
                 const label =
                   days < 0
                     ? `${Math.abs(days)}d overdue`
                     : days === 0
-                    ? "Due today"
-                    : `${days}d left`;
+                      ? "Due today"
+                      : `${days}d left`;
                 return (
                   <View
                     style={{
@@ -674,7 +763,13 @@ export default function OrderDetailScreen() {
                       paddingVertical: 2,
                     }}
                   >
-                    <Text style={{ fontSize: 11, fontFamily: "Inter_700Bold", color }}>
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontFamily: "Inter_700Bold",
+                        color,
+                      }}
+                    >
                       {label}
                     </Text>
                   </View>
@@ -704,7 +799,13 @@ export default function OrderDetailScreen() {
               >
                 Notes
               </Text>
-              <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: c.foreground }}>
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontFamily: "Inter_400Regular",
+                  color: c.foreground,
+                }}
+              >
                 {order.notes}
               </Text>
             </View>
@@ -721,7 +822,9 @@ export default function OrderDetailScreen() {
               borderColor: allItemsDelivered ? "#A7F3D0" : c.primary + "30",
             }}
           >
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+            >
               <MaterialIcons
                 name={allItemsDelivered ? "check-circle" : "local-shipping"}
                 size={20}
@@ -754,7 +857,8 @@ export default function OrderDetailScreen() {
                   backgroundColor: c.primary,
                   paddingVertical: 10,
                   borderRadius: 10,
-                  opacity: markingDelivered === "__all__" ? 0.7 : pressed ? 0.9 : 1,
+                  opacity:
+                    markingDelivered === "__all__" ? 0.7 : pressed ? 0.9 : 1,
                 })}
               >
                 {markingDelivered === "__all__" ? (
@@ -762,7 +866,13 @@ export default function OrderDetailScreen() {
                 ) : (
                   <MaterialIcons name="done-all" size={18} color="#FFFFFF" />
                 )}
-                <Text style={{ color: "#FFFFFF", fontSize: 13, fontFamily: "Inter_700Bold" }}>
+                <Text
+                  style={{
+                    color: "#FFFFFF",
+                    fontSize: 13,
+                    fontFamily: "Inter_700Bold",
+                  }}
+                >
                   Mark all items delivered
                 </Text>
               </Pressable>
@@ -778,7 +888,17 @@ export default function OrderDetailScreen() {
             const sourceMeas = it.measurementId
               ? measurements.find((m) => m.id === it.measurementId)
               : null;
-            const itemPhotos: string[] = (sourceMeas?.photos as string[] | undefined) ?? [];
+            let itemPhotos: string[] = [];
+            if (Array.isArray(sourceMeas?.photos))
+              itemPhotos = sourceMeas.photos as string[];
+            else if (typeof sourceMeas?.photos === "string") {
+              try {
+                itemPhotos = JSON.parse(sourceMeas.photos);
+              } catch {
+                itemPhotos = [];
+              }
+            }
+            if (!Array.isArray(itemPhotos)) itemPhotos = [];
             itemPhotos.forEach((p) => {
               if (!allPhotos.includes(p)) allPhotos.push(p);
             });
@@ -801,7 +921,9 @@ export default function OrderDetailScreen() {
                   <View key={idx} style={{ position: "relative" }}>
                     <Image
                       source={{
-                        uri: photo.startsWith("data:") ? photo : `data:image/jpeg;base64,${photo}`
+                        uri: photo.startsWith("data:")
+                          ? photo
+                          : `data:image/jpeg;base64,${photo}`,
                       }}
                       style={{
                         width: 80,
@@ -822,7 +944,13 @@ export default function OrderDetailScreen() {
 
         {/* ── Items grouped by person ─────────────────────────────── */}
         <View style={{ gap: 14 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
             <Text
               style={{
                 fontSize: 15,
@@ -859,7 +987,13 @@ export default function OrderDetailScreen() {
                     alignItems: "center",
                   }}
                 >
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 10,
+                    }}
+                  >
                     <View
                       style={{
                         width: 36,
@@ -878,12 +1012,20 @@ export default function OrderDetailScreen() {
                     </View>
                     <View>
                       <Text
-                        style={{ fontSize: 15, fontFamily: "Inter_700Bold", color: c.foreground }}
+                        style={{
+                          fontSize: 15,
+                          fontFamily: "Inter_700Bold",
+                          color: c.foreground,
+                        }}
                       >
                         {group.name}
                       </Text>
                       <Text
-                        style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground }}
+                        style={{
+                          fontSize: 12,
+                          fontFamily: "Inter_400Regular",
+                          color: c.mutedForeground,
+                        }}
                       >
                         {titleCase(group.relation)} · {group.items.length} item
                         {group.items.length === 1 ? "" : "s"}
@@ -891,7 +1033,13 @@ export default function OrderDetailScreen() {
                     </View>
                   </View>
 
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
                     {groupItemsDelivered && (
                       <Badge label="Delivered" variant="success" />
                     )}
@@ -903,14 +1051,29 @@ export default function OrderDetailScreen() {
                 {/* Items in this group */}
                 <View style={{ gap: 10 }}>
                   {group.items.map((it, idx) => {
-                    const inv = it.invoiceId ? invoices.find((i) => i.id === it.invoiceId) : null;
+                    const inv = it.invoiceId
+                      ? invoices.find((i) => i.id === it.invoiceId)
+                      : null;
                     const measValues = it.measurementValues ?? null;
-                    const measEntries = measValues ? Object.entries(measValues) : [];
+                    const measEntries = measValues
+                      ? Object.entries(measValues)
+                      : [];
                     const sourceMeas = it.measurementId
                       ? measurements.find((m) => m.id === it.measurementId)
                       : null;
-                    const itemPhotos: string[] = (sourceMeas?.photos as string[] | undefined) ?? [];
-                    const delivered = (itemDelivery[it.id] ?? "pending") === "delivered";
+                    let itemPhotos: string[] = [];
+                    if (Array.isArray(sourceMeas?.photos))
+                      itemPhotos = sourceMeas.photos as string[];
+                    else if (typeof sourceMeas?.photos === "string") {
+                      try {
+                        itemPhotos = JSON.parse(sourceMeas.photos);
+                      } catch {
+                        itemPhotos = [];
+                      }
+                    }
+                    if (!Array.isArray(itemPhotos)) itemPhotos = [];
+                    const delivered =
+                      (itemDelivery[it.id] ?? "pending") === "delivered";
                     const busy = markingDelivered === it.id;
 
                     return (
@@ -960,7 +1123,8 @@ export default function OrderDetailScreen() {
                                 color: c.mutedForeground,
                               }}
                             >
-                              Qty: {it.quantity} · {formatCurrency(Number(it.price))}
+                              Qty: {it.quantity} ·{" "}
+                              {formatCurrency(Number(it.price))}
                             </Text>
                           </View>
                           <View style={{ alignItems: "flex-end", gap: 4 }}>
@@ -976,10 +1140,15 @@ export default function OrderDetailScreen() {
                             {it.invoiceId && inv ? (
                               <Pressable
                                 onPress={() =>
-                                  router.push(`/invoices/${it.invoiceId}` as any)
+                                  router.push(
+                                    `/invoices/${it.invoiceId}` as any,
+                                  )
                                 }
                               >
-                                <Badge label={inv.invoiceNumber} variant="success" />
+                                <Badge
+                                  label={inv.invoiceNumber}
+                                  variant="success"
+                                />
                               </Pressable>
                             ) : (
                               <Badge label="Uninvoiced" variant="warning" />
@@ -1008,7 +1177,13 @@ export default function OrderDetailScreen() {
                             >
                               Measurements
                             </Text>
-                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                flexWrap: "wrap",
+                                gap: 6,
+                              }}
+                            >
                               {measEntries.map(([k, v]) => (
                                 <View
                                   key={k}
@@ -1027,7 +1202,9 @@ export default function OrderDetailScreen() {
                                     }}
                                   >
                                     {titleCase(k)}:{" "}
-                                    <Text style={{ fontFamily: "Inter_700Bold" }}>
+                                    <Text
+                                      style={{ fontFamily: "Inter_700Bold" }}
+                                    >
                                       {String(v)}
                                     </Text>
                                   </Text>
@@ -1051,7 +1228,13 @@ export default function OrderDetailScreen() {
                             >
                               Photos
                             </Text>
-                            <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                gap: 6,
+                                flexWrap: "wrap",
+                              }}
+                            >
                               {itemPhotos.slice(0, 6).map((p, pIdx) => (
                                 <Image
                                   key={pIdx}
@@ -1107,7 +1290,9 @@ export default function OrderDetailScreen() {
                               style={{
                                 fontSize: 11,
                                 fontFamily: "Inter_600SemiBold",
-                                color: delivered ? "#059669" : c.mutedForeground,
+                                color: delivered
+                                  ? "#059669"
+                                  : c.mutedForeground,
                               }}
                             >
                               {delivered ? "Pending" : "Mark as Delivered"}
@@ -1131,28 +1316,53 @@ export default function OrderDetailScreen() {
             const sourceMeas = it.measurementId
               ? measurements.find((m) => m.id === it.measurementId)
               : null;
-            const itemPhotos: string[] = (sourceMeas?.photos as string[] | undefined) ?? [];
+            let itemPhotos: string[] = [];
+            if (Array.isArray(sourceMeas?.photos))
+              itemPhotos = sourceMeas.photos as string[];
+            else if (typeof sourceMeas?.photos === "string") {
+              try {
+                itemPhotos = JSON.parse(sourceMeas.photos);
+              } catch {
+                itemPhotos = [];
+              }
+            }
+            if (!Array.isArray(itemPhotos)) itemPhotos = [];
             itemPhotos.forEach((p) => {
-              if (!seen.has(p)) { seen.add(p); allPhotos.push(p); }
+              if (!seen.has(p)) {
+                seen.add(p);
+                allPhotos.push(p);
+              }
             });
           });
           if (allPhotos.length === 0) return null;
           return (
             <Card style={{ padding: 16, backgroundColor: c.card }}>
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.foreground }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 12,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontFamily: "Inter_600SemiBold",
+                    color: c.foreground,
+                  }}
+                >
                   Product Photos ({allPhotos.length})
                 </Text>
               </View>
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                 {allPhotos.slice(0, 8).map((photo, idx) => (
-                  <View
-                    key={idx}
-                    style={{ position: "relative" }}
-                  >
+                  <View key={idx} style={{ position: "relative" }}>
                     <Image
                       source={{
-                        uri: photo.startsWith("data:") ? photo : `data:image/jpeg;base64,${photo}`
+                        uri: photo.startsWith("data:")
+                          ? photo
+                          : `data:image/jpeg;base64,${photo}`,
                       }}
                       style={{
                         width: 80,
@@ -1167,8 +1377,25 @@ export default function OrderDetailScreen() {
                   </View>
                 ))}
                 {allPhotos.length > 8 && (
-                  <View style={{ width: 80, height: 80, borderRadius: 8, backgroundColor: c.muted, justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: c.border }}>
-                    <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: c.mutedForeground }}>
+                  <View
+                    style={{
+                      width: 80,
+                      height: 80,
+                      borderRadius: 8,
+                      backgroundColor: c.muted,
+                      justifyContent: "center",
+                      alignItems: "center",
+                      borderWidth: 1,
+                      borderColor: c.border,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontFamily: "Inter_600SemiBold",
+                        color: c.mutedForeground,
+                      }}
+                    >
                       +{allPhotos.length - 8} more
                     </Text>
                   </View>
@@ -1180,7 +1407,17 @@ export default function OrderDetailScreen() {
 
         {/* ── Order Photos ──────────────────────────────────────── */}
         {(() => {
-          const orderPhotos = (currentOrder.photos ?? []) as string[];
+          let orderPhotos: string[] = [];
+          if (Array.isArray(currentOrder.photos))
+            orderPhotos = currentOrder.photos as string[];
+          else if (typeof currentOrder.photos === "string") {
+            try {
+              orderPhotos = JSON.parse(currentOrder.photos);
+            } catch {
+              orderPhotos = [];
+            }
+          }
+          if (!Array.isArray(orderPhotos)) orderPhotos = [];
           if (orderPhotos.length === 0) return null;
           return (
             <Card style={{ padding: 16, backgroundColor: c.card }}>
@@ -1199,9 +1436,16 @@ export default function OrderDetailScreen() {
                   <View key={idx} style={{ position: "relative" }}>
                     <Image
                       source={{
-                        uri: photo.startsWith("data:") ? photo : `data:image/jpeg;base64,${photo}`,
+                        uri: photo.startsWith("data:")
+                          ? photo
+                          : `data:image/jpeg;base64,${photo}`,
                       }}
-                      style={{ width: 80, height: 80, borderRadius: 8, backgroundColor: c.muted }}
+                      style={{
+                        width: 80,
+                        height: 80,
+                        borderRadius: 8,
+                        backgroundColor: c.muted,
+                      }}
                       resizeMode="cover"
                     />
                   </View>
@@ -1220,10 +1464,22 @@ export default function OrderDetailScreen() {
               alignItems: "center",
             }}
           >
-            <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>
+            <Text
+              style={{
+                fontSize: 16,
+                fontFamily: "Inter_700Bold",
+                color: c.foreground,
+              }}
+            >
               Total Order Value
             </Text>
-            <Text style={{ fontSize: 22, fontFamily: "Inter_800ExtraBold", color: c.primary }}>
+            <Text
+              style={{
+                fontSize: 22,
+                fontFamily: "Inter_800ExtraBold",
+                color: c.primary,
+              }}
+            >
               {formatCurrency(Number(order.totalAmount))}
             </Text>
           </View>
@@ -1238,10 +1494,22 @@ export default function OrderDetailScreen() {
                   alignItems: "center",
                 }}
               >
-                <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: "#059669" }}>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontFamily: "Inter_500Medium",
+                    color: "#059669",
+                  }}
+                >
                   Advance Paid
                 </Text>
-                <Text style={{ fontSize: 15, fontFamily: "Inter_700Bold", color: "#059669" }}>
+                <Text
+                  style={{
+                    fontSize: 15,
+                    fontFamily: "Inter_700Bold",
+                    color: "#059669",
+                  }}
+                >
                   -{formatCurrency(Number(order.advanceAmount ?? 0))}
                 </Text>
               </View>
@@ -1251,7 +1519,8 @@ export default function OrderDetailScreen() {
                   justifyContent: "space-between",
                   alignItems: "center",
                   marginTop: 6,
-                  backgroundColor: Number(order.balanceDue ?? 0) === 0 ? "#D1FAE5" : "#FEF3C7",
+                  backgroundColor:
+                    Number(order.balanceDue ?? 0) === 0 ? "#D1FAE5" : "#FEF3C7",
                   borderRadius: 8,
                   padding: 10,
                 }}
@@ -1260,10 +1529,15 @@ export default function OrderDetailScreen() {
                   style={{
                     fontSize: 15,
                     fontFamily: "Inter_700Bold",
-                    color: Number(order.balanceDue ?? 0) === 0 ? "#059669" : "#D97706",
+                    color:
+                      Number(order.balanceDue ?? 0) === 0
+                        ? "#059669"
+                        : "#D97706",
                   }}
                 >
-                  {Number(order.balanceDue ?? 0) === 0 ? "✓ Fully Paid" : "Balance Due"}
+                  {Number(order.balanceDue ?? 0) === 0
+                    ? "✓ Fully Paid"
+                    : "Balance Due"}
                 </Text>
                 {Number(order.balanceDue ?? 0) > 0 && (
                   <Text
@@ -1304,7 +1578,13 @@ export default function OrderDetailScreen() {
                 })}
               >
                 <MaterialIcons name="visibility" size={18} color={c.primary} />
-                <Text style={{ fontSize: 13, fontFamily: "Inter_700Bold", color: c.primary }}>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontFamily: "Inter_700Bold",
+                    color: c.primary,
+                  }}
+                >
                   View Invoice {orderInvoice.invoiceNumber}
                 </Text>
               </Pressable>
@@ -1326,9 +1606,19 @@ export default function OrderDetailScreen() {
                 {invoiceLoading ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <MaterialIcons name="receipt-long" size={18} color="#FFFFFF" />
+                  <MaterialIcons
+                    name="receipt-long"
+                    size={18}
+                    color="#FFFFFF"
+                  />
                 )}
-                <Text style={{ color: "#FFFFFF", fontSize: 13, fontFamily: "Inter_700Bold" }}>
+                <Text
+                  style={{
+                    color: "#FFFFFF",
+                    fontSize: 13,
+                    fontFamily: "Inter_700Bold",
+                  }}
+                >
                   Generate Invoice
                 </Text>
               </Pressable>
@@ -1376,7 +1666,13 @@ export default function OrderDetailScreen() {
               >
                 <MaterialIcons name="share" size={17} color={c.primary} />
               </View>
-              <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: c.foreground }}>
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontFamily: "Inter_600SemiBold",
+                  color: c.foreground,
+                }}
+              >
                 Share
               </Text>
             </Pressable>
@@ -1464,7 +1760,13 @@ export default function OrderDetailScreen() {
                   alignItems: "center",
                 }}
               >
-                <Text style={{ fontSize: 18, fontFamily: "Inter_700Bold", color: c.foreground }}>
+                <Text
+                  style={{
+                    fontSize: 18,
+                    fontFamily: "Inter_700Bold",
+                    color: c.foreground,
+                  }}
+                >
                   Edit Order
                 </Text>
                 <Pressable
@@ -1472,7 +1774,11 @@ export default function OrderDetailScreen() {
                   disabled={savingEdit}
                   hitSlop={8}
                 >
-                  <MaterialIcons name="close" size={22} color={c.mutedForeground} />
+                  <MaterialIcons
+                    name="close"
+                    size={22}
+                    color={c.mutedForeground}
+                  />
                 </Pressable>
               </View>
 
@@ -1495,39 +1801,47 @@ export default function OrderDetailScreen() {
                     Status
                   </Text>
                   <View style={{ flexDirection: "row", gap: 8 }}>
-                    {(["pending", "completed", "cancelled"] as const).map((st) => (
-                      <Pressable
-                        key={st}
-                        onPress={() => {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          setEditDraft((d) => ({ ...d, status: st }));
-                        }}
-                        style={{
-                          flex: 1,
-                          paddingVertical: 10,
-                          alignItems: "center",
-                          borderRadius: 10,
-                          backgroundColor:
-                            editDraft.status === st ? statusConfig[st].color + "18" : c.muted,
-                          borderWidth: 1,
-                          borderColor:
-                            editDraft.status === st ? statusConfig[st].color : c.border,
-                        }}
-                      >
-                        <Text
+                    {(["pending", "completed", "cancelled"] as const).map(
+                      (st) => (
+                        <Pressable
+                          key={st}
+                          onPress={() => {
+                            Haptics.impactAsync(
+                              Haptics.ImpactFeedbackStyle.Light,
+                            );
+                            setEditDraft((d) => ({ ...d, status: st }));
+                          }}
                           style={{
-                            fontSize: 13,
-                            fontFamily: "Inter_600SemiBold",
-                            color:
+                            flex: 1,
+                            paddingVertical: 10,
+                            alignItems: "center",
+                            borderRadius: 10,
+                            backgroundColor:
+                              editDraft.status === st
+                                ? statusConfig[st].color + "18"
+                                : c.muted,
+                            borderWidth: 1,
+                            borderColor:
                               editDraft.status === st
                                 ? statusConfig[st].color
-                                : c.mutedForeground,
+                                : c.border,
                           }}
                         >
-                          {statusConfig[st].label}
-                        </Text>
-                      </Pressable>
-                    ))}
+                          <Text
+                            style={{
+                              fontSize: 13,
+                              fontFamily: "Inter_600SemiBold",
+                              color:
+                                editDraft.status === st
+                                  ? statusConfig[st].color
+                                  : c.mutedForeground,
+                            }}
+                          >
+                            {statusConfig[st].label}
+                          </Text>
+                        </Pressable>
+                      ),
+                    )}
                   </View>
                 </View>
 
@@ -1535,7 +1849,9 @@ export default function OrderDetailScreen() {
                 <DatePicker
                   label="Delivery Date"
                   value={editDraft.deliveryDate}
-                  onChange={(v) => setEditDraft((d) => ({ ...d, deliveryDate: v }))}
+                  onChange={(v) =>
+                    setEditDraft((d) => ({ ...d, deliveryDate: v }))
+                  }
                 />
 
                 {/* Discount */}
@@ -1582,12 +1898,14 @@ export default function OrderDetailScreen() {
                       color: c.mutedForeground,
                     }}
                   >
-                    Current total: {formatCurrency(Number(currentOrder.totalAmount))}.
-                    {" "}After discount:{" "}
+                    Current total:{" "}
+                    {formatCurrency(Number(currentOrder.totalAmount))}. After
+                    discount:{" "}
                     {formatCurrency(
                       Math.max(
                         0,
-                        Number(currentOrder.totalAmount) - (Number(editDraft.discount) || 0),
+                        Number(currentOrder.totalAmount) -
+                          (Number(editDraft.discount) || 0),
                       ),
                     )}
                   </Text>
@@ -1598,7 +1916,9 @@ export default function OrderDetailScreen() {
                   label="Notes"
                   placeholder="Order notes (optional)"
                   value={editDraft.notes}
-                  onChangeText={(v) => setEditDraft((d) => ({ ...d, notes: v.slice(0, 500) }))}
+                  onChangeText={(v) =>
+                    setEditDraft((d) => ({ ...d, notes: v.slice(0, 500) }))
+                  }
                   multiline
                   numberOfLines={3}
                   maxLength={500}
@@ -1635,7 +1955,11 @@ export default function OrderDetailScreen() {
       >
         <Pressable
           onPress={() => setShowShareModal(false)}
-          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }}
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "flex-end",
+          }}
         >
           <Pressable
             onPress={(e) => e.stopPropagation()}
@@ -1652,7 +1976,14 @@ export default function OrderDetailScreen() {
           >
             {/* Handle bar */}
             <View style={{ alignItems: "center", marginBottom: 4 }}>
-              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: c.border }} />
+              <View
+                style={{
+                  width: 36,
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor: c.border,
+                }}
+              />
             </View>
 
             {/* Header / Label matching the style */}
@@ -1683,13 +2014,21 @@ export default function OrderDetailScreen() {
                   gap: 8,
                   paddingVertical: 14,
                   borderRadius: 12,
-                  backgroundColor: pressed ? c.primary + "1A" : c.primary + "0D",
+                  backgroundColor: pressed
+                    ? c.primary + "1A"
+                    : c.primary + "0D",
                   borderWidth: 1,
                   borderColor: c.primary + "20",
                 })}
               >
                 <MaterialIcons name="share" size={20} color={c.primary} />
-                <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.primary }}>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontFamily: "Inter_600SemiBold",
+                    color: c.primary,
+                  }}
+                >
                   Share
                 </Text>
               </Pressable>
@@ -1713,7 +2052,13 @@ export default function OrderDetailScreen() {
                 })}
               >
                 <MaterialIcons name="chat" size={20} color="#25D366" />
-                <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#25D366" }}>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontFamily: "Inter_600SemiBold",
+                    color: "#25D366",
+                  }}
+                >
                   WhatsApp
                 </Text>
               </Pressable>

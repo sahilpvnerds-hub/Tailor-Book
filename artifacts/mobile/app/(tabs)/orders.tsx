@@ -106,7 +106,7 @@ export default function OrdersScreen() {
 
         {/* Filter pills */}
         <View style={{ flexDirection: "row", gap: 8 }}>
-          {(["all", "pending", "partially-delivered", "completed", "cancelled"] as const).map((f) => (
+          {(["all", "pending", "partially-delivered", "completed"] as const).map((f) => (
             <Pressable
               key={f}
               onPress={() => setFilter(f)}
