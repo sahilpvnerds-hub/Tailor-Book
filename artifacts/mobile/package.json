@@ -15,7 +15,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
-    "@babel/plugin-transform-private-fields": "^8.0.1",
+    "@babel/plugin-transform-class-properties": "^8.0.1",
     "@babel/plugin-transform-private-methods": "^8.0.1",
     "@babel/plugin-transform-private-property-in-object": "^8.0.1",
     "@babel/plugin-transform-typescript": "^8.0.1",

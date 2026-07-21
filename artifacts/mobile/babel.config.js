@@ -9,7 +9,7 @@ module.exports = function (api) {
       // doesn't support #privateField syntax even though Hermes runtime does.
       // babel-preset-expo's preset-env skips these transforms because Hermes
       // claims support, so we run them explicitly BEFORE the preset.
-      ["@babel/plugin-transform-private-fields", { loose: true }],
+      ["@babel/plugin-transform-class-properties", { loose: true }],
       ["@babel/plugin-transform-private-methods", { loose: true }],
       ["@babel/plugin-transform-private-property-in-object", { loose: true }],
       function () {
