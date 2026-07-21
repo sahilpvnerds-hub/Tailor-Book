@@ -5,6 +5,10 @@ module.exports = function (api) {
       ["babel-preset-expo", { unstable_transformImportMeta: true }]
     ],
     plugins: [
+      // Force JSX transform for ALL files — expo-router/build/ ships .js files
+      // with raw JSX that preset-expo doesn't always transform in EAS builds.
+      ["@babel/plugin-transform-react-jsx", { runtime: "automatic" }],
+
       function () {
         return {
            visitor: {
@@ -28,13 +32,10 @@ module.exports = function (api) {
     ],
     overrides: [
       {
-        // Only TS/TSX files — reanimated/worklets private fields are in .ts source.
-        // .js files (like expo-router/entry.js) must go through preset-expo's
-        // JSX transform unmodified.
+        // Only TS/TSX files get private-field transforms — reanimated/worklets
+        // internals use #privateField syntax that hermesc can't compile.
         test: /\.tsx?$/,
         plugins: [
-          // TypeScript FIRST — required before class-properties plugin
-          // (class-properties crashes on TS declare fields like `context!: Type`)
           ["@babel/plugin-transform-typescript", { allowDeclareFields: true }],
           ["@babel/plugin-transform-class-properties", { loose: true }],
           ["@babel/plugin-transform-private-methods", { loose: true }],
