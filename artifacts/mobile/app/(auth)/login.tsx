@@ -78,9 +78,10 @@ export default function LoginScreen() {
           } else if (raw.includes("admin access")) {
             specificMessage = "Admin access required. Please contact an administrator.";
           }
+          const resolvedUrl = resolveApiBaseUrl();
           Alert.alert(
             "Access Denied (403)",
-            `${specificMessage}\n\nStatus: 403\nError: ${raw}`,
+            `${specificMessage}\n\nServer: ${resolvedUrl}\nStatus: 403\nError: ${raw}`,
             [{ text: "OK" }]
           );
         } else if (result.status === 429) {
@@ -145,7 +146,7 @@ export default function LoginScreen() {
 
       if (!result.available) {
         // Email exists — navigate and let forgot-password screen handle delivery
-        router.push(`/(auth)/forgot-password?email=${encodeURIComponent(emailVal.toLowerCase())}`);
+        router.push(`/(auth)/forgot-password?email=${encodeURIComponent(emailVal.toLowerCase())}` as any);
       } else {
         // Email not found — show generic message (don't reveal if email exists or not)
         Alert.alert(

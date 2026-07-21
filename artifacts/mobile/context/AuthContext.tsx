@@ -12,8 +12,8 @@ import type { RegisterData, UpdateProfileData, User } from "@/types";
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (emailOrMobile: string, password: string) => Promise<{ success: boolean; error?: string; user?: User }>;
-  register: (data: RegisterData) => Promise<{ success: boolean; error?: string }>;
+  login: (emailOrMobile: string, password: string) => Promise<{ success: boolean; error?: string; status?: number; user?: User }>;
+  register: (data: RegisterData) => Promise<{ success: boolean; error?: string; status?: number }>;
   logout: () => Promise<void>;
   updateOnboardingComplete: () => Promise<void>;
   updateProfile: (data: UpdateProfileData) => Promise<void>;

@@ -1,18 +1,21 @@
 {
   "expo": {
     "name": "Stitchix",
-    "slug": "mobile",
+    "slug": "stitchix",
     "version": "1.0.0",
     "orientation": "portrait",
-    "extra": {
-      "eas": {
-        "projectId": "ea6b13c6-7a0b-4ced-8c52-103cd7cfd35c"
-      }
-    },
     "icon": "./assets/images/icon.jpg",
-    "scheme": "mobile",
+    "scheme": "stitchix",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "extra": {
+      "router": {
+        "origin": "https://admin-tailorbook.yiion.com"
+      },
+      "eas": {
+        "projectId": "217be2f4-0309-4b59-bdee-ba531bda1a3e"
+      }
+    },
     "splash": {
       "image": "./assets/images/icon.jpg",
       "resizeMode": "contain",
@@ -20,10 +23,15 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.anonymous.mobile"
+      "bundleIdentifier": "com.stitchix.app"
     },
     "android": {
-      "package": "com.tailorbook"
+      "package": "com.stitchix.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.jpg",
+        "backgroundColor": "#1C1C7D"
+      }
     },
     "web": {
       "favicon": "./assets/images/icon.jpg"
@@ -32,7 +40,7 @@
       [
         "expo-router",
         {
-          "origin": "https://replit.com/"
+          "origin": "https://admin-tailorbook.yiion.com"
         }
       ],
       "expo-font",
@@ -41,6 +49,7 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "owner": "yiionsystems"
   }
 }

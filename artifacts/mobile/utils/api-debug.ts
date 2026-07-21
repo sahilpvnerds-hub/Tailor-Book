@@ -181,13 +181,13 @@ export async function login(emailOrMobile: string, password: string): Promise<{ 
   console.log("[API Debug] Login attempt for:", emailOrMobile);
 
   try {
-    const response = await debugFetch<{ token: string; user: User; error?: string }>(url, {
+    const response = await debugFetch<any>(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ emailOrMobile, password }),
     });
 
-    if (!response.ok) {
+    if (response.error) {
       return {
         ok: false,
         error: response.error ?? "Login failed",
@@ -220,13 +220,13 @@ export async function register(formData: RegisterData): Promise<{ ok: true; id: 
   const url = `${API_BASE_URL}/auth/register`;
   console.log("[API Debug] Registration attempt");
 
-  const response = await debugFetch<{ id: string; message: string; error?: string }>(url, {
+  const response = await debugFetch<any>(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(formData),
   });
 
-  if (!response.ok) {
+  if (response.error) {
     throw new Error(response.error ?? "Registration failed");
   }
   return response;
