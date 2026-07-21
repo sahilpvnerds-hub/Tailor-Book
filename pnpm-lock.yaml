@@ -297,6 +297,9 @@ importers:
       '@babel/plugin-transform-private-methods':
         specifier: ^8.0.1
         version: 8.0.1(@babel/core@7.29.0)
+      '@babel/plugin-transform-private-property-in-object':
+        specifier: ^8.0.1
+        version: 8.0.1(@babel/core@7.29.0)
       '@babel/plugin-transform-typescript':
         specifier: ^8.0.1
         version: 8.0.1(@babel/core@7.29.0)
@@ -1205,6 +1208,12 @@ packages:
     engines: {node: '>=6.9.0'}
     peerDependencies:
       '@babel/core': ^7.0.0-0
+
+  '@babel/plugin-transform-private-property-in-object@8.0.1':
+    resolution: {integrity: sha512-e+yfOqSYBZaf3PARpiQkjZrpWYgmcFLhK+1tevh2CpHR1O9/36IdyPnAZusESX5nzVV/XZTDAtQBRLa8HPT5Dw==}
+    engines: {node: ^22.18.0 || >=24.11.0}
+    peerDependencies:
+      '@babel/core': ^8.0.0
 
   '@babel/plugin-transform-react-display-name@7.29.7':
     resolution: {integrity: sha512-+1wdDMGNb4UPeY3Q4L5yLiYe6TXPXubs4NjrgRFw13hPRLJfEMw2Q5OXkee6/IfdqePIeW4Jjwe3aBh7SdKz4Q==}
@@ -6695,6 +6704,13 @@ snapshots:
       '@babel/helper-plugin-utils': 7.29.7
     transitivePeerDependencies:
       - supports-color
+
+  '@babel/plugin-transform-private-property-in-object@8.0.1(@babel/core@7.29.0)':
+    dependencies:
+      '@babel/core': 7.29.0
+      '@babel/helper-annotate-as-pure': 8.0.0
+      '@babel/helper-create-class-features-plugin': 8.0.1(@babel/core@7.29.0)
+      '@babel/helper-plugin-utils': 8.0.1(@babel/core@7.29.0)
 
   '@babel/plugin-transform-react-display-name@7.29.7(@babel/core@7.29.0)':
     dependencies:
