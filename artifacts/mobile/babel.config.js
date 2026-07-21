@@ -5,6 +5,10 @@ module.exports = function (api) {
       ["babel-preset-expo", { unstable_transformImportMeta: true }]
     ],
     plugins: [
+      // TypeScript FIRST — class-properties plugin crashes on TS declare fields
+      // (e.g. `context!: Type`) if it sees them before TS is stripped.
+      ["@babel/plugin-transform-typescript", { allowDeclareFields: true }],
+
       // Force-transform private fields/methods — hermesc in EAS build env
       // doesn't support #privateField syntax even though Hermes runtime does.
       // babel-preset-expo's preset-env skips these transforms because Hermes
