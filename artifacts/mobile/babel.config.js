@@ -5,17 +5,6 @@ module.exports = function (api) {
       ["babel-preset-expo", { unstable_transformImportMeta: true }]
     ],
     plugins: [
-      // TypeScript FIRST — class-properties plugin crashes on TS declare fields
-      // (e.g. `context!: Type`) if it sees them before TS is stripped.
-      ["@babel/plugin-transform-typescript", { allowDeclareFields: true }],
-
-      // Force-transform private fields/methods — hermesc in EAS build env
-      // doesn't support #privateField syntax even though Hermes runtime does.
-      // babel-preset-expo's preset-env skips these transforms because Hermes
-      // claims support, so we run them explicitly BEFORE the preset.
-      ["@babel/plugin-transform-class-properties", { loose: true }],
-      ["@babel/plugin-transform-private-methods", { loose: true }],
-      ["@babel/plugin-transform-private-property-in-object", { loose: true }],
       function () {
         return {
            visitor: {
@@ -36,6 +25,22 @@ module.exports = function (api) {
         };
       },
       "react-native-worklets/plugin", // MUST be last per react-native-reanimated docs
+    ],
+    overrides: [
+      {
+        // Only TS/TSX files — reanimated/worklets private fields are in .ts source.
+        // .js files (like expo-router/entry.js) must go through preset-expo's
+        // JSX transform unmodified.
+        test: /\.tsx?$/,
+        plugins: [
+          // TypeScript FIRST — required before class-properties plugin
+          // (class-properties crashes on TS declare fields like `context!: Type`)
+          ["@babel/plugin-transform-typescript", { allowDeclareFields: true }],
+          ["@babel/plugin-transform-class-properties", { loose: true }],
+          ["@babel/plugin-transform-private-methods", { loose: true }],
+          ["@babel/plugin-transform-private-property-in-object", { loose: true }],
+        ],
+      },
     ],
   };
 };
