@@ -5,6 +5,13 @@ module.exports = function (api) {
       ["babel-preset-expo", { unstable_transformImportMeta: true }]
     ],
     plugins: [
+      // Force-transform private fields/methods — hermesc in EAS build env
+      // doesn't support #privateField syntax even though Hermes runtime does.
+      // babel-preset-expo's preset-env skips these transforms because Hermes
+      // claims support, so we run them explicitly BEFORE the preset.
+      ["@babel/plugin-transform-private-fields", { loose: true }],
+      ["@babel/plugin-transform-private-methods", { loose: true }],
+      ["@babel/plugin-transform-private-property-in-object", { loose: true }],
       function () {
         return {
            visitor: {
