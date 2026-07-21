@@ -46,18 +46,32 @@ router.get("/", async (req: Request, res: Response) => {
       conditions.push(eq(orders.tailorId, tailorId));
     }
 
-    const rows = await db
-      .select()
+    // Fetch only IDs sorted by createdAt to prevent "Out of sort memory"
+    // caused by sorting large JSON columns (like photos) in MySQL.
+    const idRows = await db
+      .select({ id: orders.id })
       .from(orders)
       .where(conditions.length ? and(...conditions) : undefined)
       .orderBy(desc(orders.createdAt));
 
-    if (rows.length === 0) {
+    if (idRows.length === 0) {
       res.json([]);
       return;
     }
 
-    const ids = rows.map((r) => r.id);
+    const ids = idRows.map((r) => r.id);
+
+    // Fetch full order rows (MySQL will not need to sort the large columns)
+    const unsortedRows = await db
+      .select()
+      .from(orders)
+      .where(inArray(orders.id, ids));
+
+    // Restore the correct sort order in memory
+    const rows = [];
+    const rowMap = new Map();
+    for (const r of unsortedRows) rowMap.set(r.id, r);
+    for (const id of ids) if (rowMap.has(id)) rows.push(rowMap.get(id));
 
     // Get order items - handle missing delivery_status column gracefully
     let items: any[] = [];
