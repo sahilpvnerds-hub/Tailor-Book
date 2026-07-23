@@ -3,7 +3,7 @@
 // package.json: the "exports" field is empty/absent, which blocks Node from
 // resolving internal subpaths like "expo/internal/unstable-autolinking-exports".
 // @expo/prebuild-config depends on this subpath, so EAS cloud builds fail.
-// This script patches package.json after every install.
+// This script patches package.json and creates stub files after every install.
 const fs = require('fs');
 const path = require('path');
 
@@ -15,10 +15,16 @@ if (!fs.existsSync(expoPkg)) {
 
 const pkg = JSON.parse(fs.readFileSync(expoPkg, 'utf8'));
 
-// Add exports entries for internal subpaths that @expo/prebuild-config requires
+// Add exports entries for all subpaths that tools need
 const neededExports = {
+  '.': {
+    types: './types/Expo.d.ts',
+    default: './build/Expo.js',
+  },
   './bin/cli': { default: './bin/cli' },
   './bin/cli.js': { default: './bin/cli' },
+  './bin/autolinking': { default: './bin/autolinking' },
+  './bin/fingerprint': { default: './bin/fingerprint' },
   './internal/unstable-autolinking-exports': {
     types: './internal/unstable-autolinking-exports.d.ts',
     default: './internal/unstable-autolinking-exports.js',
@@ -59,4 +65,15 @@ if (patched) {
   console.log('[patch-expo] done');
 } else {
   console.log('[patch-expo] already patched, skipping');
+}
+
+// Create build/Expo.js stub (expo@54.x ships without compiled JS)
+const expoBuildJs = path.resolve(path.dirname(expoPkg), 'build', 'Expo.js');
+if (!fs.existsSync(expoBuildJs)) {
+  fs.mkdirSync(path.dirname(expoBuildJs), { recursive: true });
+  fs.writeFileSync(
+    expoBuildJs,
+    "module.exports = require('../src/Expo');\n"
+  );
+  console.log('[patch-expo] created build/Expo.js stub');
 }
