@@ -25,6 +25,8 @@ const neededExports = {
   './bin/cli.js': { default: './bin/cli' },
   './bin/autolinking': { default: './bin/autolinking' },
   './bin/fingerprint': { default: './bin/fingerprint' },
+  './config-plugins': { default: './config-plugins.js' },
+  './config-plugins.js': { default: './config-plugins.js' },
   './internal/unstable-autolinking-exports': {
     types: './internal/unstable-autolinking-exports.d.ts',
     default: './internal/unstable-autolinking-exports.js',
