@@ -17,6 +17,8 @@ const pkg = JSON.parse(fs.readFileSync(expoPkg, 'utf8'));
 
 // Add exports entries for internal subpaths that @expo/prebuild-config requires
 const neededExports = {
+  './bin/cli': { default: './bin/cli' },
+  './bin/cli.js': { default: './bin/cli' },
   './internal/unstable-autolinking-exports': {
     types: './internal/unstable-autolinking-exports.d.ts',
     default: './internal/unstable-autolinking-exports.js',
