@@ -1,6 +1,7 @@
 const { getDefaultConfig } = require("expo/metro-config");
 const path = require("path");
 const fs = require("fs");
+const { pathToFileURL } = require("url");
 
 const projectRoot = __dirname;
 
@@ -22,7 +23,10 @@ if (fs.existsSync(pnpmStore)) {
   }
 }
 
-config.resolver.nodeModulesPaths = nodeModulesPaths;
+// Convert paths to file:// URLs so EAS/ESM loader accepts them on Windows
+config.resolver.nodeModulesPaths = nodeModulesPaths.map((p) =>
+  pathToFileURL(p).href
+);
 config.resolver.disableHierarchicalLookup = false;
 
 module.exports = config;
