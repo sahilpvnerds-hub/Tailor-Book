@@ -28,18 +28,13 @@ module.exports = function (api) {
           }
         };
       },
-      "react-native-worklets/plugin", // MUST be last per react-native-reanimated docs
+      "react-native-worklets/plugin",
     ],
     overrides: [
       {
-        // Only TS/TSX files get private-field transforms — reanimated/worklets
-        // internals use #privateField syntax that hermesc can't compile.
         test: /\.tsx?$/,
         plugins: [
           ["@babel/plugin-transform-typescript", { allowDeclareFields: true }],
-          ["@babel/plugin-transform-class-properties", { loose: true }],
-          ["@babel/plugin-transform-private-methods", { loose: true }],
-          ["@babel/plugin-transform-private-property-in-object", { loose: true }],
         ],
       },
     ],

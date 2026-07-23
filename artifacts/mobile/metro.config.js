@@ -8,7 +8,7 @@ const pnpmStore = path.resolve(workspaceRoot, "node_modules", ".pnpm");
 
 const config = getDefaultConfig(projectRoot);
 
-config.watchFolders = [workspaceRoot];
+config.watchFolders = [...(config.watchFolders || []), workspaceRoot];
 
 const nodeModulesPaths = [
   path.resolve(projectRoot, "node_modules"),
@@ -23,6 +23,6 @@ if (fs.existsSync(pnpmStore)) {
 }
 
 config.resolver.nodeModulesPaths = nodeModulesPaths;
-config.resolver.disableHierarchicalLookup = true;
+config.resolver.disableHierarchicalLookup = false;
 
 module.exports = config;
