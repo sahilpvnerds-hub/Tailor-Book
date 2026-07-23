@@ -4,6 +4,11 @@
     "appVersionSource": "remote"
   },
   "build": {
+    "preBuild": {
+      "scripts": {
+        "preBuild": "node scripts/postinstall-patch-expo.js"
+      }
+    },
     "development": {
       "developmentClient": true,
       "distribution": "internal",
