@@ -3,11 +3,10 @@ const path = require("path");
 const fs = require("fs");
 
 const projectRoot = __dirname;
-const workspaceRoot = path.resolve(projectRoot, "../..");
-const pnpmStore = path.resolve(workspaceRoot, "node_modules", ".pnpm");
 
 const config = getDefaultConfig(projectRoot);
 
+const workspaceRoot = path.resolve(projectRoot, "../..");
 config.watchFolders = [...(config.watchFolders || []), workspaceRoot];
 
 const nodeModulesPaths = [
@@ -15,6 +14,7 @@ const nodeModulesPaths = [
   path.resolve(workspaceRoot, "node_modules"),
 ];
 
+const pnpmStore = path.resolve(workspaceRoot, "node_modules", ".pnpm");
 if (fs.existsSync(pnpmStore)) {
   for (const entry of fs.readdirSync(pnpmStore)) {
     const nm = path.resolve(pnpmStore, entry, "node_modules");
