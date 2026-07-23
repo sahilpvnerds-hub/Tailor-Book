@@ -11,7 +11,8 @@
     "android": "expo run:android",
     "prebuild": "expo prebuild",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "ios": "expo run:ios"
+    "ios": "expo run:ios",
+    "postinstall": "node scripts/postinstall-patch-expo.js"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.0",
