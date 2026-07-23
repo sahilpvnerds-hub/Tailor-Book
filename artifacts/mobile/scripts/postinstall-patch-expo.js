@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-// postinstall patch for expo@54.x — npm publishes expo with a broken
-// package.json (missing exports + main points to TS source). This script
-// fixes it after every install so EAS cloud builds also work.
+// postinstall patch for expo@54.x — npm publishes expo@54.x with a broken
+// package.json: the "exports" field is empty/absent, which blocks Node from
+// resolving internal subpaths like "expo/internal/unstable-autolinking-exports".
+// @expo/prebuild-config depends on this subpath, so EAS cloud builds fail.
+// This script patches package.json after every install.
 const fs = require('fs');
 const path = require('path');
 
@@ -13,13 +15,7 @@ if (!fs.existsSync(expoPkg)) {
 
 const pkg = JSON.parse(fs.readFileSync(expoPkg, 'utf8'));
 
-// Fix main to point to built JS instead of TS source
-if (pkg.main === 'src/Expo.ts') {
-  pkg.main = 'build/Expo.js';
-  console.log('[patch-expo] fixed main: src/Expo.ts -> build/Expo.js');
-}
-
-// Add exports field for internal subpaths if missing or empty
+// Add exports entries for internal subpaths that @expo/prebuild-config requires
 const neededExports = {
   './internal/unstable-autolinking-exports': {
     types: './internal/unstable-autolinking-exports.d.ts',
@@ -43,16 +39,22 @@ const neededExports = {
 };
 
 if (!pkg.exports || Object.keys(pkg.exports).length === 0) {
-  pkg.exports = { '.': { types: './types/Expo.d.ts', default: './build/Expo.js' } };
-  console.log('[patch-expo] added exports field');
+  pkg.exports = {};
+  console.log('[patch-expo] initialized exports field');
 }
 
+let patched = false;
 for (const [subpath, mapping] of Object.entries(neededExports)) {
   if (!pkg.exports[subpath]) {
     pkg.exports[subpath] = mapping;
+    patched = true;
     console.log(`[patch-expo] added exports: ${subpath}`);
   }
 }
 
-fs.writeFileSync(expoPkg, JSON.stringify(pkg, null, 2) + '\n');
-console.log('[patch-expo] done');
+if (patched) {
+  fs.writeFileSync(expoPkg, JSON.stringify(pkg, null, 2) + '\n');
+  console.log('[patch-expo] done');
+} else {
+  console.log('[patch-expo] already patched, skipping');
+}
