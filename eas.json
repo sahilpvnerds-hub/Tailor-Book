@@ -4,14 +4,12 @@
     "appVersionSource": "remote"
   },
   "build": {
-    "preBuild": {
-      "scripts": {
-        "preBuild": "node scripts/postinstall-patch-expo.js"
-      }
-    },
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "prebuild": {
+        "script": "node scripts/postinstall-patch-expo.js"
+      },
       "android": {
         "buildType": "apk"
       },
@@ -31,6 +29,9 @@
       }
     },
     "production": {
+      "prebuild": {
+        "script": "node scripts/postinstall-patch-expo.js"
+      },
       "android": {
         "buildType": "apk"
       },
