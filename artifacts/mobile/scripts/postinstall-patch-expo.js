@@ -17,7 +17,6 @@ function findProjectRoot() {
 }
 
 const PROJECT_ROOT = findProjectRoot();
-const NM = path.join(PROJECT_ROOT, 'node_modules');
 
 const STUB = `module.exports = {
   makeCachedDependenciesLinker: () => ({ scan: () => ({}) }),
@@ -40,12 +39,13 @@ export const resolveSearchPathsAsync: any;
 `;
 
 function findExpoDirs() {
-  if (!fs.existsSync(NM)) return [];
-
   const dirs = new Set();
-  const MAX_DEPTH = 8;
+  const rootNM = path.join(PROJECT_ROOT, 'node_modules');
+  if (!fs.existsSync(rootNM)) return Array.from(dirs);
 
-  function walk(dir, depth) {
+  // Walk ALL directories - don't skip anything
+  const MAX_DEPTH = 8;
+  const walk = (dir, depth) => {
     if (depth > MAX_DEPTH) return;
     let entries;
     try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
@@ -58,15 +58,13 @@ function findExpoDirs() {
       if (entry.name === 'expo') {
         const pkgPath = path.join(full, 'package.json');
         if (fs.existsSync(pkgPath)) dirs.add(full);
-        continue; // Don't recurse into expo/
+      } else {
+        walk(full, depth + 1);
       }
-
-      // Always recurse into .pnpm, node_modules, and package dirs
-      walk(full, depth + 1);
     }
-  }
+  };
 
-  walk(NM, 0);
+  walk(rootNM, 0);
   return Array.from(dirs);
 }
 
