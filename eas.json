@@ -20,6 +20,9 @@
     },
     "preview": {
       "distribution": "internal",
+      "prebuild": {
+        "script": "node scripts/postinstall-patch-expo.js"
+      },
       "android": {
         "buildType": "apk"
       },
