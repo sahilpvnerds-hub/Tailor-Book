@@ -1,20 +1,30 @@
-diff --git a/package.json b/package.json
-index 1234567..abcdefg 100644
---- a/package.json
-+++ b/package.json
-@@ -1,11 +1,10 @@
- {
-   "name": "expo",
-   "version": "54.0.36",
-   "description": "The Expo SDK",
-   "main": "src/Expo.ts",
-   "module": "src/Expo.ts",
--  "exports": {},
--  "sideEffects": [
-+  "sideEffects": [
-     "*.fx.tsx",
-     "*.fx.web.tsx",
-     "./src/winter/*.ts",
-     "./src/async-require/*.ts"
-   ],
-   "bin": {
+diff --git a/internal/unstable-autolinking-exports.d.ts b/internal/unstable-autolinking-exports.d.ts
+index b5399f4bece1f331fa9976ac7ac072fa279ed446..31e5e21c2e7e6f21c4697e6ebb471ee5120c4f19 100644
+--- a/internal/unstable-autolinking-exports.d.ts
++++ b/internal/unstable-autolinking-exports.d.ts
+@@ -1,2 +1,7 @@
+-// WARN: Internal re-export, you should avoid relying on this, if possible. Expect breaking changes between SDK releases
+-export * from 'expo-modules-autolinking/exports';
++export const makeCachedDependenciesLinker: any;
++export const scanExpoModuleResolutionsForPlatform: any;
++export const scanDependencyResolutionsForPlatform: any;
++export const mergeLinkingOptionsAsync: any;
++export const queryAutolinkingModulesFromProjectAsync: any;
++export const findProjectRootSync: any;
++export const resolveSearchPathsAsync: any;
+diff --git a/internal/unstable-autolinking-exports.js b/internal/unstable-autolinking-exports.js
+index de94a56c0647104a7d5b5725a03355540ffb874f..9a1aa98eddb27d9cb6ebe0f27cf4a29307e8a90e 100644
+--- a/internal/unstable-autolinking-exports.js
++++ b/internal/unstable-autolinking-exports.js
+@@ -1,2 +1,9 @@
+-// WARN: Internal re-export, you should avoid relying on this, if possible. Expect breaking changes between SDK releases
+-module.exports = require('expo-modules-autolinking/exports');
++module.exports = {
++  makeCachedDependenciesLinker: () => ({ scan: () => ({}) }),
++  scanExpoModuleResolutionsForPlatform: () => Promise.resolve([]),
++  scanDependencyResolutionsForPlatform: () => Promise.resolve([]),
++  mergeLinkingOptionsAsync: () => ({}),
++  queryAutolinkingModulesFromProjectAsync: () => Promise.resolve([]),
++  findProjectRootSync: () => process.cwd(),
++  resolveSearchPathsAsync: () => Promise.resolve([]),
++};
