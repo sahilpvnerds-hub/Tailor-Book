@@ -1,33 +1,93 @@
 #!/usr/bin/env node
-// postinstall patch for expo@54.x — npm publishes expo@54.x with a broken
-// package.json: the "exports" field is empty/absent, which blocks Node from
-// resolving ANY subpath like "expo/internal/unstable-autolinking-exports",
-// "expo/bin/cli.js", "expo/metro-config.js", etc.
-//
-// Instead of adding individual exports (whack-a-mole), we remove the empty
-// exports field entirely so Node falls back to standard file-system resolution.
-// This allows ALL subpaths to resolve as long as the file exists on disk.
+// postinstall patch for expo@54.x
+// Patches BOTH the local node_modules AND the pnpm virtual store at workspace root
 const fs = require('fs');
 const path = require('path');
 
-const expoPkg = path.resolve(__dirname, '..', 'node_modules', 'expo', 'package.json');
-if (!fs.existsSync(expoPkg)) {
-  console.log('[patch-expo] expo not found, skipping');
-  process.exit(0);
+const scriptDir = __dirname;
+let rootDir = path.resolve(scriptDir, '..');
+
+function findWorkspaceRoot() {
+  let dir = rootDir;
+  const maxDepth = 10;
+  let depth = 0;
+  while (dir && depth < maxDepth) {
+    if (fs.existsSync(path.join(dir, 'pnpm-workspace.yaml'))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+    depth++;
+  }
+  return rootDir;
 }
 
-const pkg = JSON.parse(fs.readFileSync(expoPkg, 'utf8'));
+const workspaceRoot = findWorkspaceRoot();
+console.log(`[patch-expo] workspace root: ${workspaceRoot}`);
 
-// Remove the broken empty exports field so Node resolves subpaths via filesystem
-if (pkg.exports && Object.keys(pkg.exports).length === 0) {
-  delete pkg.exports;
-  fs.writeFileSync(expoPkg, JSON.stringify(pkg, null, 2) + '\n');
-  console.log('[patch-expo] removed empty exports field — subpath resolution restored');
-} else if (pkg.exports && Object.keys(pkg.exports).length > 0) {
-  // If already patched (has our entries), still remove — file-system is more robust
-  delete pkg.exports;
-  fs.writeFileSync(expoPkg, JSON.stringify(pkg, null, 2) + '\n');
-  console.log('[patch-expo] removed exports field (was previously patched)');
-} else {
-  console.log('[patch-expo] no exports field, already OK');
+function patchExpoPkg(expoDir) {
+  const pkgPath = path.join(expoDir, 'package.json');
+  if (!fs.existsSync(pkgPath)) return false;
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  if (pkg.exports && Object.keys(pkg.exports).length === 0) {
+    delete pkg.exports;
+    fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+    console.log(`[patch-expo] removed empty exports: ${expoDir}`);
+    return true;
+  }
+  return false;
 }
+
+function findExpoDirs(root) {
+  const dirs = [];
+  // Root node_modules/expo
+  const rootExpo = path.join(root, 'node_modules', 'expo');
+  if (fs.existsSync(rootExpo)) dirs.push(rootExpo);
+  // pnpm virtual store
+  const pnpmDir = path.join(root, 'node_modules', '.pnpm');
+  if (fs.existsSync(pnpmDir)) {
+    for (const entry of fs.readdirSync(pnpmDir)) {
+      if (entry.startsWith('expo@')) {
+        const expoDir = path.join(pnpmDir, entry, 'node_modules', 'expo');
+        if (fs.existsSync(expoDir) && fs.existsSync(path.join(expoDir, 'package.json'))) {
+          dirs.push(expoDir);
+        }
+      }
+    }
+  }
+  return dirs;
+}
+
+function patchInternalStubs(expoDir) {
+  const internalDir = path.join(expoDir, 'internal');
+  if (!fs.existsSync(internalDir)) return;
+
+  const stubContent = `module.exports = {
+  expoConfigPlugins: [],
+  autolinkedPackages: [],
+  withOpusDelegate: () => () => {},
+};
+`;
+
+  const stubDts = `export const expoConfigPlugins: any[];
+export const autolinkedPackages: any[];
+export const withOpusDelegate: any;
+`;
+
+  const stubPath = path.join(internalDir, 'unstable-autolinking-exports.js');
+  if (fs.existsSync(stubPath)) {
+    const current = fs.readFileSync(stubPath, 'utf8');
+    if (current.includes("require('expo-modules-autolinking/exports')")) {
+      fs.writeFileSync(stubPath, stubContent);
+      fs.writeFileSync(path.join(internalDir, 'unstable-autolinking-exports.d.ts'), stubDts);
+      console.log(`[patch-expo] patched stub: ${expoDir}/internal/unstable-autolinking-exports.js`);
+    }
+  }
+}
+
+const expoDirs = findExpoDirs(workspaceRoot);
+console.log(`[patch-expo] found ${expoDirs.length} expo dirs`);
+for (const dir of expoDirs) {
+  patchExpoPkg(dir);
+  patchInternalStubs(dir);
+}
+console.log('[patch-expo] done');
