@@ -7,11 +7,6 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "hooks": {
-        "prebuild": {
-          "script": "node scripts/postinstall-patch-expo.js"
-        }
-      },
       "android": {
         "buildType": "apk"
       },
@@ -22,11 +17,6 @@
     },
     "preview": {
       "distribution": "internal",
-      "hooks": {
-        "prebuild": {
-          "script": "node scripts/postinstall-patch-expo.js"
-        }
-      },
       "android": {
         "buildType": "apk"
       },
@@ -36,11 +26,6 @@
       }
     },
     "production": {
-      "hooks": {
-        "prebuild": {
-          "script": "node scripts/postinstall-patch-expo.js"
-        }
-      },
       "android": {
         "buildType": "apk"
       },
