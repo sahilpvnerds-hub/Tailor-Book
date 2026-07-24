@@ -33,7 +33,6 @@ function findExpoDirs() {
   const rootNM = path.join(PROJECT_ROOT, 'node_modules');
   if (!fs.existsSync(rootNM)) return dirs;
 
-  // Walk ALL of node_modules — don't skip anything
   const walk = (dir, maxDepth = 8, depth = 0) => {
     if (depth > maxDepth) return;
     let entries;
@@ -76,21 +75,10 @@ function patchStubs(expoDir) {
   const stubJs = path.join(internalDir, 'unstable-autolinking-exports.js');
   const stubDts = path.join(internalDir, 'unstable-autolinking-exports.d.ts');
 
-  let needPatch = false;
-  if (fs.existsSync(stubJs)) {
-    const content = fs.readFileSync(stubJs, 'utf8');
-    if (content.includes('require(') || content.includes('module.exports = {}')) {
-      needPatch = true;
-    }
-  } else {
-    needPatch = true;
-  }
-
-  if (needPatch) {
-    fs.writeFileSync(stubJs, STUB);
-    fs.writeFileSync(stubDts, STUB_DTS);
-    console.log(`  [patch-expo] created stub: ${path.relative(PROJECT_ROOT, stubJs)}`);
-  }
+  // Always write the stub - don't check content, just overwrite
+  fs.writeFileSync(stubJs, STUB);
+  fs.writeFileSync(stubDts, STUB_DTS);
+  console.log(`  [patch-expo] patched stub: ${path.relative(PROJECT_ROOT, stubJs)}`);
 }
 
 const dirs = findExpoDirs();
