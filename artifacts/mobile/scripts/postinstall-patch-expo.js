@@ -1,28 +1,28 @@
 #!/usr/bin/env node
 // postinstall patch for expo@54.x
 // expo@54.0.36 is broken: empty "exports" field + missing internal modules.
-// Searches BOTH the package dir (EAS) and the project root (local dev).
+// Uses process.cwd() which is the package dir where pnpm install runs.
 const fs = require('fs');
 const path = require('path');
 
 const CWD = process.cwd();
 
-// Find project root (where pnpm-workspace.yaml lives)
+// Find project root by walking up from script location
 function findProjectRoot() {
-  let dir = __dirname;
+  let dir = path.resolve(__dirname);
   for (let i = 0; i < 10; i++) {
     if (fs.existsSync(path.join(dir, 'pnpm-workspace.yaml'))) return dir;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
-  return path.resolve(__dirname, '..', '..', '..');
+  return path.resolve(__dirname, '..', '..');
 }
 
 const PROJECT_ROOT = findProjectRoot();
 
-// On EAS: pnpm installs in CWD/node_modules/
-// On local dev: pnpm installs in PROJECT_ROOT/node_modules/
+// On EAS: pnpm installs in CWD/node_modules/ (the package dir)
+// On local dev: pnpm installs in PROJECT_ROOT/node_modules/ (workspace root)
 const SEARCH_ROOTS = [CWD, PROJECT_ROOT].filter((v, i, a) => a.indexOf(v) === i);
 
 const STUB = `module.exports = {
