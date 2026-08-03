@@ -10,7 +10,7 @@ module.exports = function (api) {
       ["@babel/plugin-transform-react-jsx", { runtime: "automatic" }],
 
       // Replace process.env references for expo-router (safe, no-op if not present)
-      ["./babel-plugin-transform-env.js"],
+      // ["./babel-plugin-transform-env.js"],
       "react-native-worklets/plugin",
     ],
     overrides: [
