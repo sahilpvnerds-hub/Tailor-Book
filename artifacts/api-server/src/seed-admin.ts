@@ -8,7 +8,7 @@
  * Safe to run multiple times (upserts on email conflict).
  */
 
-import "dotenv/config";
+import "./load-env";
 import bcrypt from "bcryptjs";
 import { db } from "@workspace/db";
 import { users } from "@workspace/db/schema";

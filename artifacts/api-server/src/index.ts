@@ -1,5 +1,5 @@
 // Load .env FIRST, before any other imports that read process.env.
-import "dotenv/config";
+import "./load-env";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import os from "node:os";

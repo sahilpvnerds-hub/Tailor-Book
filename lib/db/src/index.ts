@@ -1,26 +1,42 @@
 // Load .env from the api-server directory if available, otherwise from process.env.
-// We import dotenv lazily here so the library can also be used in environments
-// where the caller has already loaded .env (e.g. via tsx, docker, etc.).
 import path from "node:path";
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
 
 try {
-  // Look for .env starting from cwd, walking up at most 4 levels.
+  let currentDir = "";
+  try {
+    currentDir = path.dirname(fileURLToPath(import.meta.url));
+  } catch {}
+
+  // Look for .env starting from cwd, walking up, or relative to the executing file.
   const candidates = [
-    process.cwd() + "/.env",
-    process.cwd() + "/../.env",
-    process.cwd() + "/../../.env",
-    process.cwd() + "/../../../.env",
+    path.resolve(process.cwd(), ".env"),
+    path.resolve(process.cwd(), "..", ".env"),
+    path.resolve(process.cwd(), "..", "..", ".env"),
+    path.resolve(process.cwd(), "..", "..", "..", ".env"),
+    path.resolve(process.cwd(), "artifacts/api-server/.env"),
   ];
+
+  if (currentDir) {
+    candidates.push(
+      path.resolve(currentDir, ".env"),
+      path.resolve(currentDir, "..", ".env"),
+      path.resolve(currentDir, "..", "..", ".env"),
+      path.resolve(currentDir, "..", "..", "..", ".env"),
+      path.resolve(currentDir, "..", "..", "..", "..", ".env"),
+    );
+  }
+
   for (const c of candidates) {
     if (fs.existsSync(c)) {
-      const dotenv = await import("dotenv");
       dotenv.config({ path: c });
       break;
     }
   }
 } catch {
-  // dotenv not available — caller will pass env via process.env
+  // dotenv not available or load failed — caller will pass env via process.env
 }
 
 import { drizzle } from "drizzle-orm/mysql2";
