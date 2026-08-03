@@ -181,38 +181,56 @@ export async function login(emailOrMobile: string, password: string): Promise<{ 
   console.log("[API Debug] Login attempt for:", emailOrMobile);
 
   try {
-    const response = await debugFetch<any>(url, {
+    const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ emailOrMobile, password }),
     });
 
-    if (response.error) {
+    const text = await response.text();
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      console.error("[API Debug] Login failed to parse JSON:", text);
       return {
         ok: false,
-        error: response.error ?? "Login failed",
-        status: 403,
+        error: "Failed to parse login response",
+        status: response.status,
+      };
+    }
+
+    if (!response.ok) {
+      console.error("[API Debug] Login failed:", { status: response.status, data });
+      return {
+        ok: false,
+        error: data?.error ?? "Login failed",
+        status: response.status,
       };
     }
 
     console.log("[API Debug] Login successful:", {
-      hasToken: !!response.token,
+      hasToken: !!data.token,
       user: {
-        id: response.user.id,
-        name: response.user.name,
-        email: response.user.email,
-        role: response.user.role
+        id: data.user?.id,
+        name: data.user?.name,
+        email: data.user?.email,
+        role: data.user?.role
       }
     });
 
     return {
       ok: true,
-      token: response.token,
-      user: response.user,
+      token: data.token,
+      user: data.user,
     };
   } catch (error) {
     console.error("[API Debug] Login error:", error);
-    throw error;
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Network error",
+      status: 500,
+    };
   }
 }
 
@@ -220,16 +238,30 @@ export async function register(formData: RegisterData): Promise<{ ok: true; id: 
   const url = `${API_BASE_URL}/auth/register`;
   console.log("[API Debug] Registration attempt");
 
-  const response = await debugFetch<any>(url, {
+  const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(formData),
   });
 
-  if (response.error) {
-    throw new Error(response.error ?? "Registration failed");
+  const text = await response.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    throw new Error("Failed to parse registration response");
   }
-  return response;
+
+  if (!response.ok) {
+    console.error("[API Debug] Registration failed:", { status: response.status, data });
+    throw new Error(data?.error ?? "Registration failed");
+  }
+
+  return {
+    ok: true,
+    id: data.id,
+    message: data.message,
+  };
 }
 
 // Add more API functions with debug logging as needed

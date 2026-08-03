@@ -299,8 +299,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         c = mergeById(c, apiC);
         fm = mergeById(fm, apiFm);
         m = (apiM as any[]).map(normalizeMeasurement);
-        inv = mergeById(inv, (apiInv as any[]).map(normalizeInvoice));
-        ord = mergeById(ord, (apiOrd as any[]).map(normalizeOrder));
+        inv = mergeInvoices(inv, (apiInv as any[]).map(normalizeInvoice));
+        ord = mergeOrders(ord, (apiOrd as any[]).map(normalizeOrder));
 
         // Only use API product types if the server returned some.
         // Otherwise keep the locally-seeded defaults (from first-login
@@ -354,6 +354,36 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     // Add any local-only records (created offline, not yet synced to server)
     for (const localItem of local) {
       if (!apiMap.has(localItem.id)) {
+        result.push(localItem);
+      }
+    }
+
+    return result;
+  }
+
+  // Merge orders by ID, and discard local duplicates that match server orderNumber
+  function mergeOrders(local: Order[], api: Order[]): Order[] {
+    const apiMap = new Map(api.map(item => [item.id, item]));
+    const apiNumberSet = new Set(api.map(item => item.orderNumber));
+    const result = [...api];
+
+    for (const localItem of local) {
+      if (!apiMap.has(localItem.id) && !apiNumberSet.has(localItem.orderNumber)) {
+        result.push(localItem);
+      }
+    }
+
+    return result;
+  }
+
+  // Merge invoices by ID, and discard local duplicates that match server invoiceNumber
+  function mergeInvoices(local: Invoice[], api: Invoice[]): Invoice[] {
+    const apiMap = new Map(api.map(item => [item.id, item]));
+    const apiNumberSet = new Set(api.map(item => item.invoiceNumber));
+    const result = [...api];
+
+    for (const localItem of local) {
+      if (!apiMap.has(localItem.id) && !apiNumberSet.has(localItem.invoiceNumber)) {
         result.push(localItem);
       }
     }
@@ -1385,13 +1415,13 @@ async function updateItemDeliveryStatus(itemId: string, status: ItemDeliveryStat
   if (token) {
     try {
       await api.orders.updateItemDelivery(token, itemId, status);
+      // Sync the updated order status
+      const order = all.find(o => (o.items ?? []).some((it: any) => it.id === itemId));
+      if (order) {
+        await apiUpdateOrderStatus(token, order.id, order.status);
+      }
     } catch (err) {
       console.warn("Failed to sync item delivery status:", err);
-    }
-    // Sync the updated order status
-    const order = all.find(o => (o.items ?? []).some((it: any) => it.id === itemId));
-    if (order) {
-      await apiUpdateOrderStatus(token, order.id, order.status);
     }
   }
 }

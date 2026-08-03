@@ -163,19 +163,59 @@ export default function OrderDetailScreen() {
           it.featureLabel ? ` (${it.featureLabel})` : ""
         } — ${t("share.qty", "Qty")}: ${it.quantity} — ${t("share.for", "For")}: ${it.personName ?? o.customerName}`,
       );
-      // Include measurement values if available
-      if (
-        it.measurementValues &&
-        Object.keys(it.measurementValues).length > 0
-      ) {
-        const measStr = Object.entries(it.measurementValues)
+      
+      const sourceMeas = it.measurementId
+        ? measurements.find((m) => m.id === it.measurementId)
+        : null;
+
+      const measEntries = (() => {
+        if (it.measurementValues && Object.keys(it.measurementValues).length > 0) {
+          return Object.entries(it.measurementValues);
+        }
+        if (sourceMeas) {
+          const entries: [string, string][] = [];
+          const keys = [
+            "chest",
+            "shoulder",
+            "neck",
+            "sleeve",
+            "waist",
+            "length",
+            "hip",
+            "thigh",
+            "pantLength",
+            "bottomWidth",
+            "armhole",
+            "wrist",
+          ];
+          for (const key of keys) {
+            const val = (sourceMeas as any)[key];
+            if (val && Number(val) > 0) {
+              entries.push([key, `${val}"`]);
+            }
+          }
+          if (sourceMeas.customMeasurements && Array.isArray(sourceMeas.customMeasurements)) {
+            for (const cm of sourceMeas.customMeasurements) {
+              if (cm.value && Number(cm.value) > 0) {
+                entries.push([cm.label, `${cm.value}"`]);
+              }
+            }
+          }
+          return entries;
+        }
+        return [];
+      })();
+
+      if (measEntries.length > 0) {
+        const measStr = measEntries
           .filter(([, v]) => v)
-          .map(([k, v]) => `${k}: ${v}`)
+          .map(([k, v]) => `${titleCase(k)}: ${v}`)
           .join(", ");
-        if (measStr)
+        if (measStr) {
           itemLines.push(
             `   ${t("share.measurements", "Measurements")}: ${measStr}`,
           );
+        }
       }
     });
     const lines = [
@@ -1054,13 +1094,46 @@ export default function OrderDetailScreen() {
                     const inv = it.invoiceId
                       ? invoices.find((i) => i.id === it.invoiceId)
                       : null;
-                    const measValues = it.measurementValues ?? null;
-                    const measEntries = measValues
-                      ? Object.entries(measValues)
-                      : [];
                     const sourceMeas = it.measurementId
                       ? measurements.find((m) => m.id === it.measurementId)
                       : null;
+                    const measEntries = (() => {
+                      if (it.measurementValues && Object.keys(it.measurementValues).length > 0) {
+                        return Object.entries(it.measurementValues);
+                      }
+                      if (sourceMeas) {
+                        const entries: [string, string][] = [];
+                        const keys = [
+                          "chest",
+                          "shoulder",
+                          "neck",
+                          "sleeve",
+                          "waist",
+                          "length",
+                          "hip",
+                          "thigh",
+                          "pantLength",
+                          "bottomWidth",
+                          "armhole",
+                          "wrist",
+                        ];
+                        for (const key of keys) {
+                          const val = (sourceMeas as any)[key];
+                          if (val && Number(val) > 0) {
+                            entries.push([key, `${val}"`]);
+                          }
+                        }
+                        if (sourceMeas.customMeasurements && Array.isArray(sourceMeas.customMeasurements)) {
+                          for (const cm of sourceMeas.customMeasurements) {
+                            if (cm.value && Number(cm.value) > 0) {
+                              entries.push([cm.label, `${cm.value}"`]);
+                            }
+                          }
+                        }
+                        return entries;
+                      }
+                      return [];
+                    })();
                     let itemPhotos: string[] = [];
                     if (Array.isArray(sourceMeas?.photos))
                       itemPhotos = sourceMeas.photos as string[];

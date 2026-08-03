@@ -99,7 +99,7 @@ export async function pickMeasurementPhotos(existingCount: number): Promise<Pick
                 return;
               }
               const result = await ImagePicker.launchCameraAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                mediaTypes: ["images"],
                 quality: JPEG_QUALITY,
                 base64: true,
                 exif: false,
@@ -134,7 +134,7 @@ export async function pickMeasurementPhotos(existingCount: number): Promise<Pick
                 return;
               }
               const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                mediaTypes: ["images"],
                 allowsMultipleSelection: true,
                 selectionLimit: remaining,
                 quality: JPEG_QUALITY,
