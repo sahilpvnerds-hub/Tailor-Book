@@ -49,11 +49,14 @@ export default function MeasurementsScreen() {
       const personName = member?.name ?? m.familyMemberName ?? customer?.name ?? m.customerName;
       if (relationFilter !== "all" && relation !== relationFilter) continue;
       if (productFilter !== "all" && m.productType !== productFilter) continue;
+      const mCustName = m.customerName || "";
+      const mPersonName = personName || "";
+      const mProdType = m.productType || "";
       if (
         q &&
-        !m.customerName.toLowerCase().includes(q) &&
-        !personName.toLowerCase().includes(q) &&
-        !m.productType.toLowerCase().includes(q)
+        !mCustName.toLowerCase().includes(q) &&
+        !mPersonName.toLowerCase().includes(q) &&
+        !mProdType.toLowerCase().includes(q)
       ) continue;
 
       const key = `${m.customerId}:${m.familyMemberId ?? "self"}`;

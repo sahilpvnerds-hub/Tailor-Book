@@ -33,10 +33,14 @@ export default function OrdersScreen() {
     () =>
       orders
         .filter(
-          (o) =>
-            (filter === "all" || o.status === filter) &&
-            (o.customerName.toLowerCase().includes(search.toLowerCase()) ||
-              o.orderNumber.toLowerCase().includes(search.toLowerCase()))
+          (o) => {
+            const customerName = o.customerName || "";
+            const orderNumber = o.orderNumber || "";
+            const s = search.toLowerCase();
+            return (filter === "all" || o.status === filter) &&
+                   (customerName.toLowerCase().includes(s) ||
+                    orderNumber.toLowerCase().includes(s));
+          }
         )
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     [orders, search, filter]

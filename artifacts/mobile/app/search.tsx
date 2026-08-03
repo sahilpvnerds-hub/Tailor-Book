@@ -18,9 +18,21 @@ export default function SearchScreen() {
     if (!query.trim()) return { customers: [], measurements: [], invoices: [] };
     const q = query.toLowerCase();
     return {
-      customers: customers.filter((c) => c.name.toLowerCase().includes(q) || c.mobile.includes(q)).slice(0, 5),
-      measurements: measurements.filter((m) => m.customerName.toLowerCase().includes(q) || m.productType.toLowerCase().includes(q)).slice(0, 5),
-      invoices: invoices.filter((i) => i.customerName.toLowerCase().includes(q) || i.invoiceNumber.toLowerCase().includes(q)).slice(0, 5),
+      customers: customers.filter((cu) => {
+        const name = cu.name || "";
+        const mobile = cu.mobile || "";
+        return name.toLowerCase().includes(q) || mobile.includes(q);
+      }).slice(0, 5),
+      measurements: measurements.filter((m) => {
+        const custName = m.customerName || "";
+        const prodType = m.productType || "";
+        return custName.toLowerCase().includes(q) || prodType.toLowerCase().includes(q);
+      }).slice(0, 5),
+      invoices: invoices.filter((inv) => {
+        const custName = inv.customerName || "";
+        const invNum = inv.invoiceNumber || "";
+        return custName.toLowerCase().includes(q) || invNum.toLowerCase().includes(q);
+      }).slice(0, 5),
     };
   }, [query, customers, measurements, invoices]);
 

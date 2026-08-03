@@ -147,15 +147,22 @@ export default function NewMeasurementScreen() {
     return measurements
       .filter((m) => {
         const samePerson = personId === SELF_PERSON_ID ? !m.familyMemberId : m.familyMemberId === personId;
+        const mProdType = m.productType || "";
+        const searchProductName = productName || "";
         const sameProduct =
           (productId && m.productTypeId === productId) ||
-          m.productType.toLowerCase() === productName.toLowerCase();
+          (mProdType && searchProductName && mProdType.toLowerCase() === searchProductName.toLowerCase());
         return m.customerId === selectedCustomerId && samePerson && sameProduct;
       })
-      .sort((a, b) =>
-        latestMeasurementKey(b).localeCompare(latestMeasurementKey(a)) ||
-        b.createdAt.localeCompare(a.createdAt)
-      )[0];
+      .sort((a, b) => {
+        const keyA = latestMeasurementKey(a) || "";
+        const keyB = latestMeasurementKey(b) || "";
+        const dateCompare = keyB.localeCompare(keyA);
+        if (dateCompare !== 0) return dateCompare;
+        const createdA = a.createdAt || "";
+        const createdB = b.createdAt || "";
+        return createdB.localeCompare(createdA);
+      })[0];
   }
 
   function customFieldsForProduct(productId: string, productName: string) {
@@ -187,9 +194,11 @@ export default function NewMeasurementScreen() {
     }
 
     for (const cm of latest.customMeasurements ?? []) {
-      const match = customFieldsForProduct(product.id, product.name)
-        .find((cf) => cf.fieldName.toLowerCase() === cm.label.toLowerCase());
-      if (match) draft.customValues[match.id] = String(cm.value);
+      if (cm && cm.label) {
+        const match = customFieldsForProduct(product.id, product.name)
+          .find((cf) => cf && cf.fieldName && cf.fieldName.toLowerCase() === cm.label.toLowerCase());
+        if (match) draft.customValues[match.id] = String(cm.value);
+      }
     }
 
     if (latest.featureLabel) {

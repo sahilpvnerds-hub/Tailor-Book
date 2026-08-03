@@ -39,7 +39,7 @@ function titleCase(value: string) {
 }
 
 function latestMeasurementKey(measurement: Measurement) {
-  return measurement.measurementDate ?? measurement.date ?? measurement.createdAt;
+  return measurement.measurementDate ?? measurement.date ?? measurement.createdAt ?? "";
 }
 
 function featureMatchesGender(featureGender: "male" | "female" | "both" | undefined, assigneeGender?: Gender) {
@@ -66,7 +66,9 @@ function customFieldMatchesScope(
 
   if (field.productTypeId && field.productTypeId !== productTypeId) return false;
   if (!field.productTypeId && field.productType) {
-    return field.productType.toLowerCase() === productType.toLowerCase();
+    const fProdType = field.productType || "";
+    const pType = productType || "";
+    return fProdType.toLowerCase() === pType.toLowerCase();
   }
 
   return true;
@@ -242,15 +244,22 @@ export default function EditOrderScreen() {
     return measurements
       .filter((m) => {
         const samePerson = familyMemberId === null ? !m.familyMemberId : m.familyMemberId === familyMemberId;
+        const mProdType = m.productType || "";
+        const searchProdTypeName = productTypeName || "";
         const sameProduct =
           (productTypeId && m.productTypeId === productTypeId) ||
-          m.productType.toLowerCase() === productTypeName.toLowerCase();
+          (mProdType && searchProdTypeName && mProdType.toLowerCase() === searchProdTypeName.toLowerCase());
         return m.customerId === customerId && samePerson && sameProduct;
       })
-      .sort((a, b) =>
-        latestMeasurementKey(b).localeCompare(latestMeasurementKey(a)) ||
-        b.createdAt.localeCompare(a.createdAt)
-      )[0] || null;
+      .sort((a, b) => {
+        const keyA = latestMeasurementKey(a) || "";
+        const keyB = latestMeasurementKey(b) || "";
+        const dateCompare = keyB.localeCompare(keyA);
+        if (dateCompare !== 0) return dateCompare;
+        const createdA = a.createdAt || "";
+        const createdB = b.createdAt || "";
+        return createdB.localeCompare(createdA);
+      })[0] || null;
   }
 
   function getCustomFieldsForScope(
@@ -290,8 +299,10 @@ export default function EditOrderScreen() {
     const cVals: Record<string, string> = {};
     const scopedFields = getCustomFieldsForScope(customerId, familyMemberId, productTypeId, productTypeName);
     latest.customMeasurements?.forEach((cm) => {
-      const match = scopedFields.find((cf) => cf.fieldName.toLowerCase() === cm.label.toLowerCase());
-      if (match) cVals[match.id] = String(cm.value);
+      if (cm && cm.label) {
+        const match = scopedFields.find((cf) => cf && cf.fieldName && cf.fieldName.toLowerCase() === cm.label.toLowerCase());
+        if (match) cVals[match.id] = String(cm.value);
+      }
     });
 
     return {
@@ -305,7 +316,11 @@ export default function EditOrderScreen() {
 
   function getProductForItem(item: LocalItem): ProductType | undefined {
     return productTypes.find((p) => p.id === item.productTypeId)
-      ?? productTypes.find((p) => p.name.toLowerCase() === item.productType.toLowerCase());
+      ?? productTypes.find((p) => {
+        const pName = p.name || "";
+        const itemProdType = item.productType || "";
+        return pName.toLowerCase() === itemProdType.toLowerCase();
+      });
   }
 
   function getAssigneeGender(familyMemberId: string | null): Gender | undefined {
@@ -318,7 +333,7 @@ export default function EditOrderScreen() {
     const assigneeGender = getAssigneeGender(familyMemberId);
     const seen = new Set<string>();
     return (product?.features ?? []).filter((feature) => {
-      const key = feature.label.trim().toLowerCase();
+      const key = (feature.label || "").trim().toLowerCase();
       if (!key || seen.has(key)) return false;
       seen.add(key);
       return featureMatchesGender(feature.gender, assigneeGender);
@@ -930,17 +945,24 @@ export default function EditOrderScreen() {
 
   const balanceDue = useMemo(() => finalAmount - advancePaid, [finalAmount, advancePaid]);
 
-  // --- Customer Filtering ---
   const filteredCustomers = customers.filter(
-    (cu) =>
-      cu.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
-      cu.mobile.includes(customerSearch)
+    (cu) => {
+      const cuName = cu.name || "";
+      const searchVal = customerSearch || "";
+      const cuMobile = cu.mobile || "";
+      return cuName.toLowerCase().includes(searchVal.toLowerCase()) ||
+             cuMobile.includes(searchVal);
+    }
   );
 
   const modalFiltered = customers.filter(
-    (cu) =>
-      cu.name.toLowerCase().includes(modalSearch.toLowerCase()) ||
-      cu.mobile.includes(modalSearch)
+    (cu) => {
+      const cuName = cu.name || "";
+      const searchVal = modalSearch || "";
+      const cuMobile = cu.mobile || "";
+      return cuName.toLowerCase().includes(searchVal.toLowerCase()) ||
+             cuMobile.includes(searchVal);
+    }
   );
 
   const useModalPicker = customers.length > CUSTOMER_INLINE_LIMIT;
