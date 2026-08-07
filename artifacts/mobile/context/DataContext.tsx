@@ -252,8 +252,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     }
     next.date = next.date ?? next.measurementDate ?? next.createdAt;
-    next.customMeasurements = next.customMeasurements ?? [];
-    next.photos = next.photos ?? [];
+    next.customMeasurements = Array.isArray(next.customMeasurements) ? next.customMeasurements : [];
+    next.photos = Array.isArray(next.photos) ? next.photos : [];
     return next;
   }
 
@@ -910,7 +910,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const raw = (m as any)[key];
       if (typeof raw === "number" && raw > 0) out[key] = `${raw}"`;
     }
-    for (const cm of m.customMeasurements ?? []) {
+    const customList = Array.isArray(m.customMeasurements) ? m.customMeasurements : [];
+    for (const cm of customList) {
       if (cm.value > 0) out[cm.label] = `${cm.value}"`;
     }
     return out;

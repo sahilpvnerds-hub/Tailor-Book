@@ -101,7 +101,8 @@ export default function MeasurementDetailScreen() {
     }
     setEditFieldValues(fieldValues);
     const customValues: Record<string, string> = {};
-    for (const cm of measurement!.customMeasurements ?? []) {
+    const customList = Array.isArray(measurement!.customMeasurements) ? measurement!.customMeasurements : [];
+    for (const cm of customList) {
       customValues[cm.label] = String(cm.value);
     }
     setEditCustomValues(customValues);

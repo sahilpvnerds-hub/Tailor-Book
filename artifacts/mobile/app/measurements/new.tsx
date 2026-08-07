@@ -193,7 +193,8 @@ export default function NewMeasurementScreen() {
       }
     }
 
-    for (const cm of latest.customMeasurements ?? []) {
+    const customList = Array.isArray(latest.customMeasurements) ? latest.customMeasurements : [];
+    for (const cm of customList) {
       if (cm && cm.label) {
         const match = customFieldsForProduct(product.id, product.name)
           .find((cf) => cf && cf.fieldName && cf.fieldName.toLowerCase() === cm.label.toLowerCase());

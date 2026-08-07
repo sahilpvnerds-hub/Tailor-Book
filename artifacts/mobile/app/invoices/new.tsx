@@ -68,7 +68,8 @@ export default function NewInvoiceScreen() {
         const v = (sourceMeasurement as any)[k];
         if (typeof v === "number" && v > 0) m[k] = `${v}"`;
       });
-      sourceMeasurement.customMeasurements?.forEach((cm) => {
+      const cmList = Array.isArray(sourceMeasurement.customMeasurements) ? sourceMeasurement.customMeasurements : [];
+      cmList.forEach((cm) => {
         if (cm.value > 0) m[cm.label] = `${cm.value}"`;
       });
       return [{

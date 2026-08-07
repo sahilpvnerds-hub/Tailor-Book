@@ -233,7 +233,8 @@ export default function NewOrderScreen() {
 
     const cVals: Record<string, string> = {};
     const scopedFields = getCustomFieldsForScope(customerId, familyMemberId, productTypeId, productTypeName);
-    latest.customMeasurements?.forEach((cm) => {
+    const customList = Array.isArray(latest.customMeasurements) ? latest.customMeasurements : [];
+    customList.forEach((cm) => {
       if (cm && cm.label) {
         const match = scopedFields.find((cf) => cf && cf.fieldName && cf.fieldName.toLowerCase() === cm.label.toLowerCase());
         if (match) cVals[match.id] = String(cm.value);
