@@ -1045,7 +1045,7 @@ export default function NewOrderScreen() {
         </Card>
 
         {/* Dynamic Items Section */}
-        {selectedCustomerId && (
+        {!!selectedCustomerId && (
           <View style={{ gap: 16 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
               <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: c.foreground }}>
@@ -1496,7 +1496,7 @@ export default function NewOrderScreen() {
         )}
 
         {/* Order Meta Info */}
-        {selectedCustomerId && (
+        {!!selectedCustomerId && (
           <Card style={{ padding: 16, gap: 14 }}>
 
             {/* Product Photos — order-level reference photos */}
@@ -1717,7 +1717,7 @@ export default function NewOrderScreen() {
         )}
 
         {/* Total & Action */}
-        {selectedCustomerId && (
+        {!!selectedCustomerId && (
           <View style={{ gap: 12, marginTop: 8 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 4 }}>
               <Text style={{ fontSize: 16, fontFamily: "Inter_600SemiBold", color: c.mutedForeground }}>
