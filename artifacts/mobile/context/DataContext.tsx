@@ -1289,9 +1289,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       };
     }
 
-    await saveAllOrders([...all, ord]);
-    setOrders((prev) => [ord!, ...prev]);
-    return ord;
+    const normalizedOrd = normalizeOrder(ord);
+    await saveAllOrders([...all, normalizedOrd]);
+    setOrders((prev) => [normalizedOrd, ...prev]);
+    return normalizedOrd;
   }
 
   /**
@@ -1345,9 +1346,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       updatedAt: new Date().toISOString(),
     };
 
-    const updatedOrders = allOrders.map((o) => o.id === orderId ? updatedOrder : o);
+    const normalizedUpdate = normalizeOrder(updatedOrder);
+    const updatedOrders = allOrders.map((o) => o.id === orderId ? normalizedUpdate : o);
     await saveAllOrders(updatedOrders);
-    setOrders(prev => prev.map((o) => o.id === orderId ? updatedOrder : o));
+    setOrders(prev => prev.map((o) => o.id === orderId ? normalizedUpdate : o));
 
     // Sync to the server
     const token = await getToken();
@@ -1366,13 +1368,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           photos: data.photos ?? [],
         });
         // Update local state with server response
-        setOrders(prev => prev.map((o) => o.id === orderId ? serverOrder : o));
+        const normalizedServer = normalizeOrder(serverOrder);
+        setOrders(prev => prev.map((o) => o.id === orderId ? normalizedServer : o));
       } catch (err) {
         console.warn("updateOrder API sync failed:", err);
       }
     }
 
-    return updatedOrder;
+    return normalizedUpdate;
   }
 
   async function updateOrderStatus(id: string, status?: Order["status"]) {

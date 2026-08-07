@@ -190,9 +190,17 @@ export default function EditOrderScreen() {
         // Convert order items to local format
         const items = orderData.items || [];
         const localItemsData: LocalItem[] = items.map(item => {
+          let mv = item.measurementValues;
+          if (typeof mv === "string") {
+            try {
+              mv = JSON.parse(mv);
+            } catch {
+              mv = null;
+            }
+          }
           const measVals: Record<string, string> = {};
-          if (item.measurementValues) {
-            Object.entries(item.measurementValues).forEach(([k, v]) => {
+          if (mv) {
+            Object.entries(mv).forEach(([k, v]) => {
               measVals[k] = String(v).replace(/"/g, "");
             });
           }
