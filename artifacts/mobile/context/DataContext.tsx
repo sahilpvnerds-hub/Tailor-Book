@@ -190,14 +190,25 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       advanceAmount: Number(o.advanceAmount ?? 0),
       balanceDue: Number(o.balanceDue ?? 0),
       photos: o.photos ?? [],
-      items: (o.items ?? []).map((it: any) => ({
-        ...it,
-        price: Number(it.price ?? 0),
-        // Normalize snake_case DB column to camelCase used by the client.
-        // Without this, after a server refresh it.deliveryStatus is undefined
-        // and the "Mark all delivered" banner incorrectly reappears.
-        deliveryStatus: (it.deliveryStatus ?? it.delivery_status ?? "pending") as "pending" | "delivered",
-      })),
+      items: (o.items ?? []).map((it: any) => {
+        let mv = it.measurementValues;
+        if (typeof mv === "string") {
+          try {
+            mv = JSON.parse(mv);
+          } catch {
+            mv = null;
+          }
+        }
+        return {
+          ...it,
+          price: Number(it.price ?? 0),
+          measurementValues: mv ?? null,
+          // Normalize snake_case DB column to camelCase used by the client.
+          // Without this, after a server refresh it.deliveryStatus is undefined
+          // and the "Mark all delivered" banner incorrectly reappears.
+          deliveryStatus: (it.deliveryStatus ?? it.delivery_status ?? "pending") as "pending" | "delivered",
+        };
+      }),
     };
   }
 
@@ -234,10 +245,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       subtotal: Number(inv.subtotal ?? 0),
       total: Number(inv.total ?? 0),
       paidAmount: inv.paidAmount == null ? undefined : Number(inv.paidAmount),
-      items: (inv.items ?? []).map((it: any) => ({
-        ...it,
-        price: Number(it.price ?? 0),
-      })),
+      items: (inv.items ?? []).map((it: any) => {
+        let mv = it.measurementValues;
+        if (typeof mv === "string") {
+          try {
+            mv = JSON.parse(mv);
+          } catch {
+            mv = null;
+          }
+        }
+        return {
+          ...it,
+          price: Number(it.price ?? 0),
+          measurementValues: mv ?? null,
+        };
+      }),
     };
   }
 
@@ -252,7 +274,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     }
     next.date = next.date ?? next.measurementDate ?? next.createdAt;
-    next.customMeasurements = Array.isArray(next.customMeasurements) ? next.customMeasurements : [];
+    
+    let cm = next.customMeasurements;
+    if (typeof cm === "string") {
+      try {
+        cm = JSON.parse(cm);
+      } catch {
+        cm = [];
+      }
+    }
+    next.customMeasurements = Array.isArray(cm) ? cm : [];
     next.photos = Array.isArray(next.photos) ? next.photos : [];
     return next;
   }

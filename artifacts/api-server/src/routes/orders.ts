@@ -14,6 +14,17 @@ function ensureOwnership(req: Request, tailorId: string) {
   return tailorId === req.user!.id;
 }
 
+function parseMeasurementValues(mv: any) {
+  if (typeof mv === "string") {
+    try {
+      return JSON.parse(mv);
+    } catch {
+      return null;
+    }
+  }
+  return mv ?? null;
+}
+
 async function nextCounterValue(name: string): Promise<number> {
   const existing = await db.select().from(counters).where(eq(counters.name, name)).limit(1);
   if (existing.length === 0) {
@@ -97,6 +108,7 @@ router.get("/", async (req: Request, res: Response) => {
       const mappedItems = orderItemsArr.map((it: any) => ({
         ...it,
         deliveryStatus: it.delivery_status ?? "pending",
+        measurementValues: parseMeasurementValues(it.measurementValues),
       }));
       return {
         ...r,
@@ -136,6 +148,7 @@ router.get("/:id", async (req: Request, res: Response) => {
   const mappedItems = items.map((it: any) => ({
     ...it,
     deliveryStatus: it.deliveryStatus ?? it.delivery_status ?? "pending",
+    measurementValues: parseMeasurementValues(it.measurementValues),
   }));
   res.json({ ...order, items: mappedItems });
 });
@@ -292,7 +305,12 @@ router.post("/", async (req: Request, res: Response) => {
 
   const [createdOrder] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
   const items = await db.select().from(orderItems).where(eq(orderItems.orderId, id));
-  res.status(201).json({ ...createdOrder, items });
+  const mappedItems = items.map((it: any) => ({
+    ...it,
+    deliveryStatus: it.deliveryStatus ?? it.delivery_status ?? "pending",
+    measurementValues: parseMeasurementValues(it.measurementValues),
+  }));
+  res.status(201).json({ ...createdOrder, items: mappedItems });
 });
 
 // ---- PATCH /api/orders/:id/status -----------------------------------------
@@ -500,7 +518,12 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
   const [updatedOrder] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
   const items = await db.select().from(orderItems).where(eq(orderItems.orderId, id));
-  res.json({ ...updatedOrder, items });
+  const mappedItems = items.map((it: any) => ({
+    ...it,
+    deliveryStatus: it.deliveryStatus ?? it.delivery_status ?? "pending",
+    measurementValues: parseMeasurementValues(it.measurementValues),
+  }));
+  res.json({ ...updatedOrder, items: mappedItems });
 });
 
 // ---- DELETE /api/orders/:id -----------------------------------------------
@@ -660,8 +683,12 @@ router.post("/:id/invoice", async (req: Request, res: Response) => {
 
   const [inv] = await db.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
   const items = await db.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, invoiceId));
+  const mappedItems = items.map((it: any) => ({
+    ...it,
+    measurementValues: parseMeasurementValues(it.measurementValues),
+  }));
 
-  res.status(201).json({ ...inv, items: items.sort((a, b) => a.position - b.position) });
+  res.status(201).json({ ...inv, items: mappedItems.sort((a, b) => a.position - b.position) });
 });
 
 // ---- PATCH /api/orders/items/:id/delivery -------------------------------

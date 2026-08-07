@@ -14,6 +14,17 @@ function ensureOwnership(req: Request, tailorId: string) {
   return tailorId === req.user!.id;
 }
 
+function parseMeasurementValues(mv: any) {
+  if (typeof mv === "string") {
+    try {
+      return JSON.parse(mv);
+    } catch {
+      return null;
+    }
+  }
+  return mv ?? null;
+}
+
 async function nextCounterValue(name: string): Promise<number> {
   const existing = await db.select().from(counters).where(eq(counters.name, name)).limit(1);
   if (existing.length === 0) {
@@ -63,10 +74,17 @@ router.get("/", async (req: Request, res: Response) => {
     arr.push(it);
     itemsByInvoice.set(it.invoiceId, arr);
   }
-  const result = rows.map((r) => ({
-    ...r,
-    items: (itemsByInvoice.get(r.id) ?? []).sort((a, b) => a.position - b.position),
-  }));
+  const result = rows.map((r) => {
+    const rawItems = itemsByInvoice.get(r.id) ?? [];
+    const mappedItems = rawItems.map((it: any) => ({
+      ...it,
+      measurementValues: parseMeasurementValues(it.measurementValues),
+    }));
+    return {
+      ...r,
+      items: mappedItems.sort((a, b) => a.position - b.position),
+    };
+  });
   res.json(result);
 });
 
@@ -90,7 +108,11 @@ router.get("/:id", async (req: Request, res: Response) => {
     .select()
     .from(invoiceItems)
     .where(eq(invoiceItems.invoiceId, inv.id));
-  res.json({ ...inv, items: items.sort((a, b) => a.position - b.position) });
+  const mappedItems = items.map((it: any) => ({
+    ...it,
+    measurementValues: parseMeasurementValues(it.measurementValues),
+  }));
+  res.json({ ...inv, items: mappedItems.sort((a, b) => a.position - b.position) });
 });
 
 // ---- POST /api/invoices ---------------------------------------------------
@@ -235,7 +257,11 @@ router.post("/", async (req: Request, res: Response) => {
     .select()
     .from(invoiceItems)
     .where(eq(invoiceItems.invoiceId, id));
-  res.status(201).json({ ...inv, items: items.sort((a, b) => a.position - b.position) });
+  const mappedItems = items.map((it: any) => ({
+    ...it,
+    measurementValues: parseMeasurementValues(it.measurementValues),
+  }));
+  res.status(201).json({ ...inv, items: mappedItems.sort((a, b) => a.position - b.position) });
 });
 
 // ---- PATCH /api/invoices/:id/status --------------------------------------
@@ -302,7 +328,11 @@ router.patch("/:id/status", async (req: Request, res: Response) => {
     .select()
     .from(invoiceItems)
     .where(eq(invoiceItems.invoiceId, updated.id));
-  res.json({ ...updated, items: items.sort((a, b) => a.position - b.position) });
+  const mappedItems = items.map((it: any) => ({
+    ...it,
+    measurementValues: parseMeasurementValues(it.measurementValues),
+  }));
+  res.json({ ...updated, items: mappedItems.sort((a, b) => a.position - b.position) });
 });
 
 // ---- DELETE /api/invoices/:id --------------------------------------------
