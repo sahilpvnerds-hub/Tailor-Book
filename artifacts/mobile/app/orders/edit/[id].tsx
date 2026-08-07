@@ -103,6 +103,7 @@ export default function EditOrderScreen() {
     productTypes,
     measurements,
     familyMembers,
+    orders,
     updateOrder,
     addMeasurement,
     updateMeasurement,
@@ -162,14 +163,26 @@ export default function EditOrderScreen() {
 
   // --- Load Order Data ---
   useEffect(() => {
-    loadOrder();
-  }, [id]);
+    // Only load if we haven't already loaded. This allows a re-run when
+    // the orders context is populated after the first mount (empty context).
+    if (!initialOrder) {
+      loadOrder();
+    }
+  // Re-run when orders context is populated (it may be empty on first mount)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, orders.length]);
 
   const loadOrder = async () => {
     setLoading(true);
     try {
-      const allOrders = await import("@/utils/storage").then(m => m.getStorageItem<Order[]>("@tailorbook/orders"));
-      const orderData = allOrders?.find((o: Order) => o.id === id);
+      // First check the React context state (most up-to-date, includes freshly created orders)
+      let orderData: Order | undefined = orders.find((o: Order) => o.id === id);
+
+      // Fallback to AsyncStorage if not found in context (e.g., app just booted)
+      if (!orderData) {
+        const allOrders = await import("@/utils/storage").then(m => m.getStorageItem<Order[]>("@tailorbook/orders"));
+        orderData = allOrders?.find((o: Order) => o.id === id);
+      }
 
       if (orderData) {
         setInitialOrder({ ...orderData });

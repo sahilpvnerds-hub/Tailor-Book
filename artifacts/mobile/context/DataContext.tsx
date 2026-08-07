@@ -304,12 +304,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       // Offline
     }
 
-    // Start with current local data as the base
+    // Start with current local data as the base.
+    // Also normalize locally-stored records to ensure any data that was
+    // stored before normalization logic was added is fixed on load.
     let c = await getCustomers(user.id);
     let fm = await getFamilyMembers(user.id);
-    let m = await getMeasurements(user.id);
-    let inv = await getInvoices(user.id);
-    let ord = await getOrders(user.id);
+    let m = (await getMeasurements(user.id)).map(normalizeMeasurement);
+    let inv = (await getInvoices(user.id)).map(normalizeInvoice);
+    let ord = (await getOrders(user.id)).map(normalizeOrder);
     let pt = await getProductTypes(user.id);
     let cf = await getCustomFields(user.id);
 
@@ -1586,14 +1588,15 @@ async function deleteOrder(id: string) {
       };
     }
 
-    await saveAllInvoices([...allInvoices, inv]);
-    setInvoices((prev) => [inv!, ...prev]);
+    const normalizedInv = normalizeInvoice(inv);
+    await saveAllInvoices([...allInvoices, normalizedInv]);
+    setInvoices((prev) => [normalizedInv, ...prev]);
 
     const updatedOrders = allOrders.map((o) => {
       if (o.id === orderId) {
         const updatedItems = o.items?.map((it) => {
           const matched = itemsToInvoice.some((toInv) => toInv.id === it.id);
-          return matched ? { ...it, invoiceId: inv!.id } : it;
+          return matched ? { ...it, invoiceId: normalizedInv.id } : it;
         }) ?? [];
         return { ...o, items: updatedItems, updatedAt: new Date().toISOString() };
       }
@@ -1606,7 +1609,7 @@ async function deleteOrder(id: string) {
         if (o.id === orderId) {
           const updatedItems = o.items?.map((it) => {
             const matched = itemsToInvoice.some((toInv) => toInv.id === it.id);
-            return matched ? { ...it, invoiceId: inv!.id } : it;
+            return matched ? { ...it, invoiceId: normalizedInv.id } : it;
           }) ?? [];
           return { ...o, items: updatedItems, updatedAt: new Date().toISOString() };
         }
@@ -1614,7 +1617,7 @@ async function deleteOrder(id: string) {
       })
     );
 
-    return inv;
+    return normalizedInv;
   }
 
   // ── Notifications ─────────────────────────────────────────────────────────
