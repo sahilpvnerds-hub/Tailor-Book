@@ -170,13 +170,13 @@ export default function EditOrderScreen() {
     }
   // Re-run when orders context is populated (it may be empty on first mount)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, orders.length]);
+  }, [id, orders?.length]);
 
   const loadOrder = async () => {
     setLoading(true);
     try {
       // First check the React context state (most up-to-date, includes freshly created orders)
-      let orderData: Order | undefined = orders.find((o: Order) => o.id === id);
+      let orderData: Order | undefined = orders?.find((o: Order) => o.id === id);
 
       // Fallback to AsyncStorage if not found in context (e.g., app just booted)
       if (!orderData) {
@@ -191,8 +191,18 @@ export default function EditOrderScreen() {
         setNotes(orderData.notes ?? "");
         setDeliveryDate(orderData.deliveryDate ?? "");
 
-        // Load order-level photos
-        setOrderPhotos(orderData.photos ?? []);
+        // Load order-level photos with recursive parse
+        let rawPhotos: any = orderData.photos ?? [];
+        while (typeof rawPhotos === "string") {
+          try {
+            const parsed = JSON.parse(rawPhotos);
+            if (parsed === rawPhotos) break;
+            rawPhotos = parsed;
+          } catch {
+            break;
+          }
+        }
+        setOrderPhotos(Array.isArray(rawPhotos) ? rawPhotos : []);
 
         // Calculate advance amount from balance
         const totalAmount = Number(orderData.totalAmount) || 0;
@@ -203,16 +213,18 @@ export default function EditOrderScreen() {
         // Convert order items to local format
         const items = orderData.items || [];
         const localItemsData: LocalItem[] = items.map(item => {
-          let mv = item.measurementValues;
-          if (typeof mv === "string") {
+          let mv: any = item.measurementValues;
+          while (typeof mv === "string") {
             try {
-              mv = JSON.parse(mv);
+              const parsed = JSON.parse(mv);
+              if (parsed === mv) break;
+              mv = parsed;
             } catch {
-              mv = null;
+              break;
             }
           }
           const measVals: Record<string, string> = {};
-          if (mv) {
+          if (mv && typeof mv === "object") {
             Object.entries(mv).forEach(([k, v]) => {
               measVals[k] = String(v).replace(/"/g, "");
             });

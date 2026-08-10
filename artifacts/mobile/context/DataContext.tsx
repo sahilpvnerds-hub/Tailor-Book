@@ -179,30 +179,38 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // Helpers
   // ---------------------------------------------------------------------------
 
+  function parseJSONSafely<T>(val: any, fallback: T): T {
+    let current = val;
+    while (typeof current === "string") {
+      try {
+        const parsed = JSON.parse(current);
+        if (parsed === current) break;
+        current = parsed;
+      } catch {
+        break;
+      }
+    }
+    return (current !== undefined && current !== null) ? (current as T) : fallback;
+  }
+
   /**
    * The API/DB returns decimal columns (price, totalAmount, advanceAmount,
    * balanceDue) as strings. Coerce them to numbers so UI arithmetic works.
    */
   function normalizeOrder(o: any): Order {
+    const rawPhotos = parseJSONSafely(o.photos, []);
     return {
       ...o,
       totalAmount: Number(o.totalAmount ?? 0),
       advanceAmount: Number(o.advanceAmount ?? 0),
       balanceDue: Number(o.balanceDue ?? 0),
-      photos: o.photos ?? [],
+      photos: Array.isArray(rawPhotos) ? rawPhotos : [],
       items: (o.items ?? []).map((it: any) => {
-        let mv = it.measurementValues;
-        if (typeof mv === "string") {
-          try {
-            mv = JSON.parse(mv);
-          } catch {
-            mv = null;
-          }
-        }
+        const mv = parseJSONSafely<Record<string, string> | null>(it.measurementValues, null);
         return {
           ...it,
           price: Number(it.price ?? 0),
-          measurementValues: mv ?? null,
+          measurementValues: typeof mv === "object" && mv !== null ? mv : null,
           // Normalize snake_case DB column to camelCase used by the client.
           // Without this, after a server refresh it.deliveryStatus is undefined
           // and the "Mark all delivered" banner incorrectly reappears.
@@ -218,24 +226,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
    * can safely call `.map()` / `.length` on it.
    */
   function normalizeProductType(p: any): ProductType {
-    const features = (p as any).features;
-    let normalizedFeatures: ProductType["features"];
-    if (Array.isArray(features)) {
-      normalizedFeatures = features;
-    } else if (typeof features === "string") {
-      try {
-        const parsed = JSON.parse(features);
-        normalizedFeatures = Array.isArray(parsed) ? parsed : [];
-      } catch {
-        normalizedFeatures = [];
-      }
-    } else {
-      normalizedFeatures = [];
-    }
+    const features = parseJSONSafely(p.features, []);
     return {
       ...p,
       amount: Number(p.amount ?? 0),
-      features: normalizedFeatures,
+      features: Array.isArray(features) ? features : [],
     };
   }
 
@@ -246,18 +241,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       total: Number(inv.total ?? 0),
       paidAmount: inv.paidAmount == null ? undefined : Number(inv.paidAmount),
       items: (inv.items ?? []).map((it: any) => {
-        let mv = it.measurementValues;
-        if (typeof mv === "string") {
-          try {
-            mv = JSON.parse(mv);
-          } catch {
-            mv = null;
-          }
-        }
+        const mv = parseJSONSafely<Record<string, string> | null>(it.measurementValues, null);
         return {
           ...it,
           price: Number(it.price ?? 0),
-          measurementValues: mv ?? null,
+          measurementValues: typeof mv === "object" && mv !== null ? mv : null,
         };
       }),
     };
@@ -275,16 +263,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
     next.date = next.date ?? next.measurementDate ?? next.createdAt;
     
-    let cm = next.customMeasurements;
-    if (typeof cm === "string") {
-      try {
-        cm = JSON.parse(cm);
-      } catch {
-        cm = [];
-      }
-    }
+    const cm = parseJSONSafely(next.customMeasurements, []);
+    const photos = parseJSONSafely(next.photos, []);
     next.customMeasurements = Array.isArray(cm) ? cm : [];
-    next.photos = Array.isArray(next.photos) ? next.photos : [];
+    next.photos = Array.isArray(photos) ? photos : [];
     return next;
   }
 

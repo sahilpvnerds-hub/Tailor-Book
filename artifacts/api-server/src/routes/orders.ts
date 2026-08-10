@@ -15,15 +15,34 @@ function ensureOwnership(req: Request, tailorId: string) {
 }
 
 function parseMeasurementValues(mv: any) {
-  if (typeof mv === "string") {
+  let current = mv;
+  while (typeof current === "string") {
     try {
-      return JSON.parse(mv);
+      const parsed = JSON.parse(current);
+      if (parsed === current) break;
+      current = parsed;
     } catch {
-      return null;
+      break;
     }
   }
-  return mv ?? null;
+  return current ?? null;
 }
+
+function parsePhotos(photos: any): string[] {
+  let current = photos;
+  while (typeof current === "string") {
+    try {
+      const parsed = JSON.parse(current);
+      if (parsed === current) break;
+      current = parsed;
+    } catch {
+      break;
+    }
+  }
+  return Array.isArray(current) ? current : [];
+}
+
+
 
 async function nextCounterValue(name: string): Promise<number> {
   const existing = await db.select().from(counters).where(eq(counters.name, name)).limit(1);
@@ -112,6 +131,7 @@ router.get("/", async (req: Request, res: Response) => {
       }));
       return {
         ...r,
+        photos: parsePhotos(r.photos),
         items: mappedItems,
       };
     });
@@ -150,7 +170,7 @@ router.get("/:id", async (req: Request, res: Response) => {
     deliveryStatus: it.deliveryStatus ?? it.delivery_status ?? "pending",
     measurementValues: parseMeasurementValues(it.measurementValues),
   }));
-  res.json({ ...order, items: mappedItems });
+  res.json({ ...order, photos: parsePhotos(order.photos), items: mappedItems });
 });
 
 // ---- POST /api/orders -----------------------------------------------------
@@ -310,7 +330,7 @@ router.post("/", async (req: Request, res: Response) => {
     deliveryStatus: it.deliveryStatus ?? it.delivery_status ?? "pending",
     measurementValues: parseMeasurementValues(it.measurementValues),
   }));
-  res.status(201).json({ ...createdOrder, items: mappedItems });
+  res.status(201).json({ ...createdOrder, photos: parsePhotos(createdOrder.photos), items: mappedItems });
 });
 
 // ---- PATCH /api/orders/:id/status -----------------------------------------
@@ -345,7 +365,12 @@ router.patch("/:id/status", async (req: Request, res: Response) => {
 
   const [updated] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
   const items = await db.select().from(orderItems).where(eq(orderItems.orderId, id));
-  res.json({ ...updated, items });
+  const mappedItems = items.map((it: any) => ({
+    ...it,
+    deliveryStatus: it.deliveryStatus ?? it.delivery_status ?? "pending",
+    measurementValues: parseMeasurementValues(it.measurementValues),
+  }));
+  res.json({ ...updated, photos: parsePhotos(updated.photos), items: mappedItems });
 });
 
 // ---- PATCH /api/orders/:id -----------------------------------------------
@@ -523,7 +548,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
     deliveryStatus: it.deliveryStatus ?? it.delivery_status ?? "pending",
     measurementValues: parseMeasurementValues(it.measurementValues),
   }));
-  res.json({ ...updatedOrder, items: mappedItems });
+  res.json({ ...updatedOrder, photos: parsePhotos(updatedOrder.photos), items: mappedItems });
 });
 
 // ---- DELETE /api/orders/:id -----------------------------------------------
@@ -670,7 +695,7 @@ router.post("/:id/invoice", async (req: Request, res: Response) => {
         familyMemberId: it.familyMemberId,
         personName: it.personName,
         relation: it.relation,
-        measurementValues: it.measurementValues,
+        measurementValues: parseMeasurementValues(it.measurementValues),
         position: i,
       });
 

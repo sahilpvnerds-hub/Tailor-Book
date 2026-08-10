@@ -15,15 +15,33 @@ function ensureOwnership(req: Request, tailorId: string) {
 }
 
 function parseMeasurementValues(mv: any) {
-  if (typeof mv === "string") {
+  let current = mv;
+  while (typeof current === "string") {
     try {
-      return JSON.parse(mv);
+      const parsed = JSON.parse(current);
+      if (parsed === current) break;
+      current = parsed;
     } catch {
-      return null;
+      break;
     }
   }
-  return mv ?? null;
+  return current ?? null;
 }
+
+function parseArray(val: any): string[] {
+  let current = val;
+  while (typeof current === "string") {
+    try {
+      const parsed = JSON.parse(current);
+      if (parsed === current) break;
+      current = parsed;
+    } catch {
+      break;
+    }
+  }
+  return Array.isArray(current) ? current : [];
+}
+
 
 async function nextCounterValue(name: string): Promise<number> {
   const existing = await db.select().from(counters).where(eq(counters.name, name)).limit(1);
@@ -82,6 +100,7 @@ router.get("/", async (req: Request, res: Response) => {
     }));
     return {
       ...r,
+      photos: parseArray(r.photos),
       items: mappedItems.sort((a, b) => a.position - b.position),
     };
   });
@@ -112,7 +131,7 @@ router.get("/:id", async (req: Request, res: Response) => {
     ...it,
     measurementValues: parseMeasurementValues(it.measurementValues),
   }));
-  res.json({ ...inv, items: mappedItems.sort((a, b) => a.position - b.position) });
+  res.json({ ...inv, photos: parseArray(inv.photos), items: mappedItems.sort((a, b) => a.position - b.position) });
 });
 
 // ---- POST /api/invoices ---------------------------------------------------
@@ -246,7 +265,7 @@ router.post("/", async (req: Request, res: Response) => {
         familyMemberId: it.familyMemberId ?? null,
         personName: it.personName ?? null,
         relation: it.relation ?? null,
-        measurementValues: it.measurementValues ?? null,
+        measurementValues: parseMeasurementValues(it.measurementValues ?? null),
         position: i,
       });
     }
@@ -261,7 +280,7 @@ router.post("/", async (req: Request, res: Response) => {
     ...it,
     measurementValues: parseMeasurementValues(it.measurementValues),
   }));
-  res.status(201).json({ ...inv, items: mappedItems.sort((a, b) => a.position - b.position) });
+  res.status(201).json({ ...inv, photos: parseArray(inv.photos), items: mappedItems.sort((a, b) => a.position - b.position) });
 });
 
 // ---- PATCH /api/invoices/:id/status --------------------------------------
@@ -332,7 +351,7 @@ router.patch("/:id/status", async (req: Request, res: Response) => {
     ...it,
     measurementValues: parseMeasurementValues(it.measurementValues),
   }));
-  res.json({ ...updated, items: mappedItems.sort((a, b) => a.position - b.position) });
+  res.json({ ...updated, photos: parseArray(updated.photos), items: mappedItems.sort((a, b) => a.position - b.position) });
 });
 
 // ---- DELETE /api/invoices/:id --------------------------------------------
