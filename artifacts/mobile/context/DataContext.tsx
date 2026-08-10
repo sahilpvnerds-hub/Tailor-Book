@@ -1295,7 +1295,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }) {
     // Update locally first so the UI is snappy, then sync to the server
     const allOrders = await rawGet<Order>(STORAGE_KEYS.ORDERS);
-    const existingOrder = allOrders.find((o) => o.id === orderId);
+    let existingOrder = allOrders.find((o) => o.id === orderId);
+
+    if (!existingOrder) {
+      existingOrder = orders.find((o) => o.id === orderId);
+    }
 
     if (!existingOrder) {
       throw new Error("Order not found");
@@ -1331,7 +1335,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     };
 
     const normalizedUpdate = normalizeOrder(updatedOrder);
-    const updatedOrders = allOrders.map((o) => o.id === orderId ? normalizedUpdate : o);
+    const updatedOrders = allOrders.some((o) => o.id === orderId)
+      ? allOrders.map((o) => o.id === orderId ? normalizedUpdate : o)
+      : [...allOrders, normalizedUpdate];
     await saveAllOrders(updatedOrders);
     setOrders(prev => prev.map((o) => o.id === orderId ? normalizedUpdate : o));
 
@@ -1341,18 +1347,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       try {
         const serverOrder = await apiUpdateOrder(token, orderId, {
           ...data,
-          items: data.items.map((item) => {
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const { id: _id, ...rest } = item as any; // Strip optional id before sending to API
-            return rest;
-          }),
+          items: itemsWithIds.map((item) => ({
+            id: item.id,
+            productTypeId: item.productTypeId ?? null,
+            productType: item.productType,
+            featureLabel: item.featureLabel ?? null,
+            quantity: item.quantity,
+            price: item.price,
+            measurementId: item.measurementId ?? null,
+            familyMemberId: item.familyMemberId ?? null,
+            personName: item.personName ?? null,
+            relation: item.relation ?? null,
+            measurementValues: item.measurementValues ?? null,
+          })),
           totalAmount,
           advanceAmount,
           balanceDue,
           photos: data.photos ?? [],
         });
-        // Update local state with server response
+        // Update local state and AsyncStorage with server response
         const normalizedServer = normalizeOrder(serverOrder);
+        const latestOrders = updatedOrders.map((o) => o.id === orderId ? normalizedServer : o);
+        await saveAllOrders(latestOrders);
         setOrders(prev => prev.map((o) => o.id === orderId ? normalizedServer : o));
       } catch (err) {
         console.warn("updateOrder API sync failed:", err);

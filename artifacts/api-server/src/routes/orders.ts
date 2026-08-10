@@ -175,6 +175,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 
 // ---- POST /api/orders -----------------------------------------------------
 const orderItemInputSchema = z.object({
+  id: z.string().nullable().optional(),
   productTypeId: z.string().nullable().optional(),
   productType: z.string().min(1),
   featureLabel: z.string().nullable().optional(),
@@ -489,11 +490,12 @@ router.patch("/:id", async (req: Request, res: Response) => {
     const updatedOrderItemIds = new Set<string>();
 
     for (const newItem of enrichedItems) {
-      const existingItem = existingItems.find(it =>
-        it.productType === newItem.productType &&
-        it.familyMemberId === (newItem.familyMemberId ?? null) &&
-        JSON.stringify(it.measurementValues) === JSON.stringify(newItem.measurementValues)
-      );
+      const existingItem = (newItem.id ? existingItems.find(it => it.id === newItem.id) : null) ||
+        existingItems.find(it =>
+          it.productType === newItem.productType &&
+          it.familyMemberId === (newItem.familyMemberId ?? null) &&
+          JSON.stringify(parseMeasurementValues(it.measurementValues)) === JSON.stringify(parseMeasurementValues(newItem.measurementValues))
+        );
 
       if (existingItem) {
         // Update existing item
@@ -512,7 +514,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
         updatedOrderItemIds.add(existingItem.id);
       } else {
         // Add new item
-        const newItemId = crypto.randomUUID();
+        const newItemId = newItem.id || crypto.randomUUID();
         await tx.insert(orderItems).values({
           id: newItemId,
           orderId: id,

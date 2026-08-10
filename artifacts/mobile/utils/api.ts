@@ -768,7 +768,7 @@ export async function createOrder(
 export async function updateOrder(
   token: string,
   orderId: string,
-  order: Partial<Order> & { items: Omit<OrderItem, "id" | "orderId" | "createdAt" | "deliveryStatus" | "invoiceId">[] }
+  order: Omit<Partial<Order>, "items"> & { items: Array<Omit<OrderItem, "orderId" | "createdAt" | "deliveryStatus" | "invoiceId"> & { id?: string }> }
 ): Promise<Order> {
   const response = await fetch(`${API_BASE_URL}/orders/${orderId}`, {
     method: "PATCH",
